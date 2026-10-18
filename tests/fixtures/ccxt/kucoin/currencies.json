@@ -1,0 +1,112 @@
+{
+ "USDT": {
+  "code": "USDT",
+  "deposit": true,
+  "withdraw": true,
+  "networks": {
+   "APT": {
+    "id": "aptos",
+    "network": null,
+    "deposit": true,
+    "withdraw": true,
+    "fee": 0.5,
+    "active": null
+   },
+   "statemint": {
+    "id": "statemint",
+    "network": null,
+    "deposit": true,
+    "withdraw": true,
+    "fee": 1.0,
+    "active": null
+   },
+   "OP": {
+    "id": "optimism",
+    "network": null,
+    "deposit": false,
+    "withdraw": true,
+    "fee": 1.0,
+    "active": null
+   },
+   "ton2": {
+    "id": "ton2",
+    "network": null,
+    "deposit": true,
+    "withdraw": false,
+    "fee": 0.5,
+    "active": null
+   },
+   "KCC": {
+    "id": "kcc",
+    "network": null,
+    "deposit": true,
+    "withdraw": true,
+    "fee": 0.5,
+    "active": null
+   },
+   "SOL": {
+    "id": "sol",
+    "network": null,
+    "deposit": true,
+    "withdraw": true,
+    "fee": 1.5,
+    "active": null
+   }
+  }
+ },
+ "BTC": {
+  "code": "BTC",
+  "deposit": true,
+  "withdraw": true,
+  "networks": {
+   "BTC": {
+    "id": "btc",
+    "network": null,
+    "deposit": true,
+    "withdraw": true,
+    "fee": 9e-05,
+    "active": null
+   },
+   "BEP20": {
+    "id": "bsc",
+    "network": null,
+    "deposit": true,
+    "withdraw": true,
+    "fee": 4e-06,
+    "active": null
+   },
+   "btcln": {
+    "id": "btcln",
+    "network": null,
+    "deposit": false,
+    "withdraw": false,
+    "fee": 2e-05,
+    "active": null
+   },
+   "KCC": {
+    "id": "kcc",
+    "network": null,
+    "deposit": true,
+    "withdraw": true,
+    "fee": 2e-05,
+    "active": null
+   },
+   "ARBITRUM": {
+    "id": "arbitrum",
+    "network": null,
+    "deposit": false,
+    "withdraw": false,
+    "fee": 0.0001,
+    "active": null
+   },
+   "BTCNATIVESEGWIT": {
+    "id": "bech32",
+    "network": null,
+    "deposit": true,
+    "withdraw": false,
+    "fee": 0.0005,
+    "active": null
+   }
+  }
+ }
+}

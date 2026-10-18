@@ -1,0 +1,80 @@
+{
+ "USDT": {
+  "code": "USDT",
+  "deposit": true,
+  "withdraw": true,
+  "networks": {
+   "ERC20": {
+    "id": "ETH",
+    "network": "ERC20",
+    "deposit": true,
+    "withdraw": true,
+    "fee": null,
+    "active": null
+   },
+   "0G": {
+    "id": "0G",
+    "network": "0G",
+    "deposit": false,
+    "withdraw": false,
+    "fee": null,
+    "active": null
+   },
+   "ALGO": {
+    "id": "ALGO",
+    "network": "ALGO",
+    "deposit": false,
+    "withdraw": true,
+    "fee": null,
+    "active": null
+   },
+   "APT": {
+    "id": "APT",
+    "network": "APT",
+    "deposit": true,
+    "withdraw": true,
+    "fee": null,
+    "active": null
+   },
+   "ARBITRUM": {
+    "id": "ARBEVM",
+    "network": "ARBITRUM",
+    "deposit": true,
+    "withdraw": true,
+    "fee": null,
+    "active": null
+   },
+   "BEP20": {
+    "id": "BSC",
+    "network": "BEP20",
+    "deposit": true,
+    "withdraw": true,
+    "fee": null,
+    "active": null
+   }
+  }
+ },
+ "BTC": {
+  "code": "BTC",
+  "deposit": true,
+  "withdraw": true,
+  "networks": {
+   "BTC": {
+    "id": "BTC",
+    "network": "BTC",
+    "deposit": true,
+    "withdraw": true,
+    "fee": null,
+    "active": null
+   },
+   "BEP20": {
+    "id": "BSC",
+    "network": "BEP20",
+    "deposit": true,
+    "withdraw": true,
+    "fee": null,
+    "active": null
+   }
+  }
+ }
+}

@@ -1,0 +1,16 @@
+{
+ "BTC/USDT": {
+  "symbol": "BTC/USDT",
+  "bid": 80902.3,
+  "ask": 80902.4,
+  "quoteVolume": 552543629.1323912,
+  "timestamp": null
+ },
+ "ETH/USDT": {
+  "symbol": "ETH/USDT",
+  "bid": 2338.4,
+  "ask": 2338.41,
+  "quoteVolume": 143023395.5971674,
+  "timestamp": null
+ }
+}

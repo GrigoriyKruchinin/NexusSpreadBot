@@ -1,0 +1,101 @@
+{
+ "BTC/USDT": {
+  "id": "BTC-USDT",
+  "symbol": "BTC/USDT",
+  "base": "BTC",
+  "quote": "USDT",
+  "type": "spot",
+  "spot": true,
+  "active": true,
+  "taker": 0.0015,
+  "maker": 0.001,
+  "precision": {
+   "amount": 1e-08,
+   "price": 0.1
+  },
+  "limits": {
+   "leverage": {
+    "min": 1.0,
+    "max": 10.0
+   },
+   "amount": {
+    "min": 1e-05,
+    "max": 9999999999.0
+   },
+   "price": {
+    "min": null,
+    "max": null
+   },
+   "cost": {
+    "min": null,
+    "max": 1000000.0
+   }
+  }
+ },
+ "ETH/USDT": {
+  "id": "ETH-USDT",
+  "symbol": "ETH/USDT",
+  "base": "ETH",
+  "quote": "USDT",
+  "type": "spot",
+  "spot": true,
+  "active": true,
+  "taker": 0.0015,
+  "maker": 0.001,
+  "precision": {
+   "amount": 1e-06,
+   "price": 0.01
+  },
+  "limits": {
+   "leverage": {
+    "min": 1.0,
+    "max": 10.0
+   },
+   "amount": {
+    "min": 0.0001,
+    "max": 999999999999.0
+   },
+   "price": {
+    "min": null,
+    "max": null
+   },
+   "cost": {
+    "min": null,
+    "max": 1000000.0
+   }
+  }
+ },
+ "BTC/USD:BTC": {
+  "id": "BTC-USD-SWAP",
+  "symbol": "BTC/USD:BTC",
+  "base": "BTC",
+  "quote": "USD",
+  "type": "swap",
+  "spot": false,
+  "active": true,
+  "taker": 0.0005,
+  "maker": 0.0002,
+  "precision": {
+   "amount": 0.1,
+   "price": 0.1
+  },
+  "limits": {
+   "leverage": {
+    "min": 1.0,
+    "max": 100.0
+   },
+   "amount": {
+    "min": 0.1,
+    "max": 100000000.0
+   },
+   "price": {
+    "min": null,
+    "max": null
+   },
+   "cost": {
+    "min": null,
+    "max": null
+   }
+  }
+ }
+}

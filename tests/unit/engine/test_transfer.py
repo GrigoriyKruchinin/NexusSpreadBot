@@ -123,3 +123,13 @@ def test_unknown_fee_is_unknown_not_zero() -> None:
     quote = select_transfer_route(_info("a", _net("ERC20", fee=None)), _info("b", _net("ERC20")))
     assert quote.status is TransferStatus.UNKNOWN
     assert quote.network == "ERC20"
+
+
+def test_currency_level_disabled_without_network_list_is_unavailable() -> None:
+    source = AssetTransferInfo(exchange="a", asset="ABC", networks=(), withdraw_enabled=False)
+    quote = select_transfer_route(source, _info("b", _net("ERC20")))
+    assert quote.status is TransferStatus.UNAVAILABLE
+    destination = AssetTransferInfo(exchange="b", asset="ABC", networks=(), deposit_enabled=False)
+    assert select_transfer_route(_info("a", _net("ERC20")), destination).status is (
+        TransferStatus.UNAVAILABLE
+    )

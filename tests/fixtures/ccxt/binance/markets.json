@@ -1,0 +1,158 @@
+{
+ "BTC/USDT": {
+  "id": "BTCUSDT",
+  "symbol": "BTC/USDT",
+  "base": "BTC",
+  "quote": "USDT",
+  "type": "spot",
+  "spot": true,
+  "active": true,
+  "taker": 0.001,
+  "maker": 0.001,
+  "precision": {
+   "amount": 1e-05,
+   "price": 0.01,
+   "base": 1e-08,
+   "quote": 1e-08
+  },
+  "limits": {
+   "leverage": {
+    "min": null,
+    "max": null
+   },
+   "amount": {
+    "min": 1e-05,
+    "max": 9000.0
+   },
+   "price": {
+    "min": 0.01,
+    "max": 1000000.0
+   },
+   "cost": {
+    "min": 5.0,
+    "max": 9000000.0
+   },
+   "market": {
+    "min": 0.0,
+    "max": 147.34895824
+   }
+  }
+ },
+ "ETH/USDT": {
+  "id": "ETHUSDT",
+  "symbol": "ETH/USDT",
+  "base": "ETH",
+  "quote": "USDT",
+  "type": "spot",
+  "spot": true,
+  "active": true,
+  "taker": 0.001,
+  "maker": 0.001,
+  "precision": {
+   "amount": 0.0001,
+   "price": 0.01,
+   "base": 1e-08,
+   "quote": 1e-08
+  },
+  "limits": {
+   "leverage": {
+    "min": null,
+    "max": null
+   },
+   "amount": {
+    "min": 0.0001,
+    "max": 9000.0
+   },
+   "price": {
+    "min": 0.01,
+    "max": 1000000.0
+   },
+   "cost": {
+    "min": 5.0,
+    "max": 9000000.0
+   },
+   "market": {
+    "min": 0.0,
+    "max": 3851.51531799
+   }
+  }
+ },
+ "BTC/USDT:USDT": {
+  "id": "BTCUSDT",
+  "symbol": "BTC/USDT:USDT",
+  "base": "BTC",
+  "quote": "USDT",
+  "type": "swap",
+  "spot": false,
+  "active": true,
+  "taker": 0.0005,
+  "maker": 0.0002,
+  "precision": {
+   "amount": 0.001,
+   "price": 0.1,
+   "base": 1e-08,
+   "quote": 1e-08
+  },
+  "limits": {
+   "leverage": {
+    "min": null,
+    "max": null
+   },
+   "amount": {
+    "min": 0.001,
+    "max": 1000.0
+   },
+   "price": {
+    "min": 556.8,
+    "max": 4529764.0
+   },
+   "cost": {
+    "min": 50.0,
+    "max": null
+   },
+   "market": {
+    "min": 0.001,
+    "max": 120.0
+   }
+  }
+ },
+ "NEO/BTC": {
+  "id": "NEOBTC",
+  "symbol": "NEO/BTC",
+  "base": "NEO",
+  "quote": "BTC",
+  "type": "spot",
+  "spot": true,
+  "active": false,
+  "taker": 0.001,
+  "maker": 0.001,
+  "precision": {
+   "amount": 0.01,
+   "price": 1e-08,
+   "base": 1e-08,
+   "quote": 1e-08
+  },
+  "limits": {
+   "leverage": {
+    "min": null,
+    "max": null
+   },
+   "amount": {
+    "min": 0.01,
+    "max": 100000.0
+   },
+   "price": {
+    "min": 1e-08,
+    "max": 100000.0
+   },
+   "cost": {
+    "min": 0.0001,
+    "max": 9000000.0
+   },
+   "market": {
+    "min": 0.0,
+    "max": 4136.18283333
+   }
+  }
+ }
+}

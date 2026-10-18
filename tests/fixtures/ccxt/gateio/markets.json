@@ -1,0 +1,134 @@
+{
+ "BTC/USDT": {
+  "id": "BTC_USDT",
+  "symbol": "BTC/USDT",
+  "base": "BTC",
+  "quote": "USDT",
+  "type": "spot",
+  "spot": true,
+  "active": true,
+  "taker": 0.002,
+  "maker": 0.002,
+  "precision": {
+   "amount": 1e-06,
+   "price": 0.1
+  },
+  "limits": {
+   "leverage": {
+    "min": 1.0,
+    "max": 20.0
+   },
+   "amount": {
+    "min": 1e-06,
+    "max": null
+   },
+   "price": {
+    "min": null,
+    "max": null
+   },
+   "cost": {
+    "min": 3.0,
+    "max": 5000000.0
+   }
+  }
+ },
+ "ETH/USDT": {
+  "id": "ETH_USDT",
+  "symbol": "ETH/USDT",
+  "base": "ETH",
+  "quote": "USDT",
+  "type": "spot",
+  "spot": true,
+  "active": true,
+  "taker": 0.002,
+  "maker": 0.002,
+  "precision": {
+   "amount": 0.0001,
+   "price": 0.01
+  },
+  "limits": {
+   "leverage": {
+    "min": 1.0,
+    "max": 20.0
+   },
+   "amount": {
+    "min": 0.001,
+    "max": null
+   },
+   "price": {
+    "min": null,
+    "max": null
+   },
+   "cost": {
+    "min": 3.0,
+    "max": 5000000.0
+   }
+  }
+ },
+ "0G/USDT:USDT": {
+  "id": "0G_USDT",
+  "symbol": "0G/USDT:USDT",
+  "base": "0G",
+  "quote": "USDT",
+  "type": "swap",
+  "spot": false,
+  "active": true,
+  "taker": 0.0005,
+  "maker": 0.0002,
+  "precision": {
+   "amount": 1.0,
+   "price": 0.0001
+  },
+  "limits": {
+   "leverage": {
+    "min": 1.0,
+    "max": 50.0
+   },
+   "amount": {
+    "min": 1.0,
+    "max": 450000.0
+   },
+   "price": {
+    "min": 0.186235,
+    "max": 0.251965
+   },
+   "cost": {
+    "min": null,
+    "max": null
+   }
+  }
+ },
+ "MTR/USDT": {
+  "id": "MTR_USDT",
+  "symbol": "MTR/USDT",
+  "base": "MTR",
+  "quote": "USDT",
+  "type": "spot",
+  "spot": true,
+  "active": false,
+  "taker": 0.002,
+  "maker": 0.002,
+  "precision": {
+   "amount": 1.0,
+   "price": 1e-05
+  },
+  "limits": {
+   "leverage": {
+    "min": 1.0,
+    "max": 1
+   },
+   "amount": {
+    "min": 1.0,
+    "max": null
+   },
+   "price": {
+    "min": null,
+    "max": null
+   },
+   "cost": {
+    "min": 3.0,
+    "max": null
+   }
+  }
+ }
+}

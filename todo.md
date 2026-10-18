@@ -58,15 +58,19 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [x] Exchange registry / factory (register adapters by name, no orchestrator changes on add)
 
 ### 1.4 Async CEX Connectors
-- [ ] Shared base: ccxt.pro wrapper, reconnect w/ backoff, heartbeat, rate-limit handling, symbol normalization
-- [ ] `BybitAdapter`
-- [ ] `BinanceAdapter`
-- [ ] `OKXAdapter`
-- [ ] `GateIOAdapter`
-- [ ] `KuCoinAdapter`
-- [ ] Market metadata sync: common symbol intersection, tick/lot sizes, taker/maker fees, deposit/withdraw enabled + network fees per chain
-- [ ] Orderbook snapshots → Redis hot cache (TTL = max book age)
-- [ ] Adapter tests with recorded fixture payloads
+- [x] Shared base: ccxt REST + ccxt.pro WS, error translation, bounded retries (no retry on rate limits), Decimal boundary parsing
+- [x] `BybitAdapter`
+- [x] `BinanceAdapter`
+- [x] `OKXAdapter`
+- [x] `GateIOAdapter`
+- [x] `KuCoinAdapter`
+- [x] Market metadata: lot steps, minimums, taker fees (account tier with keys, static-fee flag), deposit/withdraw status, network fees & contract addresses
+- [ ] Common symbol intersection & periodic metadata refresh (scanner, 1.7)
+- [x] ~~Orderbook snapshots → Redis hot cache~~ — books are fetched on demand and evaluated in-process (no stale-cache risk); Redis is used for cooldowns & heartbeat
+- [x] Adapter tests with recorded fixture payloads
+- [x] Safety: runtime GET-only guard on authenticated ccxt clients + AST test against fund-moving calls (risk audit)
+- [x] Log scrubbing of signatures/keys/tokens for structlog and stdlib records
+- [ ] Per-pair taker fee for OKX/KuCoin via `fetch_trading_fee` on alert candidates (fees currently flagged as estimates)
 
 ### 1.5 Net Spread Engine (R) — audited: SAFE TO PROCEED
 - [x] Depth walker: VWAP for buy (asks) / sell (bids) at reference notional; reject if insufficient depth
@@ -125,7 +129,7 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [ ] Partial fill & leg-risk handling: hedge/unwind strategy
 - [ ] Idempotent client order IDs; no duplicate submission on retry
 - [ ] Inventory model (pre-funded balances on each exchange; rebalancing alerts only)
-- [ ] No withdraw/transfer methods in any interface; startup check refuses keys with withdrawal permission (where detectable)
+- [ ] No withdraw/transfer methods in any interface; startup check refuses keys with withdrawal permission (Binance apiRestrictions, Bybit query-api, OKX account/config perm, KuCoin api-key)
 - [ ] Paper-trading / dry-run mode (default ON)
 
 ### 2.2 Risk Limits (R)

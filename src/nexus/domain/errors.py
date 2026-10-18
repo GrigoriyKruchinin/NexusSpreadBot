@@ -43,5 +43,9 @@ class ExchangeDataError(ExchangeError):
     """Exchange returned unusable data (e.g. unknown symbol)."""
 
 
+class ReadOnlyViolationError(NexusError):
+    """A non-read-only exchange request was attempted and blocked (safety guard)."""
+
+
 class UnknownExchangeError(ConfigurationError):
     """Requested exchange has no registered adapter."""

@@ -53,6 +53,14 @@ def select_transfer_route(
     if source is None or destination is None:
         missing = "source" if source is None else "destination"
         return TransferQuote(TransferStatus.UNKNOWN, note=f"no {missing} transfer metadata")
+    if source.withdraw_enabled is False:
+        return TransferQuote(
+            TransferStatus.UNAVAILABLE, note=f"withdrawals disabled on {source.exchange}"
+        )
+    if destination.deposit_enabled is False:
+        return TransferQuote(
+            TransferStatus.UNAVAILABLE, note=f"deposits disabled on {destination.exchange}"
+        )
     if not source.networks or not destination.networks:
         return TransferQuote(TransferStatus.UNKNOWN, note="network list not published")
 

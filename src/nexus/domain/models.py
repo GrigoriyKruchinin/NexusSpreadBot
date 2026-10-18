@@ -88,7 +88,8 @@ class Ticker:
     bid: Decimal | None
     ask: Decimal | None
     quote_volume_24h: Decimal | None
-    timestamp_ms: int
+    timestamp_ms: int | None
+    """Exchange timestamp if reported. Not a freshness signal: depth checks use book age."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,3 +136,7 @@ class AssetTransferInfo:
     exchange: str
     asset: str
     networks: tuple[NetworkInfo, ...] = field(default_factory=tuple)
+    withdraw_enabled: bool | None = None
+    """Currency-level withdrawal flag (``False`` disables every network)."""
+    deposit_enabled: bool | None = None
+    """Currency-level deposit flag (``False`` disables every network)."""
