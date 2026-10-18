@@ -39,7 +39,7 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [x] Root `Makefile` (lint, format, typecheck, test, test-cov, test-integration, check, up-local, down-local, ps-local, logs, migrate, revision)
 - [x] `.env.example` with every setting documented
 - [x] `pre-commit` config (ruff, mypy, end-of-file, detect-secrets)
-- [ ] `README.md` (English): overview, architecture diagram, quickstart
+- [x] `README.md` (English): overview, architecture diagram, quickstart
 
 ### 1.2 Modular Pydantic Settings
 - [x] Base groups: `DatabaseSettings`, `RedisSettings`, `CelerySettings`, `TelegramSettings`, `LoggingSettings`
@@ -112,9 +112,9 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [ ] User check: real Telegram token → start message + alerts received
 
 ### 1.10 Stage 1 Exit
-- [ ] `make check` green, coverage `engine/` ≥ 90 %
-- [ ] `/audit-risks` verdict SAFE TO PROCEED
-- [ ] 24h local soak run; review false-positive rate from DB
+- [x] `make check` green, coverage `engine/` ≥ 90 % (engine 95–100 %, total 92 %)
+- [x] `/audit-risks` verdict SAFE TO PROCEED (config, engine, adapters, scanner/workers — all findings fixed or tracked here)
+- [ ] 24h local soak run with real Telegram + read-only keys; review false-positive rate from DB (user)
 
 ---
 
