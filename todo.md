@@ -37,16 +37,18 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [x] mypy strict config (+ pydantic plugin, sqlalchemy typing)
 - [x] pytest config (`asyncio_mode=auto`, `integration` marker, coverage)
 - [x] Root `Makefile` (lint, format, typecheck, test, test-cov, test-integration, check, up-local, down-local, ps-local, logs, migrate, revision)
-- [ ] `.env.example` with every setting documented
+- [x] `.env.example` with every setting documented
 - [x] `pre-commit` config (ruff, mypy, end-of-file, detect-secrets)
 - [ ] `README.md` (English): overview, architecture diagram, quickstart
 
 ### 1.2 Modular Pydantic Settings
-- [ ] Base groups: `DatabaseSettings`, `RedisSettings`, `CelerySettings`, `TelegramSettings`, `LoggingSettings`
-- [ ] `ExchangeCredentials` per exchange (`SecretStr`, optional in V1) + `ExchangesSettings` (enabled list, symbols whitelist/blacklist)
-- [ ] `SpreadSettings`: `min_net_profit_pct=0.3`, `min_net_profit_usd=5`, `reference_notional_usd=1000`, `max_orderbook_age_ms`, `alert_cooldown_s`
-- [ ] Role-specific loaders: `MigratorSettings`, `SchedulerSettings`, `ScannerSettings`, `NotifierWorkerSettings`, `AppSettings` (full, for tests/dev only)
-- [ ] Unit tests: each role loader ignores/forbids unrelated secrets
+- [x] Base groups: `DatabaseSettings`, `RedisSettings`, `CelerySettings`, `TelegramSettings`, `LoggingSettings`
+- [x] `ExchangeCredentials` per exchange (`SecretStr`, optional in V1) + `ExchangesSettings` (enabled list, symbols whitelist/blacklist)
+- [x] `SpreadSettings`: `min_net_profit_pct=0.3`, `min_net_profit_usd=5`, `reference_notional_usd=1000`, `max_orderbook_age_ms`, `alert_cooldown_s`
+- [x] Role-specific loaders: `MigratorSettings`, `SchedulerSettings`, `ScannerRoleSettings`, `AlertsWorkerSettings`, `MaintenanceWorkerSettings`
+- [x] Unit tests: each role loader ignores/forbids unrelated secrets
+- [x] Risk audit fixes: no secrets in validation errors, `.env` ignored in containers (`NEXUS_RUNTIME=container`), bounded freshness/fee settings, strong DB password, https-only Telegram URL
+- [x] `.env.example` documents every setting (guarded by test)
 
 ### 1.3 Domain & Interfaces
 - [ ] Value objects (Decimal): `Symbol`, `Asset`, `PriceLevel`, `OrderBook` (timestamped), `FeeSchedule`, `TransferCost`, `SpreadOpportunity`
@@ -129,6 +131,7 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [ ] Daily loss limit & global kill switch (Redis flag + Telegram command)
 - [ ] Max concurrent open executions; per-exchange circuit breaker on error rate
 - [ ] Risk settings group isolated to executor container
+- [ ] Separate Postgres roles per service (migrator=owner, scanner=insert/select, workers=limited)
 
 ### 2.3 Order State Management
 - [ ] Order/Execution state machine (NEW → SUBMITTED → PARTIAL → FILLED / CANCELLED / FAILED)
