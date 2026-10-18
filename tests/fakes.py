@@ -42,6 +42,8 @@ class FakeExchange(BaseExchangeAdapter):
         self.clock = clock
         self.fee = D(fee)
         self.quotes: dict[str, tuple[str, str]] = {}
+        self.book_quotes: dict[str, tuple[str, str]] = {}
+        """Order book (bid, ask) overrides, e.g. when the book disagrees with the ticker."""
         self.transfers: dict[str, AssetTransferInfo] | None = None
         self.ticker_errors: list[ExchangeError] = []
         self.book_errors: dict[str, ExchangeError] = {}
@@ -88,7 +90,7 @@ class FakeExchange(BaseExchangeAdapter):
         self.book_calls.append(symbol)
         if symbol in self.book_errors:
             raise self.book_errors[symbol]
-        bid, ask = (D(x) for x in self.quotes[symbol])
+        bid, ask = (D(x) for x in self.book_quotes.get(symbol, self.quotes[symbol]))
         return OrderBook(
             exchange=self.exchange,
             symbol=symbol,

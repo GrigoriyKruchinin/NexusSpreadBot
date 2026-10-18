@@ -95,7 +95,7 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [x] Alert tasks with retries (429 `retry_after`, infra autoretry) & idempotent alert log; stale alerts expire
 - [x] Claim-before-send (SENDING row) to avoid duplicate Telegram messages on ack-late redelivery; event expiry
 - [x] Scanner orchestrator (async: ticker sweep → candidates → per-route book fetch with deadline → estimator → DB → alert queue), exchange health with hysteresis, rate-limit pauses, heartbeat, graceful SIGTERM
-- [ ] WebSocket hot-set: stream books for recently profitable routes (interfaces ready: `IWebSocketOrderbook`)
+- [x] WebSocket hot-set: stream books for recently profitable routes (bounded, TTL, resync on invalid book); WS-based alerts re-confirmed on REST — audited: SAFE TO PROCEED
 
 ### 1.8 Telegram Notifier
 - [x] `TelegramNotifier(INotifier)` on httpx Bot API, HTML parse mode, 429 `retry_after`, token never in errors

@@ -12,7 +12,14 @@ from nexus.domain.errors import (
     ExchangeUnavailableError,
 )
 from nexus.domain.events import ExchangeDown, ExchangeRecovered, ScannerStarted, ScannerStopped
-from nexus.domain.models import AssetTransferInfo, MarketInfo, NetworkInfo, OrderBook, Ticker
+from nexus.domain.models import (
+    AssetTransferInfo,
+    MarketInfo,
+    NetworkInfo,
+    OrderBook,
+    PriceLevel,
+    Ticker,
+)
 from nexus.domain.spread import EvaluationStatus
 from nexus.engine.candidates import CandidateFilter, CandidateFinder
 from nexus.engine.estimator import EstimatorConfig, NetSpreadEstimator
@@ -20,6 +27,7 @@ from nexus.interfaces.market_data import ITradingFeeSource
 from nexus.scanner import service
 from nexus.scanner.health import ExchangeHealthTracker
 from nexus.scanner.service import Repositories, Scanner, ScannerConfig
+from nexus.scanner.streams import OrderBookStreams
 from nexus.scanner.universe import UniverseFilter
 from tests.fakes import (
     FakeExchange,
@@ -29,6 +37,7 @@ from tests.fakes import (
     MemoryRepos,
     RecordingDispatcher,
 )
+from tests.unit.scanner.test_streams import StreamingExchange
 
 
 class FeeLookupExchange(FakeExchange, ITradingFeeSource):
@@ -54,15 +63,28 @@ class FeeLookupExchange(FakeExchange, ITradingFeeSource):
 
 
 class Harness:
-    def __init__(self, *, fee_lookup: bool = False) -> None:
+    def __init__(self, *, fee_lookup: bool = False, streaming: bool = False) -> None:
         self.clock = ManualClock()
         self.a = (FeeLookupExchange if fee_lookup else FakeExchange)("a", self.clock)
-        self.b = FakeExchange("b", self.clock)
+        self.streaming_b = StreamingExchange("b", self.clock)
+        self.b: FakeExchange = self.streaming_b if streaming else FakeExchange("b", self.clock)
         self.c = FakeExchange("c", self.clock)
         self.repos = MemoryRepos()
         self.cooldowns = MemoryCooldowns()
         self.heartbeat = MemoryHeartbeat()
         self.dispatcher = RecordingDispatcher()
+        self.streams = (
+            OrderBookStreams(
+                {"b": self.b},
+                depth=20,
+                max_streams=10,
+                hot_ttl_ms=60_000,
+                max_book_age_ms=1_000,
+                clock=self.clock,
+            )
+            if streaming
+            else None
+        )
         spread = EstimatorConfig(
             min_net_profit_pct=D("0.3"),
             min_net_profit_usd=D(5),
@@ -98,6 +120,7 @@ class Harness:
                 book_deadline_s=2.0,
             ),
             clock=self.clock,
+            streams=self.streams,
         )
 
 
@@ -429,3 +452,58 @@ async def test_slow_fee_lookup_does_not_block_evaluation(monkeypatch: pytest.Mon
     assert result.timed_out == 0
     evaluation = next(iter(h.repos.evaluations.values()))
     assert evaluation.fees_estimated  # default fee kept, flagged as an estimate
+
+
+async def test_profitable_route_legs_are_streamed() -> None:
+    h = Harness(streaming=True)
+    h.a.quote("ABC/USDT", "99.9", "100")
+    h.b.quote("ABC/USDT", "101", "101.1")
+    await h.scanner.refresh_metadata()
+    first = await h.scanner.sweep()
+    assert first.streamed_books == 0
+    assert h.streams is not None
+    assert h.streams.active == 1  # only b streams; a has no WebSocket support
+    book = await h.b.fetch_order_book("ABC/USDT", 20)
+    h.streaming_b.push("ABC/USDT", book)
+    for _ in range(5):
+        await asyncio.sleep(0)
+    calls_before = len(h.b.book_calls)
+    second = await h.scanner.sweep()
+    assert second.streamed_books == 1
+    # Alertable on the streamed book -> exactly one REST snapshot to confirm it.
+    assert len(h.b.book_calls) == calls_before + 1
+    assert second.alerts == 0  # cooldown still active; evaluation still happened
+    assert second.evaluations == 1
+    await h.streams.close()
+    assert h.streaming_b.unwatched == ["ABC/USDT"]
+
+
+async def test_phantom_streamed_level_is_not_alerted() -> None:
+    """A desynced WS book shows a profitable bid that the REST snapshot does not confirm."""
+    h = Harness(streaming=True)
+    h.a.quote("ABC/USDT", "99.9", "100")
+    h.b.quote("ABC/USDT", "101", "101.1")
+    await h.scanner.refresh_metadata()
+    await h.scanner.sweep()  # positive: b becomes hot
+    h.cooldowns.active.clear()
+    h.b.book_quotes["ABC/USDT"] = ("100", "100.1")  # real book (REST): no spread any more
+    phantom = OrderBook(
+        exchange="b",
+        symbol="ABC/USDT",
+        bids=(PriceLevel(D(101), D(1_000)),),
+        asks=(PriceLevel(D("101.1"), D(1_000)),),
+        timestamp_ms=h.clock.now,
+        received_at_ms=h.clock.now,
+    )
+    h.streaming_b.push("ABC/USDT", phantom)
+    for _ in range(5):
+        await asyncio.sleep(0)
+    result = await h.scanner.sweep()  # tickers still show the spread
+    assert result.streamed_books == 1
+    assert result.alerts == 0
+    assert result.evaluations == 1  # the stored evaluation is the REST-based one
+    stored = h.repos.evaluations[max(h.repos.evaluations)]
+    assert not stored.is_alertable
+    assert len(h.dispatcher.opportunities) == 1  # only the first, REST-based alert
+    assert h.streams is not None
+    await h.streams.close()

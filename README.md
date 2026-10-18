@@ -72,6 +72,10 @@ For a reference notional `N` (default $1,000):
 4. `net = P − C`, `net% = net / C · 100`. An alert requires **both** `net% ≥ 0.3` and
    `net ≥ $5` (configurable).
 
+Order books come from REST by default. Both legs of a route that just showed a positive net
+spread join a bounded **WebSocket hot-set** (`SCANNER_WS_*`) and are evaluated on streamed books
+while they stay fresh; otherwise the scanner falls back to REST.
+
 False-positive guards: stale/skewed books, crossed books, exchange minimums, suspended
 deposits/withdrawals (`transfer_unavailable`), a hard gross-spread cap, and a stricter cap
 unless both the transfer path and the token contract are verified (ticker collisions).

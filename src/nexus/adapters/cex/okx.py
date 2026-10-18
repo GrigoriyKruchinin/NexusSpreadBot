@@ -19,6 +19,8 @@ class OkxAdapter(CcxtExchangeAdapter):
     static_market_fees: ClassVar[bool] = True
     requires_passphrase: ClassVar[bool] = True
     max_order_book_limit: ClassVar[int] = 400
+    ws_order_book_limits: ClassVar[tuple[int, ...] | None] = (1, 5, 400)
+    """Public WS channels: bbo-tbt, books5, books (books50-l2-tbt needs a VIP4+ login)."""
 
     def _taker_from_fee_entry(self, symbol: str, raw: Mapping[str, Any]) -> Decimal | None:
         """OKX reports USDT-pair (``taker``) and USDC/crypto-pair (``takerUSDC``) rates.

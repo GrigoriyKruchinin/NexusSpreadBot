@@ -164,6 +164,11 @@ def test_bybit_websocket_limits_differ_from_rest() -> None:
     assert adapter.order_book_limit(20, websocket=True) == 50
 
 
+def test_okx_websocket_uses_public_channels() -> None:
+    # books50-l2-tbt requires a VIP4+ login: depth 50 must map to the public "books" channel.
+    assert _adapter("okx").order_book_limit(50, websocket=True) == 400
+
+
 async def test_watch_order_book_uses_ws_client() -> None:
     ws = FakeCcxtClient("bybit")
     adapter = BybitAdapter(
@@ -176,6 +181,28 @@ async def test_watch_order_book_uses_ws_client() -> None:
     book = await adapter.watch_order_book("BTC/USDT", 5)
     assert len(book.bids) == 5
     assert ws.calls == [("fetch_order_book", ("BTC/USDT", 50))]
+
+
+async def test_unwatch_order_book_best_effort() -> None:
+    ws = FakeCcxtClient("bybit", has={"unWatchOrderBook": True})
+    adapter = BybitAdapter(
+        ExchangeCredentials(),
+        AdapterOptions(),
+        clock=_Clock(),
+        rest_client=FakeCcxtClient("bybit"),
+        ws_client=ws,
+    )
+    await adapter.unwatch_order_book("BTC/USDT")
+    ws.fail("un_watch_order_book", ccxt.NetworkError("gone"))
+    await adapter.unwatch_order_book("BTC/USDT")  # errors are swallowed
+    assert ws.calls == [("un_watch_order_book", ("BTC/USDT",))] * 2
+    ws.has["unWatchOrderBook"] = False
+    await adapter.unwatch_order_book("BTC/USDT")
+    assert len(ws.calls) == 2
+
+
+async def test_unwatch_without_ws_client_is_noop() -> None:
+    await _adapter("bybit").unwatch_order_book("BTC/USDT")
 
 
 async def test_kucoin_currencies_parsed() -> None:

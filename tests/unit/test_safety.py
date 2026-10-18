@@ -11,11 +11,13 @@ Two layers are tested:
 import ast
 import re
 from pathlib import Path
+from typing import Any, ClassVar
 
 import pytest
 from pydantic import SecretStr
 
 import nexus.adapters.cex  # noqa: F401 - registers adapters
+from nexus.adapters.cex.ccxt_base import install_read_only_guard
 from nexus.adapters.registry import AdapterOptions, exchange_registry
 from nexus.config.groups import ExchangeCredentials
 from nexus.domain.errors import ReadOnlyViolationError
@@ -164,5 +166,46 @@ async def test_runtime_guard_blocks_okx_transfer_via_request() -> None:
         client = adapter._rest  # type: ignore[attr-defined]
         with pytest.raises(ReadOnlyViolationError):
             await client.request("asset/transfer", ["private"], "POST", {"ccy": "USDT"})
+    finally:
+        await adapter.close()
+
+
+async def test_kucoin_ws_guard_allows_only_public_token_post() -> None:
+    adapter = exchange_registry.create("kucoin", ExchangeCredentials(), AdapterOptions())
+    calls: list[tuple[str, str]] = []
+
+    class _Ws:
+        has: ClassVar[dict[str, bool]] = {}
+
+        async def fetch(self, url: str, method: str = "GET", *_: Any) -> Any:
+            calls.append((url, method))
+            return {}
+
+    try:
+        ws = _Ws()
+        install_read_only_guard(
+            ws,
+            "kucoin",
+            allowed_post_paths=adapter.ws_public_post_paths,  # type: ignore[attr-defined]
+        )
+        await ws.fetch("https://api.kucoin.com/api/v1/bullet-public", "POST")
+        assert calls == [("https://api.kucoin.com/api/v1/bullet-public", "POST")]
+        for url, method in (
+            ("https://api.kucoin.com/api/v1/bullet-private", "POST"),
+            ("https://api.kucoin.com/api/v1/withdrawals", "POST"),
+            ("https://api.kucoin.com/api/v1/bullet-public/x", "POST"),
+            ("https://api.kucoin.com/api/v1/bullet-public", "DELETE"),
+        ):
+            with pytest.raises(ReadOnlyViolationError):
+                await ws.fetch(url, method)
+        authenticated = _Ws()
+        authenticated.apiKey = "k"  # type: ignore[attr-defined]
+        with pytest.raises(ReadOnlyViolationError):
+            install_read_only_guard(authenticated, "kucoin", allowed_post_paths=frozenset({"/x"}))
+        # The REST client (which may hold credentials) never gets the allowlist.
+        with pytest.raises(ReadOnlyViolationError):
+            await adapter._rest.fetch(  # type: ignore[attr-defined]
+                "https://api.kucoin.com/api/v1/bullet-public", "POST"
+            )
     finally:
         await adapter.close()

@@ -201,6 +201,10 @@ class ScannerSettings(NexusBaseSettings):
     heartbeat_ttl_s: int = Field(default=120, ge=10)
     exchange_down_after_failures: int = Field(default=3, ge=1, le=100)
     rate_limit_backoff_s: int = Field(default=60, ge=5, le=3_600)
+    ws_enabled: bool = True
+    """Stream order books of recently profitable routes over WebSocket (hot-set)."""
+    ws_max_streams: int = Field(default=20, ge=0, le=200)
+    ws_hot_ttl_s: int = Field(default=300, ge=30, le=3_600)
 
     @field_validator("quote_assets", "symbols_whitelist", "symbols_blacklist")
     @classmethod

@@ -31,6 +31,7 @@ from nexus.persistence.repositories import (
 )
 from nexus.scanner.health import ExchangeHealthTracker
 from nexus.scanner.service import Repositories, Scanner, ScannerConfig
+from nexus.scanner.streams import OrderBookStreams
 from nexus.scanner.universe import UniverseFilter
 from nexus.services.alerts import AlertService
 from nexus.services.maintenance import RetentionService
@@ -73,6 +74,21 @@ async def scanner_scope(settings: ScannerRoleSettings) -> AsyncIterator[Scanner]
         stack.push_async_callback(redis.aclose)
 
         spread, scan = settings.spread, settings.scanner
+        streams = (
+            OrderBookStreams(
+                adapters,
+                depth=scan.orderbook_depth,
+                max_streams=scan.ws_max_streams,
+                hot_ttl_ms=scan.ws_hot_ttl_s * 1000,
+                # Leave headroom below the estimator's freshness limit; else fall back to REST.
+                max_book_age_ms=spread.max_orderbook_age_ms // 2,
+                clock=clock,
+            )
+            if scan.ws_enabled and scan.ws_max_streams > 0
+            else None
+        )
+        if streams is not None:
+            stack.push_async_callback(streams.close)
         yield Scanner(
             adapters=adapters,
             authenticated={n: c.is_configured for n, c in settings.credentials.items()},
@@ -115,6 +131,7 @@ async def scanner_scope(settings: ScannerRoleSettings) -> AsyncIterator[Scanner]
                 book_deadline_s=max(2.0, spread.max_orderbook_age_ms / 1000),
             ),
             clock=clock,
+            streams=streams,
         )
 
 

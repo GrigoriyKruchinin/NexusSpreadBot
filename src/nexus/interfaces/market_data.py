@@ -34,6 +34,10 @@ class IWebSocketOrderbook(ABC):
     async def watch_order_book(self, symbol: str, depth: int) -> OrderBook:
         """Return the next order book update for ``symbol`` (subscribes on first call)."""
 
+    @abstractmethod
+    async def unwatch_order_book(self, symbol: str) -> None:
+        """Unsubscribe from ``symbol`` (best effort; no-op when not subscribed)."""
+
 
 class IMarketMetadata(ABC):
     """Market and asset metadata."""

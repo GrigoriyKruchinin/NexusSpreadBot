@@ -39,6 +39,8 @@ class OrderBook:
     asks: tuple[PriceLevel, ...]
     timestamp_ms: int
     received_at_ms: int
+    streamed: bool = False
+    """True for a WebSocket-maintained book (incrementally updated, may drift out of sync)."""
 
     def __post_init__(self) -> None:
         self._validate_side(self.bids, descending=True)

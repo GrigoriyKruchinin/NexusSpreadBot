@@ -16,3 +16,5 @@ class KucoinAdapter(CcxtExchangeAdapter):
     ccxt_id: ClassVar[str] = "kucoin"
     requires_passphrase: ClassVar[bool] = True
     order_book_limits: ClassVar[tuple[int, ...] | None] = (20, 100)
+    ws_public_post_paths: ClassVar[frozenset[str]] = frozenset({"/api/v1/bullet-public"})
+    """KuCoin issues WebSocket tokens via POST (public, no credentials involved)."""

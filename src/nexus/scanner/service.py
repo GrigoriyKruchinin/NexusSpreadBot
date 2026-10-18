@@ -45,6 +45,7 @@ from nexus.interfaces.repositories import (
     ISnapshotRepository,
 )
 from nexus.scanner.health import ExchangeHealthTracker
+from nexus.scanner.streams import OrderBookStreams
 from nexus.scanner.universe import MarketUniverse, UniverseFilter
 
 log = structlog.get_logger(__name__)
@@ -100,6 +101,7 @@ class SweepResult:
     evaluations: int
     alerts: int
     timed_out: int = 0
+    streamed_books: int = 0
 
 
 class Scanner:
@@ -120,6 +122,7 @@ class Scanner:
         health: ExchangeHealthTracker,
         config: ScannerConfig,
         clock: Clock,
+        streams: OrderBookStreams | None = None,
     ) -> None:
         self._adapters = dict(adapters)
         self._authenticated = dict(authenticated)
@@ -134,6 +137,8 @@ class Scanner:
         self._config = config
         self._clock = clock
         self._universe = MarketUniverse(markets={})
+        self._streams = streams
+        self._streamed_books = 0
         self._account_fees: dict[BookKey, tuple[Decimal, int]] = {}
         """Per-symbol account taker fees ``(fee, fetched_at_ms)``; survive metadata refreshes
         until :data:`FEE_CACHE_TTL_MS`."""
@@ -173,6 +178,9 @@ class Scanner:
                         stop.wait(), timeout=max(0.0, self._config.ticker_interval_s - elapsed)
                     )
         finally:
+            if self._streams is not None:
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(self._streams.close(), EVENT_EMIT_TIMEOUT_S)
             with contextlib.suppress(Exception):
                 await asyncio.wait_for(
                     self._emit(ScannerStopped(reason="shutdown")), EVENT_EMIT_TIMEOUT_S
@@ -265,7 +273,9 @@ class Scanner:
                 datetime.now(tz=UTC), routes[: self._config.snapshot_top_k]
             )
         candidates = self._finder.select(routes, self._config.max_candidates_per_sweep)
+        self._streamed_books = 0
         evaluations, timed_out = await self._evaluate_candidates(candidates)
+        await self._update_streams(evaluations)
         ids = await self._repos.evaluations.add_evaluations(evaluations)
         alerts = 0
         for evaluation_id, evaluation in zip(ids, evaluations, strict=True):
@@ -281,6 +291,7 @@ class Scanner:
             evaluations=len(evaluations),
             alerts=alerts,
             timed_out=timed_out,
+            streamed_books=self._streamed_books,
         )
         log.info(
             "sweep_done",
@@ -290,8 +301,21 @@ class Scanner:
             evaluations=result.evaluations,
             alerts=result.alerts,
             timed_out=result.timed_out,
+            streamed_books=result.streamed_books,
+            active_streams=self._streams.active if self._streams is not None else 0,
         )
         return result
+
+    async def _update_streams(self, evaluations: Sequence[SpreadEvaluation]) -> None:
+        """Keep streaming both legs of every route that just showed a positive net spread."""
+        if self._streams is None:
+            return
+        for evaluation in evaluations:
+            breakdown = evaluation.breakdown
+            if breakdown is not None and breakdown.net_profit_usd > 0:
+                self._streams.mark_hot(evaluation.buy_exchange, evaluation.symbol)
+                self._streams.mark_hot(evaluation.sell_exchange, evaluation.symbol)
+        await self._streams.prune()
 
     async def _alert(self, evaluation_id: int, evaluation: SpreadEvaluation) -> bool:
         key = f"alert:{evaluation.route_key}"
@@ -391,7 +415,14 @@ class Scanner:
             )
             if buy_book is None or sell_book is None:
                 return None
-            return self._evaluate(route, buy_book, sell_book)
+            evaluation = self._evaluate(route, buy_book, sell_book)
+            if (
+                evaluation is not None
+                and evaluation.is_alertable
+                and (buy_book.streamed or sell_book.streamed)
+            ):
+                return await self._confirm_with_rest(route, buy_book, sell_book)
+            return evaluation
 
         tasks = [asyncio.create_task(evaluate(route)) for route in candidates]
         if not tasks:
@@ -489,7 +520,46 @@ class Scanner:
         self._fee_checked[key] = self._clock.now_ms()
         self._fee_attempts.pop(key, None)
 
-    async def _fetch_book(self, exchange: str, symbol: str) -> OrderBook | None:
+    async def _confirm_with_rest(
+        self, route: RouteQuote, buy_book: OrderBook, sell_book: OrderBook
+    ) -> SpreadEvaluation | None:
+        """Re-evaluate an alertable route on REST snapshots for its WebSocket-sourced legs.
+
+        Incremental WS books can silently miss a delta (some ccxt streams have no gap
+        detection) and keep a phantom level; an alert is only ever based on REST data.
+        """
+        buy, sell = await asyncio.gather(
+            self._rest_book_for(buy_book),
+            self._rest_book_for(sell_book),
+        )
+        if buy is None or sell is None:
+            log.info("ws_confirmation_failed", route=route.symbol)
+            return None
+        confirmed = self._evaluate(route, buy, sell)
+        log.info(
+            "ws_opportunity_rechecked",
+            route=route.symbol,
+            confirmed=confirmed is not None and confirmed.is_alertable,
+        )
+        return confirmed
+
+    async def _rest_book_for(self, book: OrderBook) -> OrderBook | None:
+        if not book.streamed:
+            return book
+        return await self._fetch_book(book.exchange, book.symbol, allow_stream=False)
+
+    async def _fetch_book(
+        self, exchange: str, symbol: str, *, allow_stream: bool = True
+    ) -> OrderBook | None:
+        if self._health.is_paused(exchange, self._clock.now_ms()):
+            return None
+        if (
+            allow_stream
+            and self._streams is not None
+            and (book := self._streams.fresh_book(exchange, symbol))
+        ):
+            self._streamed_books += 1
+            return book
         async with self._semaphores[exchange]:
             if self._health.is_paused(exchange, self._clock.now_ms()):
                 return None

@@ -14,6 +14,7 @@ import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 from typing import Any, ClassVar, TypeVar
+from urllib.parse import urlsplit
 
 import ccxt
 import ccxt.async_support as ccxt_async
@@ -63,20 +64,29 @@ _CONTRACT_KEYS: tuple[str, ...] = ("contractAddress", "contract_address", "ctAdd
 """Keys under a ccxt network's raw ``info`` holding the token contract (KuCoin, Gate, OKX, ...)."""
 
 
-def install_read_only_guard(client: Any, exchange: str) -> None:
+def install_read_only_guard(
+    client: Any, exchange: str, *, allowed_post_paths: frozenset[str] = frozenset()
+) -> None:
     """Block every non-GET HTTP request issued by an (authenticated) ccxt client.
 
     ccxt routes all REST traffic (unified methods, implicit API methods and ``request()``)
     through ``Exchange.fetch``. Order placement, withdrawals and transfers require POST /
     DELETE / PUT on every supported venue, so a GET-only client cannot move funds even if a
     future code change (or a mis-scoped API key) would otherwise allow it.
+
+    ``allowed_post_paths`` lists exact URL paths of *public* POST endpoints (e.g. KuCoin's
+    WebSocket token ``/api/v1/bullet-public``); it is used only for unauthenticated clients.
     """
+    if allowed_post_paths and getattr(client, "apiKey", None):
+        msg = f"[{exchange}] public POST allowlist is only allowed on unauthenticated clients"
+        raise ReadOnlyViolationError(msg)
     original = client.fetch
 
     async def guarded_fetch(
         url: str, method: str = "GET", headers: Any = None, body: Any = None
     ) -> Any:
-        if str(method).upper() != "GET":
+        verb = str(method).upper()
+        if verb != "GET" and not (verb == "POST" and urlsplit(url).path in allowed_post_paths):
             msg = f"[{exchange}] blocked non-read-only {str(method).upper()} request"
             raise ReadOnlyViolationError(msg)
         return await original(url, method, headers, body)
@@ -119,6 +129,8 @@ class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook, ITradingFeeS
     """Allowed WebSocket ``limit`` values when they differ from REST (``None`` = same)."""
     static_market_fees: ClassVar[bool] = False
     """True when ccxt fills ``market["taker"]`` from a library constant, not exchange data."""
+    ws_public_post_paths: ClassVar[frozenset[str]] = frozenset()
+    """Public POST endpoints the (unauthenticated) WebSocket client needs, e.g. a WS token."""
     max_attempts: ClassVar[int] = 3
     retry_backoff_s: ClassVar[float] = 0.5
 
@@ -458,11 +470,27 @@ class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook, ITradingFeeS
             raise ExchangeUnavailableError(self.name, msg)
         if self._ws is None:
             self._ws = getattr(ccxt_pro, self.ccxt_id)(self._client_config(authenticated=False))
+            if hasattr(self._ws, "fetch"):
+                # Unauthenticated today; the guard keeps it read-only if that ever changes.
+                install_read_only_guard(
+                    self._ws, self.name, allowed_post_paths=self.ws_public_post_paths
+                )
         limit = self.order_book_limit(depth, websocket=True)
         raw: Mapping[str, Any] = await self._call(
             f"watch_order_book {symbol}", lambda: self._ws.watch_order_book(symbol, limit)
         )
         return self._parse_order_book(symbol, raw, depth)
+
+    async def unwatch_order_book(self, symbol: str) -> None:
+        """Unsubscribe from a WebSocket order book stream (best effort)."""
+        if self._ws is None or self._closed or not self._ws.has.get("unWatchOrderBook"):
+            return
+        try:
+            await asyncio.wait_for(
+                self._ws.un_watch_order_book(symbol), self._options.timeout_ms / 1000
+            )
+        except (ccxt.BaseError, TimeoutError) as exc:
+            self._log.info("unwatch_failed", symbol=symbol, error=type(exc).__name__)
 
     def _parse_order_book(self, symbol: str, raw: Mapping[str, Any], depth: int) -> OrderBook:
         received = self._clock.now_ms()
