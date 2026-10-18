@@ -131,6 +131,7 @@ async def alert_service_scope(settings: AlertsWorkerSettings) -> AsyncIterator[A
             notifier=notifier,
             clock=SystemClock(),
             max_age_s=settings.telegram.alert_max_age_s,
+            event_max_age_s=settings.telegram.event_max_age_s,
         )
     finally:
         await notifier.close()

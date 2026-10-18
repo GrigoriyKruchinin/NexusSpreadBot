@@ -6,6 +6,7 @@ import asyncio
 
 from celery import Celery
 
+from nexus.domain.clock import Clock, SystemClock
 from nexus.domain.events import SystemEvent, event_to_payload
 from nexus.interfaces.coordination import IAlertDispatcher
 from nexus.workers.app import ALERTS_QUEUE, TASK_SEND_EVENT, TASK_SEND_OPPORTUNITY
@@ -22,8 +23,9 @@ _PUBLISH_RETRY_POLICY = {
 class CeleryAlertDispatcher(IAlertDispatcher):
     """Publishes alert tasks by name (the scanner never imports Telegram code or secrets)."""
 
-    def __init__(self, app: Celery) -> None:
+    def __init__(self, app: Celery, clock: Clock | None = None) -> None:
         self._app = app
+        self._clock = clock or SystemClock()
 
     async def dispatch_opportunity(self, evaluation_id: int) -> None:
         """Queue an opportunity alert for a stored evaluation."""
@@ -41,7 +43,7 @@ class CeleryAlertDispatcher(IAlertDispatcher):
         await asyncio.to_thread(
             self._app.send_task,
             TASK_SEND_EVENT,
-            args=[event_to_payload(event)],
+            args=[event_to_payload(event, emitted_at_ms=self._clock.now_ms())],
             queue=ALERTS_QUEUE,
             retry=True,
             retry_policy=_PUBLISH_RETRY_POLICY,

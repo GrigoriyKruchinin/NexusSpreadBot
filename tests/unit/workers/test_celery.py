@@ -16,6 +16,7 @@ from nexus.workers.app import (
     create_celery_app,
 )
 from nexus.workers.dispatch import CeleryAlertDispatcher
+from tests.fakes import ManualClock
 
 
 def test_routing_and_beat_schedule() -> None:
@@ -45,13 +46,13 @@ class _App:
 
 async def test_dispatcher_publishes_by_name() -> None:
     app = _App()
-    dispatcher = CeleryAlertDispatcher(app)  # type: ignore[arg-type]
+    dispatcher = CeleryAlertDispatcher(app, ManualClock(123))  # type: ignore[arg-type]
     await dispatcher.dispatch_opportunity(42)
     await dispatcher.dispatch_event(ScannerStopped(reason="test"))
     assert app.sent[0] == (TASK_SEND_OPPORTUNITY, [42], ALERTS_QUEUE)
     assert app.sent[1] == (
         TASK_SEND_EVENT,
-        [{"kind": "scanner_stopped", "data": {"reason": "test"}}],
+        [{"kind": "scanner_stopped", "data": {"reason": "test"}, "emitted_at_ms": 123}],
         ALERTS_QUEUE,
     )
 

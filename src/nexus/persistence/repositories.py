@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -202,13 +202,25 @@ class EvaluationRepository(_Repository, IEvaluationRepository):
 class AlertLogRepository(_Repository, IAlertLogRepository):
     """Alert delivery log (one row per evaluation)."""
 
-    async def was_sent(self, evaluation_id: int) -> bool:
-        """True if an alert for ``evaluation_id`` was already delivered."""
-        async with self._sessions() as session:
-            status = await session.scalar(
-                select(AlertLogRow.status).where(AlertLogRow.evaluation_id == evaluation_id)
-            )
-            return status == AlertDeliveryStatus.SENT.value
+    async def claim(self, evaluation_id: int, *, channel: str) -> bool:
+        """Atomically mark ``evaluation_id`` as being sent (see the interface docstring)."""
+        insert = pg_insert(AlertLogRow).values(
+            evaluation_id=evaluation_id,
+            channel=channel,
+            status=AlertDeliveryStatus.SENDING.value,
+        )
+        stmt = insert.on_conflict_do_update(
+            index_elements=[AlertLogRow.evaluation_id],
+            set_={
+                "status": AlertDeliveryStatus.SENDING.value,
+                "error": None,
+                "updated_at": datetime.now(tz=UTC),
+            },
+            where=AlertLogRow.status == AlertDeliveryStatus.FAILED.value,
+        ).returning(AlertLogRow.id)
+        async with self._sessions.begin() as session:
+            claimed = await session.scalar(stmt)
+        return claimed is not None
 
     async def record(
         self,

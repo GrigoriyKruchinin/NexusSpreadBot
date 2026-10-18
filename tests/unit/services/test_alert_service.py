@@ -45,10 +45,7 @@ async def test_expired_alert_dropped() -> None:
     service = _service(repos, notifier, now=EVALUATED_AT_MS + 121_000)
     assert await service.send_opportunity(evaluation_id) is AlertOutcome.EXPIRED
     assert notifier.sent == []
-    status, error = repos.alerts[evaluation_id]
-    assert status is AlertDeliveryStatus.FAILED
-    assert error is not None
-    assert "expired" in error
+    assert evaluation_id not in repos.alerts
 
 
 async def test_delivery_failure_recorded_and_reraised() -> None:
@@ -57,6 +54,29 @@ async def test_delivery_failure_recorded_and_reraised() -> None:
     with pytest.raises(NotificationError):
         await _service(repos, notifier).send_opportunity(evaluation_id)
     assert repos.alerts[evaluation_id][0] is AlertDeliveryStatus.FAILED
+    # The failed attempt releases the claim: a Celery retry may deliver it.
+    notifier.error = None
+    assert await _service(repos, notifier).send_opportunity(evaluation_id) is AlertOutcome.SENT
+    assert len(notifier.sent) == 1
+
+
+async def test_claimed_alert_not_resent_after_redelivery() -> None:
+    """A worker died after claiming (row left SENDING): redelivery must not send again."""
+    repos, notifier = MemoryRepos(), RecordingNotifier()
+    [evaluation_id] = await repos.add_evaluations([make_evaluation()])
+    assert await repos.claim(evaluation_id, channel="telegram")
+    assert await _service(repos, notifier).send_opportunity(evaluation_id) is (
+        AlertOutcome.DUPLICATE
+    )
+    assert notifier.sent == []
+
+
+async def test_unexpected_send_error_releases_claim() -> None:
+    repos, notifier = MemoryRepos(), RecordingNotifier(error=RuntimeError("boom"))
+    [evaluation_id] = await repos.add_evaluations([make_evaluation()])
+    with pytest.raises(RuntimeError):
+        await _service(repos, notifier).send_opportunity(evaluation_id)
+    assert repos.alerts[evaluation_id] == (AlertDeliveryStatus.FAILED, "boom")
 
 
 async def test_system_event_recovered_is_silent() -> None:
@@ -65,3 +85,23 @@ async def test_system_event_recovered_is_silent() -> None:
     assert await _service(repos, notifier).send_event(payload) is AlertOutcome.SENT
     assert notifier.sent[0].silent
     assert "OKX recovered" in notifier.sent[0].text
+
+
+async def test_stale_system_event_dropped() -> None:
+    repos, notifier = MemoryRepos(), RecordingNotifier()
+    now = EVALUATED_AT_MS
+    service = AlertService(
+        evaluations=repos,
+        alert_log=repos,
+        notifier=notifier,
+        clock=ManualClock(now),
+        max_age_s=30,
+        event_max_age_s=300,
+    )
+    event = ExchangeRecovered(exchange="okx", downtime_s=12)
+    stale = event_to_payload(event, emitted_at_ms=now - 301_000)
+    fresh = event_to_payload(event, emitted_at_ms=now - 299_000)
+    assert await service.send_event(stale) is AlertOutcome.EXPIRED
+    assert notifier.sent == []
+    assert await service.send_event(fresh) is AlertOutcome.SENT
+    assert len(notifier.sent) == 1

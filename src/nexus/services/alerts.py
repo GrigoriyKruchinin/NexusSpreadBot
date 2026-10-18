@@ -8,7 +8,6 @@ from typing import Any
 import structlog
 
 from nexus.domain.clock import Clock
-from nexus.domain.errors import NotificationError
 from nexus.domain.events import ExchangeRecovered, event_from_payload
 from nexus.interfaces.notifications import INotifier, OutgoingMessage
 from nexus.interfaces.repositories import (
@@ -43,6 +42,7 @@ class AlertService:
         notifier: INotifier,
         clock: Clock,
         max_age_s: int,
+        event_max_age_s: int = 300,
         opportunity_formatter: OpportunityFormatter | None = None,
         event_formatter: SystemEventFormatter | None = None,
     ) -> None:
@@ -51,13 +51,16 @@ class AlertService:
         self._notifier = notifier
         self._clock = clock
         self._max_age_ms = max_age_s * 1000
+        self._event_max_age_ms = event_max_age_s * 1000
         self._opportunity = opportunity_formatter or OpportunityFormatter()
         self._events = event_formatter or SystemEventFormatter()
 
     async def send_opportunity(self, evaluation_id: int) -> AlertOutcome:
-        """Deliver the alert for ``evaluation_id`` unless already sent, stale or invalid."""
-        if await self._alert_log.was_sent(evaluation_id):
-            return AlertOutcome.DUPLICATE
+        """Deliver the alert for ``evaluation_id`` at most once, unless stale or invalid.
+
+        The alert is claimed in the log *before* the message is sent, so an at-least-once
+        broker redelivery (acks late, worker restart) cannot produce a second message.
+        """
         evaluation = await self._evaluations.get(evaluation_id)
         if evaluation is None:
             return AlertOutcome.MISSING
@@ -65,18 +68,16 @@ class AlertService:
             return AlertOutcome.NOT_ALERTABLE
         age_ms = self._clock.now_ms() - evaluation.evaluated_at_ms
         if age_ms > self._max_age_ms:
-            await self._alert_log.record(
-                evaluation_id,
-                channel=CHANNEL,
-                status=AlertDeliveryStatus.FAILED,
-                error=f"expired: alert was {age_ms // 1000}s old",
-            )
             log.warning("alert_expired", evaluation_id=evaluation_id, age_ms=age_ms)
             return AlertOutcome.EXPIRED
+        if not await self._alert_log.claim(evaluation_id, channel=CHANNEL):
+            log.info("alert_duplicate", evaluation_id=evaluation_id)
+            return AlertOutcome.DUPLICATE
         text = self._opportunity.render(evaluation)
         try:
             receipt = await self._notifier.send(OutgoingMessage(text=text))
-        except NotificationError as exc:
+        except Exception as exc:
+            # Release the claim so a Celery retry may try again (still bounded by max age).
             await self._alert_log.record(
                 evaluation_id, channel=CHANNEL, status=AlertDeliveryStatus.FAILED, error=str(exc)
             )
@@ -91,8 +92,18 @@ class AlertService:
         return AlertOutcome.SENT
 
     async def send_event(self, payload: dict[str, Any]) -> AlertOutcome:
-        """Render and deliver a system event payload."""
+        """Render and deliver a system event payload unless it is older than the event max age.
+
+        Stale events (e.g. an ``exchange_down`` retried for minutes after the exchange has
+        already recovered) would be misleading, so they are dropped.
+        """
         event = event_from_payload(payload)
+        emitted_at_ms = payload.get("emitted_at_ms")
+        if isinstance(emitted_at_ms, int):
+            age_ms = self._clock.now_ms() - emitted_at_ms
+            if age_ms > self._event_max_age_ms:
+                log.warning("event_expired", kind=event.kind, age_ms=age_ms)
+                return AlertOutcome.EXPIRED
         silent = isinstance(event, ExchangeRecovered)
         await self._notifier.send(OutgoingMessage(text=self._events.render(event), silent=silent))
         log.info("event_sent", kind=event.kind)

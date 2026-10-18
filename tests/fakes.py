@@ -147,9 +147,12 @@ class MemoryRepos(
         else:  # exchange health
             self.health.append((str(args[0]), str(args[1]), bool(kwargs["ok"])))
 
-    async def was_sent(self, evaluation_id: int) -> bool:
+    async def claim(self, evaluation_id: int, *, channel: str) -> bool:
         entry = self.alerts.get(evaluation_id)
-        return entry is not None and entry[0] is AlertDeliveryStatus.SENT
+        if entry is not None and entry[0] is not AlertDeliveryStatus.FAILED:
+            return False
+        self.alerts[evaluation_id] = (AlertDeliveryStatus.SENDING, None)
+        return True
 
     async def purge(
         self, *, snapshots_before: datetime, evaluations_before: datetime

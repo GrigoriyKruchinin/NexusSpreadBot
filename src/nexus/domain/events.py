@@ -68,9 +68,15 @@ _EVENT_TYPES: dict[str, type[Any]] = {
 }
 
 
-def event_to_payload(event: SystemEvent) -> dict[str, Any]:
-    """Serialize an event into a JSON-safe dict (for Celery)."""
-    return {"kind": event.kind, "data": asdict(event)}
+def event_to_payload(event: SystemEvent, *, emitted_at_ms: int | None = None) -> dict[str, Any]:
+    """Serialize an event into a JSON-safe dict (for Celery).
+
+    ``emitted_at_ms`` lets the consumer drop events that sat in the queue for too long.
+    """
+    payload: dict[str, Any] = {"kind": event.kind, "data": asdict(event)}
+    if emitted_at_ms is not None:
+        payload["emitted_at_ms"] = emitted_at_ms
+    return payload
 
 
 def event_from_payload(payload: dict[str, Any]) -> SystemEvent:

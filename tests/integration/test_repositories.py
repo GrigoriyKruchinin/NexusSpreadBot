@@ -69,15 +69,16 @@ async def test_evaluation_roundtrip_exact_decimals(sessions: Sessions) -> None:
 async def test_alert_log_idempotency(sessions: Sessions) -> None:
     [evaluation_id] = await EvaluationRepository(sessions).add_evaluations([make_evaluation()])
     alerts = AlertLogRepository(sessions)
-    assert not await alerts.was_sent(evaluation_id)
+    assert await alerts.claim(evaluation_id, channel="telegram")
+    assert not await alerts.claim(evaluation_id, channel="telegram")  # in flight
     await alerts.record(
         evaluation_id, channel="telegram", status=AlertDeliveryStatus.FAILED, error="timeout"
     )
-    assert not await alerts.was_sent(evaluation_id)
+    assert await alerts.claim(evaluation_id, channel="telegram")  # retry after failure
     await alerts.record(
         evaluation_id, channel="telegram", status=AlertDeliveryStatus.SENT, message_id="42"
     )
-    assert await alerts.was_sent(evaluation_id)
+    assert not await alerts.claim(evaluation_id, channel="telegram")  # delivered
 
 
 async def test_snapshots_health_and_retention(sessions: Sessions) -> None:

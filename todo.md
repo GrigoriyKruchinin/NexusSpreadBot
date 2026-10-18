@@ -93,7 +93,7 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [x] Celery app (Redis broker), task routing: `alerts`, `maintenance` queues; role-scoped lazy settings + fail-fast at worker start
 - [x] Beat schedule: retention cleanup (metadata/fee refresh runs inside the scanner, which owns exchange keys)
 - [x] Alert tasks with retries (429 `retry_after`, infra autoretry) & idempotent alert log; stale alerts expire
-- [ ] Claim-before-send (PENDING row) to avoid duplicate Telegram messages on ack-late redelivery; event expiry
+- [x] Claim-before-send (SENDING row) to avoid duplicate Telegram messages on ack-late redelivery; event expiry
 - [x] Scanner orchestrator (async: ticker sweep → candidates → per-route book fetch with deadline → estimator → DB → alert queue), exchange health with hysteresis, rate-limit pauses, heartbeat, graceful SIGTERM
 - [ ] WebSocket hot-set: stream books for recently profitable routes (interfaces ready: `IWebSocketOrderbook`)
 

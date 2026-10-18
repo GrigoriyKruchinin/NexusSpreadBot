@@ -15,6 +15,7 @@ from nexus.engine.candidates import RouteQuote
 class AlertDeliveryStatus(StrEnum):
     """Delivery state of an alert."""
 
+    SENDING = "sending"
     SENT = "sent"
     FAILED = "failed"
 
@@ -51,8 +52,14 @@ class IAlertLogRepository(ABC):
     """Alert delivery log (idempotency)."""
 
     @abstractmethod
-    async def was_sent(self, evaluation_id: int) -> bool:
-        """True if an alert for ``evaluation_id`` was already delivered."""
+    async def claim(self, evaluation_id: int, *, channel: str) -> bool:
+        """Atomically mark ``evaluation_id`` as being sent.
+
+        Returns ``True`` only for the first claim, or when the previous attempt ``FAILED``.
+        A ``SENDING`` or ``SENT`` record is never re-claimed: a worker that died between the
+        send and the final ``record`` call leaves ``SENDING`` behind, and the alert is then
+        dropped rather than risk a duplicate message (at-most-once delivery).
+        """
 
     @abstractmethod
     async def record(

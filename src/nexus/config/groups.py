@@ -74,6 +74,8 @@ class TelegramSettings(NexusBaseSettings):
     disable_notification: bool = False
     alert_max_age_s: int = Field(default=30, ge=10, le=3_600)
     """Opportunity alerts older than this (queue backlog, retries) are dropped, not sent."""
+    event_max_age_s: int = Field(default=300, ge=30, le=86_400)
+    """System events (exchange down/recovered, start/stop) older than this are dropped."""
 
     @field_validator("chat_id")
     @classmethod
