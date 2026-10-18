@@ -1,10 +1,22 @@
+<div align="center">
+
+<img src="docs/assets/nexus-logo.jpg" alt="Nexus Spread Scanner logo" width="180">
+
 # Nexus Spread Scanner
 
-`nexus-spread-bot` is an asynchronous, strictly typed multi-exchange spread scanner. It
-monitors spot markets on centralized exchanges, estimates the **net** arbitrage spread after
-taker fees on both legs, order-book slippage and network transfer cost, and sends formatted
-Telegram alerts for opportunities above a configured threshold. Every evaluation is stored in
-PostgreSQL for later analysis.
+**An asynchronous multi-exchange arbitrage spread scanner for centralized crypto exchanges.**
+
+It watches spot markets on Bybit, Binance, OKX, Gate.io and KuCoin, estimates the **net**
+spread after taker fees on both legs, order-book slippage and network transfer cost, and
+alerts you on Telegram. Every evaluation is stored in PostgreSQL for later analysis.
+
+![Python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
+![mypy](https://img.shields.io/badge/mypy-strict-2A6DB2)
+![ruff](https://img.shields.io/badge/lint-ruff-D7FF64)
+![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)
+![Status](https://img.shields.io/badge/V1-read--only%20scanner-success)
+
+</div>
 
 > **Safety.** The bot never withdraws or transfers funds. Version 1 is read-only: every
 > authenticated exchange client is wrapped in a runtime guard that blocks any non-GET request,
