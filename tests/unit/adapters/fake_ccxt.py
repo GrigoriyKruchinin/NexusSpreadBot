@@ -27,6 +27,7 @@ class FakeCcxtClient:
             "fetch_order_book": load_fixture(exchange, "order_book"),
             "fetch_currencies": load_fixture(exchange, "currencies"),
             "fetch_trading_fees": {},
+            "fetch_trading_fee": {},
             "fetch_deposit_withdraw_fees": {},
         }
         self.payloads.update(overrides)
@@ -62,6 +63,9 @@ class FakeCcxtClient:
 
     async def fetch_trading_fees(self) -> Any:
         return await self._respond("fetch_trading_fees")
+
+    async def fetch_trading_fee(self, symbol: str) -> Any:
+        return await self._respond("fetch_trading_fee", symbol)
 
     async def fetch_deposit_withdraw_fees(self) -> Any:
         return await self._respond("fetch_deposit_withdraw_fees")

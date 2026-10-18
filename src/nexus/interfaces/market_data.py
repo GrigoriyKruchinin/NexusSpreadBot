@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
+from decimal import Decimal
 from types import TracebackType
 from typing import ClassVar, Self
 
@@ -47,6 +48,17 @@ class IMarketMetadata(ABC):
 
         Returns ``None`` when the exchange does not expose this data without credentials
         that are not configured.
+        """
+
+
+class ITradingFeeSource(ABC):
+    """Per-symbol account-tier fee lookups (for exchanges without a bulk fee endpoint)."""
+
+    @abstractmethod
+    async def fetch_taker_fee(self, symbol: str) -> Decimal | None:
+        """Account taker fee of ``symbol`` as a fraction, or ``None`` if unavailable.
+
+        Requires read-only credentials; raises ``ExchangeError`` on transport failures.
         """
 
 

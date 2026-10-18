@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from decimal import Decimal
 
 from nexus.domain.models import AssetTransferInfo, MarketInfo
 
@@ -56,6 +57,21 @@ class MarketUniverse:
             },
             transfers=dict(transfers),
         )
+
+    def with_taker_fees(self, fees: Mapping[tuple[str, str], Decimal]) -> MarketUniverse:
+        """Copy with account fees applied: ``(exchange, symbol) -> taker fee`` (fraction)."""
+        if not fees:
+            return self
+        markets = {
+            exchange: {
+                symbol: replace(market, taker_fee=fees[key], taker_fee_is_default=False)
+                if (key := (exchange, symbol)) in fees
+                else market
+                for symbol, market in by_symbol.items()
+            }
+            for exchange, by_symbol in self.markets.items()
+        }
+        return MarketUniverse(markets=markets, transfers=self.transfers)
 
     @property
     def common_symbols(self) -> frozenset[str]:

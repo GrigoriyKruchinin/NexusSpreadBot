@@ -70,7 +70,7 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [x] Adapter tests with recorded fixture payloads
 - [x] Safety: runtime GET-only guard on authenticated ccxt clients + AST test against fund-moving calls (risk audit)
 - [x] Log scrubbing of signatures/keys/tokens for structlog and stdlib records
-- [ ] Per-pair taker fee for OKX/KuCoin via `fetch_trading_fee` on alert candidates (fees currently flagged as estimates)
+- [x] Per-pair account taker fee via `fetch_trading_fee` on alert candidates (OKX; KuCoin markets already carry public per-pair fees), 6h cache, bounded retries — audited: SAFE TO PROCEED
 
 ### 1.5 Net Spread Engine (R) — audited: SAFE TO PROCEED
 - [x] Depth walker: VWAP for buy (asks) / sell (bids) at reference notional; reject if insufficient depth

@@ -12,12 +12,18 @@ import time
 from collections.abc import Coroutine, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 import structlog
 
 from nexus.domain.clock import Clock
-from nexus.domain.errors import DataValidationError, ExchangeError, ExchangeRateLimitError
+from nexus.domain.errors import (
+    DataValidationError,
+    ExchangeError,
+    ExchangeRateLimitError,
+    ExchangeUnavailableError,
+)
 from nexus.domain.events import (
     ExchangeStatus,
     ScannerStarted,
@@ -31,7 +37,7 @@ from nexus.engine.candidates import CandidateFinder, RouteQuote
 from nexus.engine.estimator import NetSpreadEstimator
 from nexus.engine.transfer import select_transfer_route
 from nexus.interfaces.coordination import IAlertDispatcher, ICooldownStore, IHeartbeat
-from nexus.interfaces.market_data import BaseExchangeAdapter
+from nexus.interfaces.market_data import BaseExchangeAdapter, ITradingFeeSource
 from nexus.interfaces.repositories import (
     IEvaluationRepository,
     IExchangeHealthRepository,
@@ -46,6 +52,13 @@ log = structlog.get_logger(__name__)
 HEARTBEAT_SERVICE = "scanner"
 MIN_LIVE_EXCHANGES = 2
 EVENT_EMIT_TIMEOUT_S = 5.0
+FEE_LOOKUPS_PER_EXCHANGE_PER_SWEEP = 3
+"""Per-symbol account fee lookups are lazy (alert candidates only) and rate-limit friendly."""
+FEE_LOOKUP_TIMEOUT_S = 2.0
+"""A slow fee endpoint must not hold up evaluation: the leg keeps its (estimated) default fee."""
+FEE_LOOKUP_MAX_ATTEMPTS = 3
+FEE_CACHE_TTL_MS = 6 * 3600 * 1000
+"""Account fee tiers change (30-day volume, promos): looked-up fees are re-fetched after this."""
 
 BookKey = tuple[str, str]
 
@@ -121,6 +134,13 @@ class Scanner:
         self._config = config
         self._clock = clock
         self._universe = MarketUniverse(markets={})
+        self._account_fees: dict[BookKey, tuple[Decimal, int]] = {}
+        """Per-symbol account taker fees ``(fee, fetched_at_ms)``; survive metadata refreshes
+        until :data:`FEE_CACHE_TTL_MS`."""
+        self._fee_checked: dict[BookKey, int] = {}
+        """Lookups that completed (with or without a fee) -> completion time (ms)."""
+        self._fee_attempts: dict[BookKey, int] = {}
+        self._fee_semaphores = {name: asyncio.Semaphore(1) for name in self._adapters}
         self._semaphores = {
             name: asyncio.Semaphore(config.max_concurrent_requests_per_exchange)
             for name in self._adapters
@@ -220,7 +240,9 @@ class Scanner:
             await self._record(name, "load_metadata", started, None)
 
         await asyncio.gather(*(load(n, a) for n, a in self._adapters.items()))
-        self._universe = MarketUniverse.build(markets, transfers, self._filter)
+        self._universe = MarketUniverse.build(markets, transfers, self._filter).with_taker_fees(
+            self._fresh_account_fees()
+        )
         all_markets = [
             m for by_symbol in self._universe.markets.values() for m in by_symbol.values()
         ]
@@ -355,10 +377,17 @@ class Scanner:
                 books[key] = asyncio.create_task(self._fetch_book(exchange, symbol))
             return books[key]
 
+        fee_tasks = {
+            key: asyncio.create_task(self._refine_fee(*key))
+            for key in self._fee_lookups(candidates)
+        }
+
         async def evaluate(route: RouteQuote) -> SpreadEvaluation | None:
-            buy_book, sell_book = await asyncio.gather(
-                book_task(route.buy_exchange, route.symbol),
-                book_task(route.sell_exchange, route.symbol),
+            legs = ((route.buy_exchange, route.symbol), (route.sell_exchange, route.symbol))
+            buy_book, sell_book, *_ = await asyncio.gather(
+                book_task(*legs[0]),
+                book_task(*legs[1]),
+                *(fee_tasks[leg] for leg in legs if leg in fee_tasks),
             )
             if buy_book is None or sell_book is None:
                 return None
@@ -368,9 +397,10 @@ class Scanner:
         if not tasks:
             return [], 0
         done, pending = await asyncio.wait(tasks, timeout=self._config.book_deadline_s)
-        for task in (*pending, *books.values()):
+        helpers = (*books.values(), *fee_tasks.values())
+        for task in (*pending, *helpers):
             task.cancel()
-        await asyncio.gather(*pending, *books.values(), return_exceptions=True)
+        await asyncio.gather(*pending, *helpers, return_exceptions=True)
         evaluations = [
             result
             for task in tasks
@@ -380,6 +410,84 @@ class Scanner:
         if pending:
             log.warning("book_deadline_exceeded", routes=len(pending))
         return evaluations, len(pending)
+
+    def _fresh_account_fees(self) -> dict[BookKey, Decimal]:
+        """Looked-up fees younger than the TTL (expired ones are dropped)."""
+        now = self._clock.now_ms()
+        self._account_fees = {
+            key: entry
+            for key, entry in self._account_fees.items()
+            if now - entry[1] < FEE_CACHE_TTL_MS
+        }
+        return {key: fee for key, (fee, _) in self._account_fees.items()}
+
+    def _fee_lookup_due(self, key: BookKey, market: MarketInfo) -> bool:
+        checked_at = self._fee_checked.get(key)
+        if checked_at is None:
+            return market.taker_fee_is_default
+        return self._clock.now_ms() - checked_at >= FEE_CACHE_TTL_MS
+
+    def _fee_lookups(self, candidates: Sequence[RouteQuote]) -> list[BookKey]:
+        """Candidate legs on a default (or expired) fee whose adapter can look it up."""
+        budget: dict[str, int] = {}
+        keys: list[BookKey] = []
+        for route in candidates:
+            for key in ((route.buy_exchange, route.symbol), (route.sell_exchange, route.symbol)):
+                exchange = key[0]
+                market = self._universe.market(*key)
+                if (
+                    key in keys
+                    or market is None
+                    or not self._fee_lookup_due(key, market)
+                    or not self._authenticated.get(exchange, False)
+                    or not isinstance(self._adapters[exchange], ITradingFeeSource)
+                    or budget.get(exchange, 0) >= FEE_LOOKUPS_PER_EXCHANGE_PER_SWEEP
+                ):
+                    continue
+                budget[exchange] = budget.get(exchange, 0) + 1
+                keys.append(key)
+        return keys
+
+    async def _refine_fee(self, exchange: str, symbol: str) -> None:
+        """Replace the default fee of one market by the account fee (never raises).
+
+        Transient failures (timeout, unavailable, rate limit) are retried in later sweeps up to
+        :data:`FEE_LOOKUP_MAX_ATTEMPTS`; anything else keeps the default fee until the TTL.
+        """
+        key = (exchange, symbol)
+        adapter = self._adapters[exchange]
+        if not isinstance(adapter, ITradingFeeSource):
+            return
+        try:
+            # The timeout covers waiting for the lookup slot too, so a queue of lookups never
+            # holds a route past the book deadline.
+            async with asyncio.timeout(FEE_LOOKUP_TIMEOUT_S), self._fee_semaphores[exchange]:
+                if self._health.is_paused(exchange, self._clock.now_ms()):
+                    return
+                fee = await adapter.fetch_taker_fee(symbol)
+        except (TimeoutError, ExchangeUnavailableError, ExchangeRateLimitError) as exc:
+            log.info("trading_fee_failed", exchange=exchange, symbol=symbol, error=str(exc))
+            if isinstance(exc, ExchangeRateLimitError):
+                self._health.pause(exchange, self._clock.now_ms())
+            attempts = self._fee_attempts.get(key, 0) + 1
+            self._fee_attempts[key] = attempts
+            if attempts >= FEE_LOOKUP_MAX_ATTEMPTS:
+                self._mark_fee_checked(key)
+            return
+        except Exception:
+            log.exception("trading_fee_error", exchange=exchange, symbol=symbol)
+            self._mark_fee_checked(key)
+            return
+        self._mark_fee_checked(key)
+        if fee is None:
+            return
+        self._account_fees[key] = (fee, self._clock.now_ms())
+        self._universe = self._universe.with_taker_fees({key: fee})
+        log.info("trading_fee_refined", exchange=exchange, symbol=symbol, taker_fee=str(fee))
+
+    def _mark_fee_checked(self, key: BookKey) -> None:
+        self._fee_checked[key] = self._clock.now_ms()
+        self._fee_attempts.pop(key, None)
 
     async def _fetch_book(self, exchange: str, symbol: str) -> OrderBook | None:
         async with self._semaphores[exchange]:

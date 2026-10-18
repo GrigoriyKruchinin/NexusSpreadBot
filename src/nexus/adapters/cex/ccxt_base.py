@@ -34,6 +34,7 @@ from nexus.domain.errors import (
     ReadOnlyViolationError,
 )
 from nexus.domain.models import (
+    MAX_SANE_TAKER_FEE,
     ZERO,
     AssetTransferInfo,
     MarketInfo,
@@ -42,7 +43,11 @@ from nexus.domain.models import (
     PriceLevel,
     Ticker,
 )
-from nexus.interfaces.market_data import BaseExchangeAdapter, IWebSocketOrderbook
+from nexus.interfaces.market_data import (
+    BaseExchangeAdapter,
+    ITradingFeeSource,
+    IWebSocketOrderbook,
+)
 from nexus.log import scrub
 
 T = TypeVar("T")
@@ -100,7 +105,7 @@ def _to_flag(value: Any) -> bool | None:
     return value if isinstance(value, bool) else None
 
 
-class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook):
+class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook, ITradingFeeSource):
     """Read-only spot market-data adapter backed by ccxt (REST) and ccxt.pro (WebSocket)."""
 
     name: ClassVar[str]
@@ -277,6 +282,31 @@ class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook):
             if taker is not None and taker > ZERO:
                 fees[symbol] = taker
         return fees
+
+    async def fetch_taker_fee(self, symbol: str) -> Decimal | None:
+        """Account-tier taker fee of one symbol (``fetchTradingFee``, read-only credentials).
+
+        The scanner calls it only for markets still priced with a default fee (e.g. OKX, whose
+        ccxt markets carry a library constant and which has no bulk ``fetchTradingFees``).
+        """
+        if not self._credentials.is_configured or not self._rest.has.get("fetchTradingFee"):
+            return None
+        raw: Mapping[str, Any] = await self._call(
+            "fetch_trading_fee", lambda: self._rest.fetch_trading_fee(symbol)
+        )
+        raw = raw or {}
+        if raw.get("symbol") not in (None, symbol):
+            self._log.warning("trading_fee_symbol_mismatch", symbol=symbol)
+            return None
+        taker = self._taker_from_fee_entry(symbol, raw)
+        if taker is None or not ZERO < taker < MAX_SANE_TAKER_FEE:
+            self._log.warning("trading_fee_implausible", symbol=symbol, taker=str(taker))
+            return None
+        return taker
+
+    def _taker_from_fee_entry(self, symbol: str, raw: Mapping[str, Any]) -> Decimal | None:
+        """Taker fee (fraction) from a unified ccxt trading-fee entry; overridable."""
+        return to_decimal(raw.get("taker"))
 
     async def load_transfer_info(self) -> Mapping[str, AssetTransferInfo] | None:
         """Per-asset network deposit/withdrawal status and withdrawal fees (read-only)."""

@@ -1,14 +1,23 @@
 import asyncio
+from collections.abc import Sequence
+from dataclasses import replace
 from decimal import Decimal as D
 
 import pytest
 
-from nexus.domain.errors import ExchangeRateLimitError, ExchangeUnavailableError
+from nexus.domain.errors import (
+    ExchangeAuthError,
+    ExchangeError,
+    ExchangeRateLimitError,
+    ExchangeUnavailableError,
+)
 from nexus.domain.events import ExchangeDown, ExchangeRecovered, ScannerStarted, ScannerStopped
-from nexus.domain.models import AssetTransferInfo, NetworkInfo, OrderBook, Ticker
+from nexus.domain.models import AssetTransferInfo, MarketInfo, NetworkInfo, OrderBook, Ticker
 from nexus.domain.spread import EvaluationStatus
 from nexus.engine.candidates import CandidateFilter, CandidateFinder
 from nexus.engine.estimator import EstimatorConfig, NetSpreadEstimator
+from nexus.interfaces.market_data import ITradingFeeSource
+from nexus.scanner import service
 from nexus.scanner.health import ExchangeHealthTracker
 from nexus.scanner.service import Repositories, Scanner, ScannerConfig
 from nexus.scanner.universe import UniverseFilter
@@ -22,10 +31,32 @@ from tests.fakes import (
 )
 
 
+class FeeLookupExchange(FakeExchange, ITradingFeeSource):
+    """Publishes default fees in metadata; the account fee needs a per-symbol lookup."""
+
+    def __init__(self, name: str, clock: ManualClock) -> None:
+        super().__init__(name, clock)
+        self.account_fee: D | None = D("0.0005")
+        self.fee_errors: list[ExchangeError] = []
+        self.fee_calls: list[str] = []
+        self.fee_delay_s = 0.0
+
+    async def load_markets(self) -> Sequence[MarketInfo]:
+        return [replace(m, taker_fee_is_default=True) for m in await super().load_markets()]
+
+    async def fetch_taker_fee(self, symbol: str) -> D | None:
+        self.fee_calls.append(symbol)
+        if self.fee_delay_s:
+            await asyncio.sleep(self.fee_delay_s)
+        if self.fee_errors:
+            raise self.fee_errors.pop(0)
+        return self.account_fee
+
+
 class Harness:
-    def __init__(self) -> None:
+    def __init__(self, *, fee_lookup: bool = False) -> None:
         self.clock = ManualClock()
-        self.a = FakeExchange("a", self.clock)
+        self.a = (FeeLookupExchange if fee_lookup else FakeExchange)("a", self.clock)
         self.b = FakeExchange("b", self.clock)
         self.c = FakeExchange("c", self.clock)
         self.repos = MemoryRepos()
@@ -284,3 +315,117 @@ async def test_stop_cancels_inflight_sweep(h: Harness) -> None:
     h.a.fetch_tickers = hang  # type: ignore[method-assign]
     await asyncio.wait_for(h.scanner.run(stop), timeout=5)
     assert isinstance(h.dispatcher.events[-1], ScannerStopped)
+
+
+def _fee_harness() -> tuple[Harness, FeeLookupExchange]:
+    harness = Harness(fee_lookup=True)
+    assert isinstance(harness.a, FeeLookupExchange)
+    harness.a.quote("ABC/USDT", "99.9", "100")
+    harness.b.quote("ABC/USDT", "101", "101.1")
+    return harness, harness.a
+
+
+async def test_account_fee_looked_up_once_for_candidates() -> None:
+    h, a = _fee_harness()
+    await h.scanner.refresh_metadata()
+    market = h.scanner.universe.market("a", "ABC/USDT")
+    assert market is not None
+    assert market.taker_fee_is_default
+    await h.scanner.sweep()
+    market = h.scanner.universe.market("a", "ABC/USDT")
+    assert market is not None
+    assert market.taker_fee == D("0.0005")
+    assert not market.taker_fee_is_default
+    evaluation = next(iter(h.repos.evaluations.values()))
+    assert not evaluation.fees_estimated  # both legs priced with account fees
+    await h.scanner.sweep()
+    await h.scanner.refresh_metadata()  # refresh keeps the looked-up fee
+    market = h.scanner.universe.market("a", "ABC/USDT")
+    assert market is not None
+    assert market.taker_fee == D("0.0005")
+    await h.scanner.sweep()
+    assert a.fee_calls == ["ABC/USDT"]
+
+
+async def test_failed_fee_lookup_retried_and_rate_limit_pauses() -> None:
+    h, a = _fee_harness()
+    a.fee_errors = [ExchangeRateLimitError("a", "429")]
+    await h.scanner.refresh_metadata()
+    await h.scanner.sweep()
+    market = h.scanner.universe.market("a", "ABC/USDT")
+    assert market is not None
+    assert market.taker_fee_is_default
+    assert h.scanner._health.is_paused("a", h.clock.now)
+    h.clock.now += 61_000
+    await h.scanner.sweep()
+    assert a.fee_calls == ["ABC/USDT", "ABC/USDT"]
+    market = h.scanner.universe.market("a", "ABC/USDT")
+    assert market is not None
+    assert not market.taker_fee_is_default
+
+
+async def test_unavailable_fee_kept_as_estimate_without_retry() -> None:
+    h, a = _fee_harness()
+    a.account_fee = None
+    await h.scanner.refresh_metadata()
+    await h.scanner.sweep()
+    await h.scanner.sweep()
+    assert a.fee_calls == ["ABC/USDT"]
+    market = h.scanner.universe.market("a", "ABC/USDT")
+    assert market is not None
+    assert market.taker_fee_is_default
+
+
+async def test_no_fee_lookup_without_credentials() -> None:
+    h, a = _fee_harness()
+    h.scanner._authenticated["a"] = False
+    await h.scanner.refresh_metadata()
+    await h.scanner.sweep()
+    assert a.fee_calls == []
+
+
+async def test_account_fee_expires_and_is_looked_up_again() -> None:
+    h, a = _fee_harness()
+    await h.scanner.refresh_metadata()
+    await h.scanner.sweep()
+    a.account_fee = D("0.0007")
+    h.clock.now += service.FEE_CACHE_TTL_MS
+    await h.scanner.refresh_metadata()  # expired fee dropped -> default again
+    market = h.scanner.universe.market("a", "ABC/USDT")
+    assert market is not None
+    assert market.taker_fee_is_default
+    await h.scanner.sweep()
+    market = h.scanner.universe.market("a", "ABC/USDT")
+    assert market is not None
+    assert market.taker_fee == D("0.0007")
+    assert a.fee_calls == ["ABC/USDT", "ABC/USDT"]
+
+
+async def test_permanent_fee_error_not_retried() -> None:
+    h, a = _fee_harness()
+    a.fee_errors = [ExchangeAuthError("a", "no permission")]
+    await h.scanner.refresh_metadata()
+    await h.scanner.sweep()
+    await h.scanner.sweep()
+    assert a.fee_calls == ["ABC/USDT"]
+
+
+async def test_transient_fee_errors_give_up_after_max_attempts() -> None:
+    h, a = _fee_harness()
+    a.fee_errors = [ExchangeUnavailableError("a", "502")] * service.FEE_LOOKUP_MAX_ATTEMPTS
+    await h.scanner.refresh_metadata()
+    for _ in range(service.FEE_LOOKUP_MAX_ATTEMPTS + 2):
+        await h.scanner.sweep()
+    assert len(a.fee_calls) == service.FEE_LOOKUP_MAX_ATTEMPTS
+
+
+async def test_slow_fee_lookup_does_not_block_evaluation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(service, "FEE_LOOKUP_TIMEOUT_S", 0.05)
+    h, a = _fee_harness()
+    a.fee_delay_s = 1.0
+    await h.scanner.refresh_metadata()
+    result = await h.scanner.sweep()
+    assert result.evaluations == 1
+    assert result.timed_out == 0
+    evaluation = next(iter(h.repos.evaluations.values()))
+    assert evaluation.fees_estimated  # default fee kept, flagged as an estimate

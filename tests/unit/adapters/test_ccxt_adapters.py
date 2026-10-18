@@ -296,6 +296,65 @@ async def test_account_fee_failure_falls_back_to_public() -> None:
     assert btc.taker_fee == D("0.001")
 
 
+@pytest.mark.parametrize("exchange", ["okx", "kucoin"])
+async def test_per_symbol_taker_fee_with_credentials(exchange: str) -> None:
+    client = FakeCcxtClient(
+        exchange,
+        has={"fetchTradingFee": True},
+        fetch_trading_fee={"symbol": "BTC/USDT", "maker": 0.0008, "taker": 0.0009},
+    )
+    creds = _creds(api_key="k", api_secret="s", api_passphrase="p")
+    adapter = _adapter(exchange, client, creds)
+    assert await adapter.fetch_taker_fee("BTC/USDT") == D("0.0009")
+    assert ("fetch_trading_fee", ("BTC/USDT",)) in client.calls
+
+
+async def test_per_symbol_taker_fee_needs_credentials_and_sane_value() -> None:
+    client = FakeCcxtClient("okx", has={"fetchTradingFee": True})
+    assert await _adapter("okx", client).fetch_taker_fee("BTC/USDT") is None
+    assert client.calls == []
+    creds = _creds(api_key="k", api_secret="s", api_passphrase="p")
+    for taker in (0.2, -0.001, None):
+        client = FakeCcxtClient(
+            "okx", has={"fetchTradingFee": True}, fetch_trading_fee={"taker": taker}
+        )
+        assert await _adapter("okx", client, creds).fetch_taker_fee("BTC/USDT") is None
+
+
+async def test_per_symbol_taker_fee_rejects_other_symbol() -> None:
+    client = FakeCcxtClient(
+        "okx",
+        has={"fetchTradingFee": True},
+        fetch_trading_fee={"symbol": "ETH/USDT", "taker": 0.0009},
+    )
+    creds = _creds(api_key="k", api_secret="s", api_passphrase="p")
+    assert await _adapter("okx", client, creds).fetch_taker_fee("BTC/USDT") is None
+
+
+@pytest.mark.parametrize(
+    ("info", "expected"),
+    [({"takerUSDC": "-0.0015"}, D("0.0015")), ({"takerUSDC": "-0.0005"}, D("0.001")), ({}, None)],
+)
+async def test_okx_non_usdt_pair_uses_conservative_rate(
+    info: dict[str, str], expected: D | None
+) -> None:
+    client = FakeCcxtClient(
+        "okx",
+        has={"fetchTradingFee": True},
+        fetch_trading_fee={"symbol": "BTC/USDC", "taker": 0.001, "info": info},
+    )
+    creds = _creds(api_key="k", api_secret="s", api_passphrase="p")
+    assert await _adapter("okx", client, creds).fetch_taker_fee("BTC/USDC") == expected
+
+
+async def test_per_symbol_taker_fee_errors_are_translated() -> None:
+    client = FakeCcxtClient("okx", has={"fetchTradingFee": True})
+    client.fail("fetch_trading_fee", ccxt.RateLimitExceeded("slow down"))
+    creds = _creds(api_key="k", api_secret="s", api_passphrase="p")
+    with pytest.raises(ExchangeRateLimitError):
+        await _adapter("okx", client, creds).fetch_taker_fee("BTC/USDT")
+
+
 # ------------------------------------------------------------------ errors & retries
 
 
