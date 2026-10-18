@@ -54,7 +54,7 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [x] Value objects (Decimal): `PriceLevel`, `OrderBook` (validated, timestamped), `Ticker`, `MarketInfo`, `NetworkInfo`, `AssetTransferInfo`; injectable `Clock`
 - [x] Error hierarchy (`domain/errors.py`)
 - [x] Interfaces: `IRestMarketData`, `IWebSocketOrderbook`, `IMarketMetadata` (markets, fees, transfer status), `BaseExchangeAdapter`, `BaseDEXProvider` (stub for V3), `INotifier`
-- [ ] Repository protocols (added with persistence, 1.6)
+- [x] Repository protocols (added with persistence, 1.6)
 - [x] Exchange registry / factory (register adapters by name, no orchestrator changes on add)
 
 ### 1.4 Async CEX Connectors
@@ -79,11 +79,11 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [x] Unit tests with hand-computed scenarios (incl. edge cases: empty book, thin book, suspended withdrawals, symbol collision)
 
 ### 1.6 Persistence (PostgreSQL)
-- [ ] Async engine & session factory
-- [ ] Models: `Exchange`, `MarketPair`, `SpreadSnapshot` (sampled), `Opportunity` (with cost breakdown), `AlertLog`, `ExchangeHealth`
-- [ ] Indexes for time-series queries; retention policy for snapshots
-- [ ] Alembic setup + initial migration
-- [ ] Repository implementations + integration tests
+- [x] Async engine & session factory
+- [x] Models: `MarketPair`, `SpreadSnapshot` (sampled), `SpreadEvaluation` (with cost breakdown), `AlertLog`, `ExchangeHealth`
+- [x] Indexes for time-series queries; retention policy (snapshots, health, non-profitable evaluations)
+- [x] Alembic setup + initial migration
+- [x] Repository implementations + integration tests
 
 ### 1.7 Redis / Celery
 - [ ] Celery app (Redis broker/backend), task routing: `scanner`, `alerts`, `maintenance` queues
