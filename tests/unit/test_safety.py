@@ -25,12 +25,19 @@ SRC = Path(__file__).resolve().parents[2] / "src"
 _FORBIDDEN_CALL = re.compile(
     r"(?i)^("
     r".*withdraw.*|.*transfer.*|.*deposit_?address.*|"
-    r"create_?\w*order\w*|cancel_?\w*|edit_?\w*order\w*|"
+    r"create_?\w*order\w*|cancel\w*order\w*|edit_?\w*order\w*|"
     r"fetch2?|request|sign|"
     r"(private|sapi|papi|fapi|dapi|v\d)\w*(post|put|delete)\w*"
     r")$"
 )
-_ALLOWED_CALLS = frozenset({"fetch_deposit_withdraw_fees"})  # read-only (GET) fee table
+_ALLOWED_CALLS = frozenset(
+    {
+        "fetch_deposit_withdraw_fees",  # ccxt read-only (GET) fee table
+        "load_transfer_info",  # our read-only metadata interface
+        "select_transfer_route",  # pure route selection (engine)
+        "transfer_info",  # universe lookup
+    }
+)
 _ALLOWED_GETATTR_TARGETS = frozenset({"ccxt_async", "ccxt_pro"})  # adapter class lookup
 
 

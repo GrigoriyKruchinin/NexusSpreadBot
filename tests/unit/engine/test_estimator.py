@@ -408,3 +408,26 @@ def test_estimated_fee_flag_propagates(config: EstimatorConfig) -> None:
         transfer=VERIFIED_FREE,
     )
     assert ev.fees_estimated
+
+
+def test_large_unverified_spread_is_suspicious(config: EstimatorConfig) -> None:
+    cfg = replace(config, max_unverified_gross_spread_pct=D(5))
+    buy, sell = _simple_books(ask="100", bid="106")
+
+    def run(transfer: TransferQuote) -> EvaluationStatus:
+        return (
+            _estimator(cfg)
+            .evaluate(
+                buy_book=buy,
+                sell_book=sell,
+                buy_market=market("a"),
+                sell_market=market("b"),
+                transfer=transfer,
+            )
+            .status
+        )
+
+    assert run(UNKNOWN) is EvaluationStatus.SUSPICIOUS_SPREAD
+    # Same network code but unknown contracts: token identity not proven (ticker collision).
+    assert run(VERIFIED_FREE) is EvaluationStatus.SUSPICIOUS_SPREAD
+    assert run(replace(VERIFIED_FREE, contract_verified=True)) is EvaluationStatus.PROFITABLE

@@ -49,6 +49,9 @@ class EstimatorConfig:
     max_gross_spread_pct: Decimal
     include_transfer_cost: bool
     require_verified_transfer: bool
+    max_unverified_gross_spread_pct: Decimal | None = None
+    """Sanity cap applied unless the transfer path AND the token identity (matching contract
+    addresses) are verified (``None`` = only ``max_gross_spread_pct`` applies)."""
 
     @classmethod
     def from_settings(cls, settings: SpreadSettings) -> EstimatorConfig:
@@ -62,6 +65,7 @@ class EstimatorConfig:
             max_gross_spread_pct=settings.max_gross_spread_pct,
             include_transfer_cost=settings.include_transfer_cost,
             require_verified_transfer=settings.require_verified_transfer,
+            max_unverified_gross_spread_pct=settings.max_unverified_gross_spread_pct,
         )
 
 
@@ -159,6 +163,17 @@ class NetSpreadEstimator:
             return result(EvaluationStatus.TRANSFER_UNAVAILABLE, transfer.note, gross=gross)
         if transfer.status is TransferStatus.UNKNOWN and cfg.require_verified_transfer:
             return result(EvaluationStatus.TRANSFER_UNVERIFIED, transfer.note, gross=gross)
+        unverified_cap = cfg.max_unverified_gross_spread_pct
+        identity_verified = (
+            transfer.status is TransferStatus.VERIFIED and transfer.contract_verified
+        )
+        if not identity_verified and unverified_cap is not None and gross > unverified_cap:
+            return result(
+                EvaluationStatus.SUSPICIOUS_SPREAD,
+                "large spread without a verified transfer path and token contract "
+                "(ticker collision / suspended withdrawals?)",
+                gross=gross,
+            )
 
         # ---- buy leg -----------------------------------------------------------------
         max_base = max_base_for_quote(buy_book.asks, cfg.reference_notional_usd)

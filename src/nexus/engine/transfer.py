@@ -106,4 +106,15 @@ def select_transfer_route(
             TransferStatus.UNKNOWN, network=open_routes[0], note="withdrawal fee unknown"
         )
     fee, network = min(priced)
-    return TransferQuote(TransferStatus.VERIFIED, network=network, fee_base=fee)
+    return TransferQuote(
+        TransferStatus.VERIFIED,
+        network=network,
+        fee_base=fee,
+        contract_verified=_contracts_match(src[network], dst[network]),
+    )
+
+
+def _contracts_match(a: NetworkInfo, b: NetworkInfo) -> bool:
+    if not (a.contract and b.contract):
+        return False
+    return a.contract.strip().lower() == b.contract.strip().lower()

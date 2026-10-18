@@ -72,6 +72,8 @@ class TelegramSettings(NexusBaseSettings):
     api_base_url: str = "https://api.telegram.org"
     request_timeout_s: float = Field(default=10.0, gt=0)
     disable_notification: bool = False
+    alert_max_age_s: int = Field(default=30, ge=10, le=3_600)
+    """Opportunity alerts older than this (queue backlog, retries) are dropped, not sent."""
 
     @field_validator("chat_id")
     @classmethod
@@ -195,6 +197,8 @@ class ScannerSettings(NexusBaseSettings):
     max_concurrent_requests_per_exchange: int = Field(default=4, ge=1, le=50)
     snapshot_top_k: int = Field(default=20, ge=0, le=1_000)
     heartbeat_ttl_s: int = Field(default=120, ge=10)
+    exchange_down_after_failures: int = Field(default=3, ge=1, le=100)
+    rate_limit_backoff_s: int = Field(default=60, ge=5, le=3_600)
 
     @field_validator("quote_assets", "symbols_whitelist", "symbols_blacklist")
     @classmethod
@@ -224,10 +228,11 @@ class SpreadSettings(NexusBaseSettings):
     max_orderbook_age_ms: int = Field(default=5_000, ge=100, le=30_000)
     max_book_skew_ms: int = Field(default=3_000, ge=0, le=30_000)
     max_gross_spread_pct: Decimal = Field(default=Decimal(20), gt=0, le=100)
+    max_unverified_gross_spread_pct: Decimal = Field(default=Decimal(5), gt=0, le=100)
     default_taker_fee_pct: Decimal = Field(default=Decimal("0.2"), ge=Decimal("0.01"), lt=5)
     include_transfer_cost: bool = True
     require_verified_transfer: bool = False
-    alert_cooldown_s: int = Field(default=600, ge=0)
+    alert_cooldown_s: int = Field(default=600, ge=30)
 
     @model_validator(mode="after")
     def _consistent(self) -> Self:
@@ -236,6 +241,16 @@ class SpreadSettings(NexusBaseSettings):
             raise ValueError(msg)
         if self.max_gross_spread_pct <= self.min_net_profit_pct:
             msg = "SPREAD_MAX_GROSS_SPREAD_PCT must exceed SPREAD_MIN_NET_PROFIT_PCT"
+            raise ValueError(msg)
+        if not (
+            self.min_net_profit_pct
+            < self.max_unverified_gross_spread_pct
+            <= self.max_gross_spread_pct
+        ):
+            msg = (
+                "SPREAD_MAX_UNVERIFIED_GROSS_SPREAD_PCT must be above SPREAD_MIN_NET_PROFIT_PCT "
+                "and not above SPREAD_MAX_GROSS_SPREAD_PCT"
+            )
             raise ValueError(msg)
         return self
 
@@ -248,4 +263,3 @@ class MaintenanceSettings(NexusBaseSettings):
     snapshot_retention_days: int = Field(default=7, ge=1)
     evaluation_retention_days: int = Field(default=30, ge=1)
     cleanup_interval_s: int = Field(default=3_600, ge=60)
-    health_check_interval_s: int = Field(default=300, ge=30)

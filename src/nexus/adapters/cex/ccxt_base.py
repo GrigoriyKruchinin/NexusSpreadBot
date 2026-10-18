@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 from typing import Any, ClassVar, TypeVar
@@ -42,9 +43,12 @@ from nexus.domain.models import (
     Ticker,
 )
 from nexus.interfaces.market_data import BaseExchangeAdapter, IWebSocketOrderbook
+from nexus.log import scrub
 
 T = TypeVar("T")
 log = structlog.get_logger(__name__)
+
+_URL_RE = re.compile(r"https?://\S+|wss?://\S+")
 
 _RETRYABLE: tuple[type[ExchangeError], ...] = (ExchangeUnavailableError,)
 """Rate-limit errors are NOT retried here: the scanner backs off per exchange instead
@@ -201,7 +205,9 @@ class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook):
             attempt += 1
 
     def _translate(self, operation: str, exc: Exception) -> ExchangeError:
-        detail = f"{operation}: {type(exc).__name__}: {str(exc)[:200]}"
+        # ccxt messages embed request URLs (signed query strings) and raw bodies: strip them.
+        message = scrub(_URL_RE.sub("<url>", str(exc)))[:160]
+        detail = f"{operation}: {type(exc).__name__}: {message}"
         if isinstance(exc, ccxt.RateLimitExceeded | ccxt.DDoSProtection):
             return ExchangeRateLimitError(self.name, detail)
         if isinstance(exc, ccxt.AuthenticationError):

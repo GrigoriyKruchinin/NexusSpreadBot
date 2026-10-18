@@ -220,6 +220,8 @@ def test_weak_database_password_rejected(monkeypatch: pytest.MonkeyPatch, passwo
         ("SPREAD_MAX_BOOK_SKEW_MS", "99999999"),
         ("SPREAD_DEFAULT_TAKER_FEE_PCT", "0"),
         ("SPREAD_MAX_GROSS_SPREAD_PCT", "0.1"),
+        ("SPREAD_MAX_UNVERIFIED_GROSS_SPREAD_PCT", "0.2"),
+        ("SPREAD_MAX_UNVERIFIED_GROSS_SPREAD_PCT", "25"),
     ],
 )
 def test_unsafe_spread_settings_rejected(
@@ -241,5 +243,19 @@ def test_telegram_base_url_must_be_https(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", VALID_TOKEN)
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "1")
     monkeypatch.setenv("TELEGRAM_API_BASE_URL", "http://evil.example")
+    with pytest.raises(ValidationError):
+        TelegramSettings()
+
+
+def test_empty_env_values_fall_back_to_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SCANNER_TICKER_INTERVAL_S", "")
+    monkeypatch.setenv("SPREAD_MIN_NET_PROFIT_PCT", "")
+    assert ScannerSettings().ticker_interval_s == 10.0
+    assert SpreadSettings().min_net_profit_pct == Decimal("0.3")
+
+
+def test_empty_required_value_is_still_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "1")
     with pytest.raises(ValidationError):
         TelegramSettings()

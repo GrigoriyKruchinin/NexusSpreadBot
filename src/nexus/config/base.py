@@ -36,6 +36,7 @@ class NexusBaseSettings(BaseSettings):
         frozen=True,
         validate_default=True,
         hide_input_in_errors=True,
+        env_ignore_empty=True,  # docker compose passes unset optional vars as ""
     )
 
     @classmethod

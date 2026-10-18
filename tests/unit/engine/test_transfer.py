@@ -133,3 +133,21 @@ def test_currency_level_disabled_without_network_list_is_unavailable() -> None:
     assert select_transfer_route(_info("a", _net("ERC20")), destination).status is (
         TransferStatus.UNAVAILABLE
     )
+
+
+def test_contract_verified_only_when_both_match() -> None:
+    def net(contract: str | None) -> NetworkInfo:
+        return NetworkInfo(
+            network="ERC20",
+            withdraw_enabled=True,
+            deposit_enabled=True,
+            withdraw_fee=D(1),
+            contract=contract,
+        )
+
+    def verified(a: str | None, b: str | None) -> bool:
+        return select_transfer_route(_info("a", net(a)), _info("b", net(b))).contract_verified
+
+    assert verified("0xAbC", "0xabc")
+    assert not verified(None, "0xabc")
+    assert not verified(None, None)

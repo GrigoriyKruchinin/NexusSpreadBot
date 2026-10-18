@@ -43,6 +43,8 @@ class TransferQuote:
     network: str | None = None
     fee_base: Decimal = ZERO
     note: str = ""
+    contract_verified: bool = False
+    """True only when both venues publish the same token contract on the chosen network."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -65,7 +65,7 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [x] `GateIOAdapter`
 - [x] `KuCoinAdapter`
 - [x] Market metadata: lot steps, minimums, taker fees (account tier with keys, static-fee flag), deposit/withdraw status, network fees & contract addresses
-- [ ] Common symbol intersection & periodic metadata refresh (scanner, 1.7)
+- [x] Common symbol intersection & periodic metadata refresh (scanner, 1.7)
 - [x] ~~Orderbook snapshots → Redis hot cache~~ — books are fetched on demand and evaluated in-process (no stale-cache risk); Redis is used for cooldowns & heartbeat
 - [x] Adapter tests with recorded fixture payloads
 - [x] Safety: runtime GET-only guard on authenticated ccxt clients + AST test against fund-moving calls (risk audit)
@@ -79,7 +79,7 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [x] `NetSpreadEstimator`: gross spread → net spread (%, USD) with full cost breakdown
 - [x] Staleness & clock-skew guard
 - [x] Threshold filter (both % and USD) + ticker pre-filter (`CandidateFinder`)
-- [ ] Per-route alert cooldown / dedup (Redis, scanner layer)
+- [x] Per-route alert cooldown / dedup (Redis `SET NX EX`, released when dispatch fails)
 - [x] Unit tests with hand-computed scenarios (incl. edge cases: empty book, thin book, suspended withdrawals, symbol collision)
 
 ### 1.6 Persistence (PostgreSQL)
@@ -89,11 +89,13 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [x] Alembic setup + initial migration
 - [x] Repository implementations + integration tests
 
-### 1.7 Redis / Celery
-- [ ] Celery app (Redis broker/backend), task routing: `scanner`, `alerts`, `maintenance` queues
-- [ ] Beat schedule: market metadata refresh, fee refresh, snapshot retention cleanup, health checks
-- [ ] Alert tasks with retries & idempotency keys
-- [ ] Scanner orchestrator service (long-running asyncio process: WS streams → cache → estimator → DB + alert queue)
+### 1.7 Redis / Celery / Scanner — audited: SAFE TO PROCEED
+- [x] Celery app (Redis broker), task routing: `alerts`, `maintenance` queues; role-scoped lazy settings + fail-fast at worker start
+- [x] Beat schedule: retention cleanup (metadata/fee refresh runs inside the scanner, which owns exchange keys)
+- [x] Alert tasks with retries (429 `retry_after`, infra autoretry) & idempotent alert log; stale alerts expire
+- [ ] Claim-before-send (PENDING row) to avoid duplicate Telegram messages on ack-late redelivery; event expiry
+- [x] Scanner orchestrator (async: ticker sweep → candidates → per-route book fetch with deadline → estimator → DB → alert queue), exchange health with hysteresis, rate-limit pauses, heartbeat, graceful SIGTERM
+- [ ] WebSocket hot-set: stream books for recently profitable routes (interfaces ready: `IWebSocketOrderbook`)
 
 ### 1.8 Telegram Notifier
 - [x] `TelegramNotifier(INotifier)` on httpx Bot API, HTML parse mode, 429 `retry_after`, token never in errors
