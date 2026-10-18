@@ -104,11 +104,12 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [x] Escaping & snapshot tests of rendered messages; unverified-transfer and estimated-fee labels always shown
 
 ### 1.9 Docker (local)
-- [ ] Multi-stage `Dockerfile` (uv, non-root user, slim runtime)
-- [ ] `docker-compose.local.yml`: postgres, redis, migrator, scanner, celery-worker, celery-beat, telegram-worker
-- [ ] Healthchecks for all services; `depends_on: condition: service_healthy` / `service_completed_successfully` (migrator)
-- [ ] Per-service `env_file`s exposing only required variables
-- [ ] Smoke test: stack up → alerts received in Telegram
+- [x] Multi-stage `Dockerfile` (uv, non-root user, slim runtime, read-only rootfs compatible)
+- [x] `docker-compose.local.yml`: postgres, redis, migrator, scanner, worker-alerts (Telegram), worker-maintenance, beat
+- [x] Healthchecks for all services; `depends_on: condition: service_healthy` / `service_completed_successfully` (migrator)
+- [x] Per-service environment exposing only required variables (one `.env`, YAML anchors per domain; enforced by `tests/unit/test_compose.py`)
+- [x] Smoke test: stack up → all healthy → evaluations stored → alert task delivered to Telegram API (fake token → `Unauthorized`, no token in logs) → graceful stop
+- [ ] User check: real Telegram token → start message + alerts received
 
 ### 1.10 Stage 1 Exit
 - [ ] `make check` green, coverage `engine/` ≥ 90 %

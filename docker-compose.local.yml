@@ -1,0 +1,198 @@
+# Nexus Spread Scanner — local (Version 1, read-only) stack.
+#   cp .env.example .env  &&  make up-local
+#
+# Every service receives ONLY the variables of its own domain (see x-*-env anchors).
+# Optional variables use ${VAR:-} -> empty means "use the default" (env_ignore_empty).
+
+name: nexus-local
+
+x-image: &image
+  image: nexus-spread-bot:local
+  build:
+    context: .
+    target: runtime
+  restart: unless-stopped
+  init: true
+  read_only: true
+  tmpfs: [/tmp]
+  security_opt: ["no-new-privileges:true"]
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "5"}
+
+x-db-env: &db-env
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: ${POSTGRES_DB:-nexus}
+  POSTGRES_USER: ${POSTGRES_USER:-nexus}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+
+x-celery-env: &celery-env
+  CELERY_BROKER_URL: redis://redis:6379/1
+  CELERY_TIMEZONE: ${CELERY_TIMEZONE:-}
+
+x-log-env: &log-env
+  LOG_LEVEL: ${LOG_LEVEL:-}
+  LOG_JSON_FORMAT: ${LOG_JSON_FORMAT:-}
+
+x-maintenance-env: &maintenance-env
+  MAINTENANCE_SNAPSHOT_RETENTION_DAYS: ${MAINTENANCE_SNAPSHOT_RETENTION_DAYS:-}
+  MAINTENANCE_EVALUATION_RETENTION_DAYS: ${MAINTENANCE_EVALUATION_RETENTION_DAYS:-}
+  MAINTENANCE_CLEANUP_INTERVAL_S: ${MAINTENANCE_CLEANUP_INTERVAL_S:-}
+
+x-scanner-env: &scanner-env
+  REDIS_URL: redis://redis:6379/0
+  EXCHANGES_ENABLED: ${EXCHANGES_ENABLED:-}
+  EXCHANGES_REQUEST_TIMEOUT_MS: ${EXCHANGES_REQUEST_TIMEOUT_MS:-}
+  BYBIT_API_KEY: ${BYBIT_API_KEY:-}
+  BYBIT_API_SECRET: ${BYBIT_API_SECRET:-}
+  BINANCE_API_KEY: ${BINANCE_API_KEY:-}
+  BINANCE_API_SECRET: ${BINANCE_API_SECRET:-}
+  OKX_API_KEY: ${OKX_API_KEY:-}
+  OKX_API_SECRET: ${OKX_API_SECRET:-}
+  OKX_API_PASSPHRASE: ${OKX_API_PASSPHRASE:-}
+  GATEIO_API_KEY: ${GATEIO_API_KEY:-}
+  GATEIO_API_SECRET: ${GATEIO_API_SECRET:-}
+  KUCOIN_API_KEY: ${KUCOIN_API_KEY:-}
+  KUCOIN_API_SECRET: ${KUCOIN_API_SECRET:-}
+  KUCOIN_API_PASSPHRASE: ${KUCOIN_API_PASSPHRASE:-}
+  SCANNER_QUOTE_ASSETS: ${SCANNER_QUOTE_ASSETS:-}
+  SCANNER_SYMBOLS_WHITELIST: ${SCANNER_SYMBOLS_WHITELIST:-}
+  SCANNER_SYMBOLS_BLACKLIST: ${SCANNER_SYMBOLS_BLACKLIST:-}
+  SCANNER_MIN_QUOTE_VOLUME_USD: ${SCANNER_MIN_QUOTE_VOLUME_USD:-}
+  SCANNER_TICKER_INTERVAL_S: ${SCANNER_TICKER_INTERVAL_S:-}
+  SCANNER_METADATA_REFRESH_S: ${SCANNER_METADATA_REFRESH_S:-}
+  SCANNER_ORDERBOOK_DEPTH: ${SCANNER_ORDERBOOK_DEPTH:-}
+  SCANNER_MAX_CANDIDATES_PER_SWEEP: ${SCANNER_MAX_CANDIDATES_PER_SWEEP:-}
+  SCANNER_MAX_CONCURRENT_REQUESTS_PER_EXCHANGE: ${SCANNER_MAX_CONCURRENT_REQUESTS_PER_EXCHANGE:-}
+  SCANNER_SNAPSHOT_TOP_K: ${SCANNER_SNAPSHOT_TOP_K:-}
+  SCANNER_HEARTBEAT_TTL_S: ${SCANNER_HEARTBEAT_TTL_S:-}
+  SCANNER_EXCHANGE_DOWN_AFTER_FAILURES: ${SCANNER_EXCHANGE_DOWN_AFTER_FAILURES:-}
+  SCANNER_RATE_LIMIT_BACKOFF_S: ${SCANNER_RATE_LIMIT_BACKOFF_S:-}
+  SPREAD_MIN_NET_PROFIT_PCT: ${SPREAD_MIN_NET_PROFIT_PCT:-}
+  SPREAD_MIN_NET_PROFIT_USD: ${SPREAD_MIN_NET_PROFIT_USD:-}
+  SPREAD_REFERENCE_NOTIONAL_USD: ${SPREAD_REFERENCE_NOTIONAL_USD:-}
+  SPREAD_MAX_ORDERBOOK_AGE_MS: ${SPREAD_MAX_ORDERBOOK_AGE_MS:-}
+  SPREAD_MAX_BOOK_SKEW_MS: ${SPREAD_MAX_BOOK_SKEW_MS:-}
+  SPREAD_MAX_GROSS_SPREAD_PCT: ${SPREAD_MAX_GROSS_SPREAD_PCT:-}
+  SPREAD_MAX_UNVERIFIED_GROSS_SPREAD_PCT: ${SPREAD_MAX_UNVERIFIED_GROSS_SPREAD_PCT:-}
+  SPREAD_DEFAULT_TAKER_FEE_PCT: ${SPREAD_DEFAULT_TAKER_FEE_PCT:-}
+  SPREAD_INCLUDE_TRANSFER_COST: ${SPREAD_INCLUDE_TRANSFER_COST:-}
+  SPREAD_REQUIRE_VERIFIED_TRANSFER: ${SPREAD_REQUIRE_VERIFIED_TRANSFER:-}
+  SPREAD_ALERT_COOLDOWN_S: ${SPREAD_ALERT_COOLDOWN_S:-}
+
+x-telegram-env: &telegram-env
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN must be set in .env}
+  TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:?TELEGRAM_CHAT_ID must be set in .env}
+  TELEGRAM_DISABLE_NOTIFICATION: ${TELEGRAM_DISABLE_NOTIFICATION:-}
+  TELEGRAM_ALERT_MAX_AGE_S: ${TELEGRAM_ALERT_MAX_AGE_S:-}
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nexus}
+      POSTGRES_USER: ${POSTGRES_USER:-nexus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"  # local analytics access only (never exposed publicly)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrator:
+    <<: *image
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      <<: [*db-env, *log-env]
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  scanner:
+    <<: *image
+    command: ["nexus", "scanner"]
+    stop_grace_period: 30s
+    environment:
+      <<: [*db-env, *celery-env, *log-env, *scanner-env]
+    depends_on:
+      migrator: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      worker-alerts: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "nexus", "healthcheck", "scanner"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  worker-alerts:
+    <<: *image
+    command: ["celery", "-A", "nexus.workers.app:celery_app", "worker", "-Q", "alerts",
+              "-n", "alerts@%h", "--concurrency", "2", "--loglevel", "INFO"]
+    environment:
+      <<: [*db-env, *celery-env, *log-env, *telegram-env]
+      NEXUS_WORKER_ROLE: alerts
+    depends_on:
+      migrator: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A nexus.workers.app:celery_app inspect ping -d alerts@$$HOSTNAME --timeout 5"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+
+  worker-maintenance:
+    <<: *image
+    command: ["celery", "-A", "nexus.workers.app:celery_app", "worker", "-Q", "maintenance",
+              "-n", "maintenance@%h", "--concurrency", "1", "--loglevel", "INFO"]
+    environment:
+      <<: [*db-env, *celery-env, *log-env, *maintenance-env]
+      NEXUS_WORKER_ROLE: maintenance
+    depends_on:
+      migrator: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A nexus.workers.app:celery_app inspect ping -d maintenance@$$HOSTNAME --timeout 5"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+
+  beat:
+    <<: *image
+    command: ["celery", "-A", "nexus.workers.app:celery_app", "beat", "--loglevel", "INFO",
+              "--schedule", "/tmp/celerybeat-schedule", "--pidfile", "/tmp/celerybeat.pid"]
+    environment:
+      <<: [*celery-env, *log-env, *maintenance-env]
+    depends_on:
+      redis: {condition: service_healthy}
+      worker-maintenance: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/celerybeat.pid && kill -0 $$(cat /tmp/celerybeat.pid)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  postgres-data:
+  redis-data:
