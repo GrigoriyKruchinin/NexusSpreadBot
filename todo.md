@@ -68,14 +68,15 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [ ] Orderbook snapshots → Redis hot cache (TTL = max book age)
 - [ ] Adapter tests with recorded fixture payloads
 
-### 1.5 Net Spread Engine (R)
-- [ ] Depth walker: VWAP for buy (asks) / sell (bids) at reference notional; reject if insufficient depth
-- [ ] Fee model: taker fees on both legs, fee asset handling
-- [ ] Transfer cost model: cheapest common network withdrawal fee, deposit/withdraw availability check
-- [ ] `NetSpreadEstimator`: gross spread → net spread (%, USD) with full cost breakdown
-- [ ] Staleness & clock-skew guard
-- [ ] Threshold filter (both % and USD) + per-pair alert cooldown / dedup
-- [ ] Unit tests with hand-computed scenarios (incl. edge cases: empty book, thin book, suspended withdrawals, symbol collision)
+### 1.5 Net Spread Engine (R) — audited: SAFE TO PROCEED
+- [x] Depth walker: VWAP for buy (asks) / sell (bids) at reference notional; reject if insufficient depth
+- [x] Fee model: taker fees on both legs, fee asset handling
+- [x] Transfer cost model: cheapest common network withdrawal fee, deposit/withdraw availability check, network aliases, contract-address conflict detection
+- [x] `NetSpreadEstimator`: gross spread → net spread (%, USD) with full cost breakdown
+- [x] Staleness & clock-skew guard
+- [x] Threshold filter (both % and USD) + ticker pre-filter (`CandidateFinder`)
+- [ ] Per-route alert cooldown / dedup (Redis, scanner layer)
+- [x] Unit tests with hand-computed scenarios (incl. edge cases: empty book, thin book, suspended withdrawals, symbol collision)
 
 ### 1.6 Persistence (PostgreSQL)
 - [ ] Async engine & session factory

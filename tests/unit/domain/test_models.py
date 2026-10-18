@@ -2,8 +2,8 @@ from decimal import Decimal as D
 
 import pytest
 
-from nexus.domain.errors import InvalidOrderBookError
-from nexus.domain.models import OrderBook, PriceLevel
+from nexus.domain.errors import DataValidationError, InvalidOrderBookError
+from nexus.domain.models import MarketInfo, OrderBook, PriceLevel
 
 
 def _book(bids: list[tuple[str, str]], asks: list[tuple[str, str]]) -> OrderBook:
@@ -47,3 +47,16 @@ def test_age_uses_older_timestamp() -> None:
 def test_invalid_books_rejected(bids: list[tuple[str, str]], asks: list[tuple[str, str]]) -> None:
     with pytest.raises(InvalidOrderBookError):
         _book(bids, asks)
+
+
+@pytest.mark.parametrize("fee", ["-0.001", "0.05", "0.1"])
+def test_implausible_taker_fee_rejected(fee: str) -> None:
+    with pytest.raises(DataValidationError):
+        MarketInfo(exchange="x", symbol="A/USDT", base="A", quote="USDT", taker_fee=D(fee))
+
+
+def test_age_uses_receive_time_when_exchange_clock_is_ahead() -> None:
+    book = OrderBook(
+        exchange="x", symbol="A/USDT", bids=(), asks=(), timestamp_ms=5_000, received_at_ms=1_000
+    )
+    assert book.age_ms(now_ms=3_000) == 2_000

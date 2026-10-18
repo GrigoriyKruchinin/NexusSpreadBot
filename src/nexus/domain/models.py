@@ -10,9 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from nexus.domain.errors import InvalidOrderBookError
+from nexus.domain.errors import DataValidationError, InvalidOrderBookError
 
 ZERO = Decimal(0)
+MAX_SANE_TAKER_FEE = Decimal("0.05")
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,16 +104,28 @@ class MarketInfo:
     min_amount: Decimal | None = None
     min_cost: Decimal | None = None
     active: bool = True
+    taker_fee_is_default: bool = False
+    """True when the exchange did not report a fee and a conservative fallback is used."""
+
+    def __post_init__(self) -> None:
+        if not ZERO <= self.taker_fee < MAX_SANE_TAKER_FEE:
+            msg = f"implausible taker fee {self.taker_fee} for {self.exchange}:{self.symbol}"
+            raise DataValidationError(msg)
 
 
 @dataclass(frozen=True, slots=True)
 class NetworkInfo:
-    """Deposit/withdrawal availability of one asset on one network."""
+    """Deposit/withdrawal availability of one asset on one network.
+
+    ``None`` flags mean the exchange did not report the status (unknown, not disabled).
+    """
 
     network: str
-    withdraw_enabled: bool
-    deposit_enabled: bool
+    withdraw_enabled: bool | None
+    deposit_enabled: bool | None
     withdraw_fee: Decimal | None
+    contract: str | None = None
+    """Token contract address on this network, when published (detects ticker collisions)."""
 
 
 @dataclass(frozen=True, slots=True)
