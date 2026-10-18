@@ -73,24 +73,25 @@ All of these are configurable via settings, never hard-coded.
 - PostgreSQL + SQLAlchemy 2.x (AsyncIO, `asyncpg`) + Alembic.
 - Redis + Celery (beat + workers); `redis.asyncio` for hot orderbook cache / pub-sub.
 - Exchange connectivity: `ccxt` (async, `ccxt.pro` WebSocket) behind our own adapter interfaces.
-- Telegram: `aiogram` 3.x (HTML parse mode).
+- Telegram: Bot API via `httpx` (HTML parse mode); `aiogram` only if interactive commands are needed (V2 kill switch).
 - FastAPI + Chart.js (V3).
-- Quality: `ruff` (lint + format), `mypy --strict`, `pytest` + `pytest-asyncio`.
+- Logging: `structlog`.
+- Quality: `ruff` (lint + format), `mypy --strict`, `pytest` + `pytest-asyncio`, `fakeredis`, `pre-commit`.
 
 ## Commands
 
-> Targets are created in Stage 1 (`Makefile`). Until then they do not exist.
-
 ```bash
 uv sync                       # install deps (incl. dev group)
-make lint                     # ruff check .
-make format                   # ruff format . && ruff check --fix .
+make lint                     # ruff format --check + ruff check
+make format                   # ruff format + ruff check --fix
 make typecheck                # mypy src tests
-make test                     # pytest -q
-make test-cov                 # pytest --cov=src/nexus --cov-report=term-missing
+make test                     # unit tests (-m "not integration")
+make test-cov                 # unit tests with coverage
+make test-integration         # integration tests (needs `make up-local`)
 make check                    # lint + typecheck + test (run before every commit)
 make up-local                 # docker compose -f docker-compose.local.yml up -d --build
 make down-local               # docker compose -f docker-compose.local.yml down
+make ps-local                 # stack status
 make logs s=<service>         # follow logs of a service
 make migrate                  # alembic upgrade head (inside migrator container)
 make revision m="message"     # alembic revision --autogenerate

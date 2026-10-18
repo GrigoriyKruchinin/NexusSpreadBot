@@ -31,14 +31,14 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [x] Local `.env` from `.env.example`; Docker Desktop / WSL2 prerequisites
 
 ### 1.1 Project skeleton & tooling
-- [ ] `pyproject.toml` (uv, Python 3.12, `src/` layout, dependency groups: main / dev)
-- [ ] `uv.lock` generated
-- [ ] ruff config (line length 100, rule sets: E, F, I, B, UP, N, S, ASYNC, RUF, ANN, SIM, PT)
-- [ ] mypy strict config (+ pydantic plugin, sqlalchemy typing)
-- [ ] pytest config (`asyncio_mode=auto`, `integration` marker, coverage)
-- [ ] Root `Makefile` (lint, format, typecheck, test, test-cov, check, up-local, down-local, logs, migrate, revision)
+- [x] `pyproject.toml` (uv, Python 3.12, `src/` layout, dependency groups: main / dev)
+- [x] `uv.lock` generated
+- [x] ruff config (line length 100, rule sets: E, F, I, B, UP, N, S, ASYNC, RUF, ANN, SIM, PT)
+- [x] mypy strict config (+ pydantic plugin, sqlalchemy typing)
+- [x] pytest config (`asyncio_mode=auto`, `integration` marker, coverage)
+- [x] Root `Makefile` (lint, format, typecheck, test, test-cov, test-integration, check, up-local, down-local, ps-local, logs, migrate, revision)
 - [ ] `.env.example` with every setting documented
-- [ ] `pre-commit` config (ruff, mypy, end-of-file, detect-secrets)
+- [x] `pre-commit` config (ruff, mypy, end-of-file, detect-secrets)
 - [ ] `README.md` (English): overview, architecture diagram, quickstart
 
 ### 1.2 Modular Pydantic Settings
