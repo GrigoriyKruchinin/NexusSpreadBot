@@ -51,10 +51,11 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [x] `.env.example` documents every setting (guarded by test)
 
 ### 1.3 Domain & Interfaces
-- [ ] Value objects (Decimal): `Symbol`, `Asset`, `PriceLevel`, `OrderBook` (timestamped), `FeeSchedule`, `TransferCost`, `SpreadOpportunity`
-- [ ] Error hierarchy (`domain/errors.py`)
-- [ ] Interfaces: `IRestMarketData`, `IWebSocketOrderbook`, `IFeeProvider`, `ITransferInfoProvider`, `BaseExchangeAdapter`, `BaseDEXProvider` (stub for V3), `INotifier`, repository protocols
-- [ ] Exchange registry / factory (register adapters by name, no orchestrator changes on add)
+- [x] Value objects (Decimal): `PriceLevel`, `OrderBook` (validated, timestamped), `Ticker`, `MarketInfo`, `NetworkInfo`, `AssetTransferInfo`; injectable `Clock`
+- [x] Error hierarchy (`domain/errors.py`)
+- [x] Interfaces: `IRestMarketData`, `IWebSocketOrderbook`, `IMarketMetadata` (markets, fees, transfer status), `BaseExchangeAdapter`, `BaseDEXProvider` (stub for V3), `INotifier`
+- [ ] Repository protocols (added with persistence, 1.6)
+- [x] Exchange registry / factory (register adapters by name, no orchestrator changes on add)
 
 ### 1.4 Async CEX Connectors
 - [ ] Shared base: ccxt.pro wrapper, reconnect w/ backoff, heartbeat, rate-limit handling, symbol normalization
