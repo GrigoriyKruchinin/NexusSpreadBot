@@ -64,6 +64,7 @@ def evaluation_to_row(evaluation: SpreadEvaluation) -> SpreadEvaluationRow:
         "sell_exchange": evaluation.sell_exchange,
         "status": evaluation.status.value,
         "reason": evaluation.reason,
+        "fees_estimated": evaluation.fees_estimated,
         "notional_usd": evaluation.notional_usd,
         "gross_spread_pct": evaluation.gross_spread_pct,
         "buy_book_age_ms": evaluation.buy_book_age_ms,
@@ -105,6 +106,7 @@ def row_to_evaluation(row: SpreadEvaluationRow) -> SpreadEvaluation:
         gross_spread_pct=row.gross_spread_pct,
         breakdown=breakdown,
         reason=row.reason or "",
+        fees_estimated=bool(row.fees_estimated),
     )
 
 

@@ -53,6 +53,7 @@ select = [
 ]
 ignore = [
     "ANN401",  # Any is allowed at untyped third-party boundaries (ccxt) with justification
+    "RUF001",  # emoji are intentional in Telegram templates
 ]
 
 [tool.ruff.lint.per-file-ignores]

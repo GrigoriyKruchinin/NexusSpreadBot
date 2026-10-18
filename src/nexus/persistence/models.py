@@ -105,6 +105,7 @@ class SpreadEvaluationRow(Base):
     sell_exchange: Mapped[str] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(32))
     reason: Mapped[str] = mapped_column(Text, default="")
+    fees_estimated: Mapped[bool] = mapped_column(Boolean, server_default="false")
     notional_usd: Mapped[Decimal] = mapped_column(Money)
     gross_spread_pct: Mapped[Decimal | None] = mapped_column(Money)
     buy_book_age_ms: Mapped[int] = mapped_column(Integer)

@@ -49,3 +49,15 @@ class ReadOnlyViolationError(NexusError):
 
 class UnknownExchangeError(ConfigurationError):
     """Requested exchange has no registered adapter."""
+
+
+class NotificationError(NexusError):
+    """Notification delivery failed (retryable unless stated otherwise)."""
+
+    def __init__(self, message: str, *, retry_after_s: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after_s = retry_after_s
+
+
+class NotificationRejectedError(NotificationError):
+    """The channel rejected the message permanently (bad request, chat not found, blocked)."""

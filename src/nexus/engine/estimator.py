@@ -114,6 +114,7 @@ class NetSpreadEstimator:
                 gross_spread_pct=gross,
                 breakdown=breakdown,
                 reason=reason,
+                fees_estimated=buy_market.taker_fee_is_default or sell_market.taker_fee_is_default,
             )
 
         # ---- data quality guards ------------------------------------------------------

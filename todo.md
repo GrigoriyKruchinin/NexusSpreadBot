@@ -96,10 +96,10 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [ ] Scanner orchestrator service (long-running asyncio process: WS streams → cache → estimator → DB + alert queue)
 
 ### 1.8 Telegram Notifier
-- [ ] `TelegramNotifier(INotifier)` on aiogram, HTML parse mode, rate-limit aware
-- [ ] Opportunity alert template: 🔀 pair, buy/sell exchanges, prices, gross vs net spread, fee/slippage/transfer breakdown, est. profit on $1,000, book age, blockquote summary
-- [ ] System alerts: exchange disconnect/reconnect, scanner start/stop
-- [ ] Escaping & snapshot tests of rendered messages
+- [x] `TelegramNotifier(INotifier)` on httpx Bot API, HTML parse mode, 429 `retry_after`, token never in errors
+- [x] Opportunity alert template: 🔀 pair, buy/sell exchanges, prices, gross vs net spread, fee/slippage/transfer breakdown, est. profit on $1,000, book age, blockquote summary
+- [x] System alerts: exchange disconnect/reconnect, scanner start/stop (rendered in the alerts worker; scanner publishes structured events)
+- [x] Escaping & snapshot tests of rendered messages; unverified-transfer and estimated-fee labels always shown
 
 ### 1.9 Docker (local)
 - [ ] Multi-stage `Dockerfile` (uv, non-root user, slim runtime)

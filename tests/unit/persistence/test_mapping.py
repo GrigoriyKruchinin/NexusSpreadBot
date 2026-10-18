@@ -4,7 +4,7 @@ from tests.support import make_evaluation
 
 
 def test_roundtrip_with_breakdown() -> None:
-    evaluation = make_evaluation()
+    evaluation = make_evaluation(fees_estimated=True)
     assert row_to_evaluation(evaluation_to_row(evaluation)) == evaluation
 
 

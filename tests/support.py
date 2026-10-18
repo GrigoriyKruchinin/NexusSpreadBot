@@ -43,6 +43,7 @@ def make_evaluation(
     buy_exchange: str = "binance",
     sell_exchange: str = "kucoin",
     evaluated_at_ms: int = EVALUATED_AT_MS,
+    fees_estimated: bool = False,
 ) -> SpreadEvaluation:
     base, quote = symbol.split("/")
     return SpreadEvaluation(
@@ -60,4 +61,5 @@ def make_evaluation(
         gross_spread_pct=D(1),
         breakdown=make_breakdown() if with_breakdown else None,
         reason="" if with_breakdown else "sell side",
+        fees_estimated=fees_estimated,
     )

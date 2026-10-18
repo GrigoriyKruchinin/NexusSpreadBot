@@ -93,6 +93,8 @@ class SpreadEvaluation:
     gross_spread_pct: Decimal | None = None
     breakdown: SpreadBreakdown | None = None
     reason: str = ""
+    fees_estimated: bool = False
+    """True when a taker fee is a library/fallback estimate rather than exchange data."""
 
     @property
     def is_alertable(self) -> bool:

@@ -52,6 +52,7 @@ def test_single_level_profitable(config: EstimatorConfig) -> None:
     assert bd.slippage_usd == D(0)
     assert bd.transfer_fee_usd == D(0)
     assert ev.route_key == "ABC/USDT|a>b"
+    assert not ev.fees_estimated
     assert ev.is_alertable
     assert ev.transfer_verified
 
@@ -393,3 +394,17 @@ def test_non_usd_quote_rejected(config: EstimatorConfig) -> None:
             sell_market=market("b", symbol="ABC/TRY"),
             transfer=VERIFIED_FREE,
         )
+
+
+def test_estimated_fee_flag_propagates(config: EstimatorConfig) -> None:
+    from dataclasses import replace as dc_replace
+
+    buy, sell = _simple_books()
+    ev = _estimator(config).evaluate(
+        buy_book=buy,
+        sell_book=sell,
+        buy_market=dc_replace(market("a"), taker_fee_is_default=True),
+        sell_market=market("b"),
+        transfer=VERIFIED_FREE,
+    )
+    assert ev.fees_estimated
