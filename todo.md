@@ -19,16 +19,16 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 - [x] Autonomous delivery loop: implement → verify → tick → commit → push
 - [x] `.claude/settings.json` — tool permissions, `.env` read deny
 - [x] `todo.md` (this file)
-- [ ] User says **"Start Implementation"**
+- [x] User says **"Start Implementation"**
 
 ---
 
 ## Stage 1 — MVP: Opportunity Detector & Telegram Alerts (Read-Only, local)
 
 ### 1.0 User guide → `docs/guides/stage-1-local-setup.md` (Russian, file only)
-- [ ] Read-only API keys: Bybit, Binance, OKX, Gate.io, KuCoin (note: public orderbooks need no keys; keys are used for per-account fee tiers & deposit/withdrawal status)
-- [ ] Telegram bot via `@BotFather` → `TELEGRAM_BOT_TOKEN`; obtain `TELEGRAM_CHAT_ID`
-- [ ] Local `.env` from `.env.example`; Docker Desktop / WSL2 prerequisites
+- [x] Read-only API keys: Bybit, Binance, OKX, Gate.io, KuCoin (note: public orderbooks need no keys; keys are used for per-account fee tiers & deposit/withdrawal status)
+- [x] Telegram bot via `@BotFather` → `TELEGRAM_BOT_TOKEN`; obtain `TELEGRAM_CHAT_ID`
+- [x] Local `.env` from `.env.example`; Docker Desktop / WSL2 prerequisites
 
 ### 1.1 Project skeleton & tooling
 - [ ] `pyproject.toml` (uv, Python 3.12, `src/` layout, dependency groups: main / dev)
