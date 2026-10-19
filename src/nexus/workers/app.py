@@ -24,17 +24,25 @@ TASK_PURGE = "nexus.maintenance.purge"
 TASK_SEND_DIGEST = "nexus.alerts.send_digest"
 
 
+class LocalNow:
+    """Picklable ``nowfun`` for crontab: beat persists its schedule with ``shelve``."""
+
+    def __init__(self, tz: str) -> None:
+        self.tz = tz
+
+    def __call__(self) -> datetime:
+        """Current time in :attr:`tz`."""
+        return datetime.now(tz=ZoneInfo(self.tz))
+
+
 def digest_schedule(digest: DigestSettings) -> dict[str, Any]:
     """Beat entry sending the digest daily at ``DIGEST_TIME`` in ``DIGEST_TZ``.
 
     ``Any``: Celery beat entries are untyped dicts.
     """
-    zone = ZoneInfo(digest.tz)
     return {
         "task": TASK_SEND_DIGEST,
-        "schedule": crontab(
-            minute=digest.minute, hour=digest.hour, nowfun=lambda: datetime.now(tz=zone)
-        ),
+        "schedule": crontab(minute=digest.minute, hour=digest.hour, nowfun=LocalNow(digest.tz)),
         "args": [digest.tz],
     }
 

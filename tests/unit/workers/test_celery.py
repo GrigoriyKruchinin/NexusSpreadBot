@@ -137,6 +137,14 @@ def test_digest_beat_schedule_uses_local_time() -> None:
     assert schedule.minute == {30}
     assert schedule.nowfun().tzinfo == ZoneInfo("Europe/Moscow")
     assert isinstance(schedule.nowfun(), datetime)
+    # Celery beat stores its schedule in a shelve (pickle): every entry must survive it.
+    import pickle
+
+    for name, item in app.conf.beat_schedule.items():
+        restored = pickle.loads(pickle.dumps(item["schedule"]))  # noqa: S301 - own data
+        assert repr(restored) == repr(item["schedule"]), name
+    roundtrip = pickle.loads(pickle.dumps(schedule))  # noqa: S301 - own data
+    assert roundtrip.nowfun().tzinfo == ZoneInfo("Europe/Moscow")
     disabled = create_celery_app(
         CelerySettings(), MaintenanceSettings(), DigestSettings(enabled=False)
     )
