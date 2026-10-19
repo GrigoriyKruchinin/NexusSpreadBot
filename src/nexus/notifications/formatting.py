@@ -29,6 +29,8 @@ EXCHANGE_DISPLAY_NAMES: Final[dict[str, str]] = {
     "okx": "OKX",
     "gateio": "Gate.io",
     "kucoin": "KuCoin",
+    "mexc": "MEXC",
+    "bitget": "Bitget",
 }
 
 

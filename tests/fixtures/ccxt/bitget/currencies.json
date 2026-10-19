@@ -1,0 +1,141 @@
+{
+ "USDT": {
+  "code": "USDT",
+  "deposit": true,
+  "withdraw": true,
+  "networks": {
+   "ERC20": {
+    "id": "ERC20",
+    "network": "ERC20",
+    "deposit": true,
+    "withdraw": true,
+    "fee": 2.0,
+    "active": null,
+    "info": {
+     "contractAddress": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+     "extraWithdrawFee": "0"
+    }
+   },
+   "TRC20": {
+    "id": "TRC20",
+    "network": "TRC20",
+    "deposit": true,
+    "withdraw": true,
+    "fee": 1.5,
+    "active": null,
+    "info": {
+     "contractAddress": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+     "extraWithdrawFee": "0"
+    }
+   },
+   "BEP20": {
+    "id": "BEP20",
+    "network": "BEP20",
+    "deposit": true,
+    "withdraw": true,
+    "fee": 0.01,
+    "active": null,
+    "info": {
+     "contractAddress": "0x55d398326f99059ff775485246999027b3197955",
+     "extraWithdrawFee": "0"
+    }
+   },
+   "ARBITRUM": {
+    "id": "ArbitrumOne",
+    "network": "ARBITRUM",
+    "deposit": true,
+    "withdraw": true,
+    "fee": 0.1,
+    "active": null,
+    "info": {
+     "contractAddress": "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9",
+     "extraWithdrawFee": "0"
+    }
+   },
+   "SOL": {
+    "id": "SOL",
+    "network": "SOL",
+    "deposit": true,
+    "withdraw": true,
+    "fee": 0.5,
+    "active": null,
+    "info": {
+     "contractAddress": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+     "extraWithdrawFee": "0"
+    }
+   },
+   "OPTIMISM": {
+    "id": "Optimism",
+    "network": "OPTIMISM",
+    "deposit": true,
+    "withdraw": true,
+    "fee": 0.014,
+    "active": null,
+    "info": {
+     "contractAddress": "0x01bff41798a0bcf287b996046ca68b395dbc1071",
+     "extraWithdrawFee": "0"
+    }
+   }
+  }
+ },
+ "BTC": {
+  "code": "BTC",
+  "deposit": true,
+  "withdraw": true,
+  "networks": {
+   "BTC": {
+    "id": "BTC",
+    "network": "BTC",
+    "deposit": true,
+    "withdraw": true,
+    "fee": 2e-05,
+    "active": null,
+    "info": {
+     "extraWithdrawFee": "0"
+    }
+   },
+   "BEP20": {
+    "id": "BEP20",
+    "network": "BEP20",
+    "deposit": true,
+    "withdraw": true,
+    "fee": 2.9e-07,
+    "active": null,
+    "info": {
+     "contractAddress": "0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c",
+     "extraWithdrawFee": "0"
+    }
+   },
+   "LIGHTNING": {
+    "id": "LIGHTNING",
+    "network": "LIGHTNING",
+    "deposit": false,
+    "withdraw": false,
+    "fee": 1e-05,
+    "active": null,
+    "info": {
+     "extraWithdrawFee": "0"
+    }
+   }
+  }
+ },
+ "BURN": {
+  "code": "BURN",
+  "deposit": true,
+  "withdraw": true,
+  "networks": {
+   "BEP20": {
+    "id": "BEP20",
+    "network": "BEP20",
+    "deposit": true,
+    "withdraw": true,
+    "fee": 1.0,
+    "active": null,
+    "info": {
+     "contractAddress": "0x0000000000000000000000000000000000000b0b",
+     "extraWithdrawFee": "0.1"
+    }
+   }
+  }
+ }
+}

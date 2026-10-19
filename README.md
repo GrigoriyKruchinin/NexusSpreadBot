@@ -6,9 +6,9 @@
 
 **An asynchronous multi-exchange arbitrage spread scanner for centralized crypto exchanges.**
 
-It watches spot markets on Bybit, Binance, OKX, Gate.io and KuCoin, estimates the **net**
-spread after taker fees on both legs, order-book slippage and network transfer cost, and
-alerts you on Telegram. Every evaluation is stored in PostgreSQL for later analysis.
+It watches spot markets on Bybit, Binance, OKX, Gate.io, KuCoin, MEXC and Bitget, estimates
+the **net** spread after taker fees on both legs, order-book slippage and network transfer
+cost, and alerts you on Telegram. Every evaluation is stored in PostgreSQL for later analysis.
 
 ![Python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
 ![mypy](https://img.shields.io/badge/mypy-strict-2A6DB2)
@@ -23,14 +23,15 @@ alerts you on Telegram. Every evaluation is stored in PostgreSQL for later analy
 > and a static (AST) test forbids fund-moving calls in the source tree.
 
 **Status:** Stage 1 (MVP: detector + alerts) implemented — see [todo.md](todo.md).
-Supported exchanges: Bybit, Binance, OKX, Gate.io, KuCoin (spot, USDT/USDC quotes).
+Supported exchanges: Bybit, Binance, OKX, Gate.io, KuCoin, MEXC, Bitget (spot, USDT/USDC
+quotes). HTX is not supported.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
     subgraph Exchanges
-        BY[Bybit] & BN[Binance] & OK[OKX] & GT[Gate.io] & KC[KuCoin]
+        BY[Bybit] & BN[Binance] & OK[OKX] & GT[Gate.io] & KC[KuCoin] & MX[MEXC] & BG[Bitget]
     end
     subgraph scanner [scanner container]
         AD[Exchange adapters<br/>ccxt, read-only guard] --> CF[CandidateFinder<br/>ticker pre-filter]

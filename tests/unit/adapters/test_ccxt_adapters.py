@@ -6,10 +6,12 @@ import pytest
 from pydantic import SecretStr
 
 from nexus.adapters.cex.binance import BinanceAdapter
+from nexus.adapters.cex.bitget import BitgetAdapter
 from nexus.adapters.cex.bybit import BybitAdapter
 from nexus.adapters.cex.ccxt_base import CcxtExchangeAdapter, to_decimal
 from nexus.adapters.cex.gateio import GateIoAdapter
 from nexus.adapters.cex.kucoin import KucoinAdapter
+from nexus.adapters.cex.mexc import MexcAdapter
 from nexus.adapters.cex.okx import OkxAdapter
 from nexus.adapters.registry import AdapterOptions, exchange_registry
 from nexus.config.groups import ExchangeCredentials
@@ -22,7 +24,7 @@ from nexus.domain.errors import (
 )
 from tests.unit.adapters.fake_ccxt import FakeCcxtClient
 
-EXCHANGES = ("binance", "bybit", "gateio", "kucoin", "okx")
+EXCHANGES = ("binance", "bitget", "bybit", "gateio", "kucoin", "mexc", "okx")
 NOW = 1_800_000_000_000
 
 
@@ -44,9 +46,11 @@ def _creds(
 
 ADAPTERS: dict[str, type[CcxtExchangeAdapter]] = {
     "binance": BinanceAdapter,
+    "bitget": BitgetAdapter,
     "bybit": BybitAdapter,
     "gateio": GateIoAdapter,
     "kucoin": KucoinAdapter,
+    "mexc": MexcAdapter,
     "okx": OkxAdapter,
 }
 
@@ -67,7 +71,7 @@ def _adapter(
     return adapter
 
 
-def test_all_v1_exchanges_registered() -> None:
+def test_all_exchanges_registered() -> None:
     assert set(EXCHANGES) <= set(exchange_registry.names())
     assert set(ADAPTERS) == set(EXCHANGES)
 
@@ -152,6 +156,10 @@ async def test_order_book_drops_invalid_levels_and_rejects_crossed() -> None:
         ("bybit", 50, 50),
         ("bybit", 500, 200),
         ("gateio", 500, 100),
+        ("mexc", 50, 50),
+        ("mexc", 5000, 1000),
+        ("bitget", 50, 50),
+        ("bitget", 500, 150),
     ],
 )
 def test_order_book_limit(exchange: str, depth: int, expected: int) -> None:
@@ -167,6 +175,11 @@ def test_bybit_websocket_limits_differ_from_rest() -> None:
 def test_okx_websocket_uses_public_channels() -> None:
     # books50-l2-tbt requires a VIP4+ login: depth 50 must map to the public "books" channel.
     assert _adapter("okx").order_book_limit(50, websocket=True) == 400
+
+
+@pytest.mark.parametrize(("depth", "expected"), [(5, 5), (10, 15), (50, 150)])
+def test_bitget_websocket_uses_fixed_channels_or_full_feed(depth: int, expected: int) -> None:
+    assert _adapter("bitget").order_book_limit(depth, websocket=True) == expected
 
 
 async def test_watch_order_book_uses_ws_client() -> None:
@@ -216,9 +229,54 @@ async def test_kucoin_currencies_parsed() -> None:
     assert op.withdraw_fee == D(1)
 
 
-@pytest.mark.parametrize("exchange", ["binance", "bybit", "okx"])
+@pytest.mark.parametrize(
+    ("exchange", "network", "withdraw", "deposit", "fee", "contract"),
+    [
+        ("mexc", "TRC20", True, True, D(1), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"),
+        ("mexc", "BEP20", True, False, D(0), "0x55d398326f99059fF775485246999027B3197955"),
+        ("bitget", "TRC20", True, True, D("1.5"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"),
+    ],
+)
+async def test_new_exchange_currencies_parsed(
+    exchange: str,
+    network: str,
+    withdraw: bool,
+    deposit: bool,
+    fee: D,
+    contract: str,
+) -> None:
+    info = await _adapter(exchange).load_transfer_info()
+    assert info is not None
+    net = next(n for n in info["USDT"].networks if n.network == network)
+    assert (net.withdraw_enabled, net.deposit_enabled) == (withdraw, deposit)
+    assert net.withdraw_fee == fee
+    assert net.contract == contract
+
+
+async def test_bitget_extra_percentage_withdraw_fee_makes_fee_unknown() -> None:
+    client = FakeCcxtClient("bitget", has={"fetchDepositWithdrawFees": True})
+    creds = _creds(api_key="k", api_secret="s", api_passphrase="p")
+    info = await _adapter("bitget", client, creds).load_transfer_info()
+    assert info is not None
+    burn = info["BURN"].networks[0]
+    assert burn.withdraw_enabled is True
+    assert burn.withdraw_fee is None  # 1 token + 10 % cannot be priced as a flat fee
+    assert all(call[0] != "fetch_deposit_withdraw_fees" for call in client.calls)
+
+
+async def test_mexc_btc_withdraw_suspended_and_empty_contract_ignored() -> None:
+    info = await _adapter("mexc").load_transfer_info()
+    assert info is not None
+    btc = info["BTC"].networks[0]
+    assert btc.withdraw_enabled is False
+    assert btc.contract is None
+
+
+@pytest.mark.parametrize("exchange", ["binance", "bybit", "okx", "mexc"])
 async def test_currencies_without_credentials_are_none(exchange: str) -> None:
-    assert await _adapter(exchange).load_transfer_info() is None
+    # ccxt returns an empty mapping when the currency endpoint needs a key (e.g. MEXC).
+    client = FakeCcxtClient(exchange, fetch_currencies={})
+    assert await _adapter(exchange, client).load_transfer_info() is None
 
 
 async def test_currency_level_disable_overrides_unknown_network_flags() -> None:
@@ -323,7 +381,19 @@ async def test_account_fee_failure_falls_back_to_public() -> None:
     assert btc.taker_fee == D("0.001")
 
 
-@pytest.mark.parametrize("exchange", ["okx", "kucoin"])
+async def test_bitget_skips_public_bulk_fees() -> None:
+    client = FakeCcxtClient(
+        "bitget",
+        has={"fetchTradingFees": True},
+        fetch_trading_fees={"BTC/USDT": {"taker": 0.002}},
+    )
+    creds = _creds(api_key="k", api_secret="s", api_passphrase="p")
+    btc = next(m for m in await _adapter("bitget", client, creds).load_markets())
+    assert btc.taker_fee_is_default
+    assert all(call[0] != "fetch_trading_fees" for call in client.calls)
+
+
+@pytest.mark.parametrize("exchange", ["okx", "kucoin", "mexc", "bitget"])
 async def test_per_symbol_taker_fee_with_credentials(exchange: str) -> None:
     client = FakeCcxtClient(
         exchange,
@@ -473,7 +543,7 @@ async def test_timeout_maps_to_unavailable() -> None:
 # ------------------------------------------------------------------ credentials
 
 
-@pytest.mark.parametrize("exchange", ["okx", "kucoin"])
+@pytest.mark.parametrize("exchange", ["okx", "kucoin", "bitget"])
 def test_passphrase_required(exchange: str) -> None:
     with pytest.raises(ConfigurationError, match="passphrase"):
         _adapter(exchange, credentials=_creds(api_key="k", api_secret="s"))
@@ -522,7 +592,15 @@ async def test_watch_after_close_rejected() -> None:
 
 @pytest.mark.parametrize(
     ("exchange", "static"),
-    [("binance", True), ("bybit", True), ("okx", True), ("kucoin", False), ("gateio", False)],
+    [
+        ("binance", True),
+        ("bybit", True),
+        ("okx", True),
+        ("kucoin", False),
+        ("gateio", False),
+        ("mexc", True),
+        ("bitget", True),
+    ],
 )
 async def test_static_library_fees_flagged_as_default(exchange: str, static: bool) -> None:
     btc = next(m for m in await _adapter(exchange).load_markets() if m.symbol == "BTC/USDT")

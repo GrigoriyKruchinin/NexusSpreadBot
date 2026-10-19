@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_FILES = ["docker-compose.local.yml"]
 APP_SERVICES = {"migrator", "scanner", "worker-alerts", "worker-maintenance", "beat"}
 
-EXCHANGE_SECRET = re.compile(r"^(BYBIT|BINANCE|OKX|GATEIO|KUCOIN)_API_")
+EXCHANGE_SECRET = re.compile(r"^(BYBIT|BINANCE|OKX|GATEIO|KUCOIN|MEXC|BITGET)_API_")
 FORBIDDEN: dict[str, list[re.Pattern[str]]] = {
     "migrator": [re.compile(r"^(TELEGRAM|REDIS|CELERY|SCANNER|SPREAD)_"), EXCHANGE_SECRET],
     "scanner": [re.compile(r"^TELEGRAM_")],

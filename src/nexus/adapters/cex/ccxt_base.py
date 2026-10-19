@@ -60,8 +60,15 @@ _RETRYABLE: tuple[type[ExchangeError], ...] = (ExchangeUnavailableError,)
 """Rate-limit errors are NOT retried here: the scanner backs off per exchange instead
 (repeated 429s escalate to IP bans on some venues)."""
 
-_CONTRACT_KEYS: tuple[str, ...] = ("contractAddress", "contract_address", "ctAddr", "addr")
-"""Keys under a ccxt network's raw ``info`` holding the token contract (KuCoin, Gate, OKX, ...)."""
+_CONTRACT_KEYS: tuple[str, ...] = (
+    "contractAddress",
+    "contract_address",
+    "ctAddr",
+    "addr",
+    "contract",
+)
+"""Keys under a ccxt network's raw ``info`` holding the token contract (KuCoin, Gate, OKX,
+Bitget, MEXC, ...)."""
 
 
 def install_read_only_guard(
@@ -128,7 +135,10 @@ class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook, ITradingFeeS
     ws_order_book_limits: ClassVar[tuple[int, ...] | None] = None
     """Allowed WebSocket ``limit`` values when they differ from REST (``None`` = same)."""
     static_market_fees: ClassVar[bool] = False
-    """True when ccxt fills ``market["taker"]`` from a library constant, not exchange data."""
+    """True when ``market["taker"]`` is a library constant or a public list rate, not the
+    account tier (alert candidates then look up the account rate per symbol)."""
+    bulk_account_fees: ClassVar[bool] = True
+    """False when ccxt's ``fetchTradingFees`` does not return account-tier rates."""
     ws_public_post_paths: ClassVar[frozenset[str]] = frozenset()
     """Public POST endpoints the (unauthenticated) WebSocket client needs, e.g. a WS token."""
     max_attempts: ClassVar[int] = 3
@@ -279,7 +289,11 @@ class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook, ITradingFeeS
 
     async def _load_account_taker_fees(self) -> dict[str, Decimal]:
         """Best-effort account-tier taker fees (requires read-only credentials)."""
-        if not self._credentials.is_configured or not self._rest.has.get("fetchTradingFees"):
+        if not (
+            self.bulk_account_fees
+            and self._credentials.is_configured
+            and self._rest.has.get("fetchTradingFees")
+        ):
             return {}
         try:
             raw: Mapping[str, Any] = await self._call(
@@ -365,8 +379,8 @@ class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook, ITradingFeeS
                 withdraw = False
             if deposit is None and currency_deposit is False:
                 deposit = False
-            fee = to_decimal(network.get("fee"))
-            if fee is None:
+            fee = self._network_withdraw_fee(network)
+            if fee is None and not self._has_unmodelled_withdraw_fee(network):
                 fee = fee_overrides.get((code, str(network_code)))
             parsed.append(
                 NetworkInfo(
@@ -378,6 +392,19 @@ class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook, ITradingFeeS
                 )
             )
         return tuple(parsed)
+
+    def _network_withdraw_fee(self, network: Mapping[str, Any]) -> Decimal | None:
+        """Flat withdrawal fee (in the asset) of a ccxt network, ``None`` when not modelled."""
+        if self._has_unmodelled_withdraw_fee(network):
+            return None
+        return to_decimal(network.get("fee"))
+
+    def _has_unmodelled_withdraw_fee(self, network: Mapping[str, Any]) -> bool:
+        """True when the venue charges an extra fee the flat-fee model cannot express.
+
+        Such networks get an unknown fee, so a route over them is never ``VERIFIED``.
+        """
+        return False
 
     def _extract_contract(self, network: Mapping[str, Any]) -> str | None:
         """Token contract address from the raw network ``info`` (``None`` if not published)."""

@@ -6,6 +6,6 @@ a registered :class:`~nexus.adapters.cex.ccxt_base.CcxtExchangeAdapter` subclass
 :class:`~nexus.interfaces.market_data.BaseExchangeAdapter`) and import it below.
 """
 
-from nexus.adapters.cex import binance, bybit, gateio, kucoin, okx
+from nexus.adapters.cex import binance, bitget, bybit, gateio, kucoin, mexc, okx
 
-__all__ = ["binance", "bybit", "gateio", "kucoin", "okx"]
+__all__ = ["binance", "bitget", "bybit", "gateio", "kucoin", "mexc", "okx"]

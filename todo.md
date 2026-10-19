@@ -143,22 +143,24 @@ real rebalancing stays manual.
 - [x] §3.6 MEXC, §3.7 Bitget read-only keys (Bitget passphrase), `.env` example, checklist; HTX not supported
 - [ ] User: read-only keys for all 7 exchanges in `.env`
 
-### 1.5.1 New exchanges: MEXC, Bitget (R)
-- [ ] `MexcAdapter` (ccxt `mexc`) and `BitgetAdapter` (ccxt `bitget`, passphrase required) as registered `CcxtExchangeAdapter` subclasses:
+### 1.5.1 New exchanges: MEXC, Bitget (R) — audited: SAFE TO PROCEED
+- [x] `MexcAdapter` (ccxt `mexc`) and `BitgetAdapter` (ccxt `bitget`, passphrase required) as registered `CcxtExchangeAdapter` subclasses:
   - follow `adapters/cex/okx.py` / `kucoin.py`;
   - set REST/WS depth limits and the static-fee flag;
   - WS public POST allowlist only if the exchange needs a public token endpoint.
-- [ ] Credentials:
+- [x] Credentials:
   - `MEXC_API_KEY/SECRET`, `BITGET_API_KEY/SECRET/PASSPHRASE` in `ExchangeCredentials`, `.env.example` and compose (scanner only, enforced by `test_compose.py`);
   - `EXCHANGES_ENABLED` default gains `mexc`, `bitget`.
-- [ ] Recorded fixture payloads:
+- [x] Recorded fixture payloads:
   - markets, tickers, order book, currencies with networks/statuses/fees, trading fee;
   - adapter tests.
-- [ ] Safety:
+- [x] Safety:
   - read-only guard on REST + WS clients;
   - the AST no-fund-movement test covers the new modules;
-  - live public smoke (tickers, books, WS).
-- [ ] README exchange list and architecture diagram updated.
+  - live public smoke (tickers, books, WS);
+  - MEXC spot WS is protobuf: `protobuf==5.29.5` runtime dependency;
+  - Bitget `extraWithdrawFee` (percentage on top of the flat fee) → network fee unknown.
+- [x] README exchange list and architecture diagram updated.
 
 ### 1.5.2 Transfer-status coverage & network matching (R)
 - [ ] With keys, statuses come from ccxt `fetch_currencies` on all 7 exchanges. Verify each adapter yields:

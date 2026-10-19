@@ -133,10 +133,16 @@ _CREDS = {
     "okx": ExchangeCredentials(
         api_key=SecretStr("k"), api_secret=SecretStr("s"), api_passphrase=SecretStr("p")
     ),
+    "mexc": ExchangeCredentials(api_key=SecretStr("k"), api_secret=SecretStr("s")),
+    "bitget": ExchangeCredentials(
+        api_key=SecretStr("k"), api_secret=SecretStr("s"), api_passphrase=SecretStr("p")
+    ),
 }
 
 
-@pytest.mark.parametrize("exchange", ["binance", "bybit", "okx", "gateio", "kucoin"])
+@pytest.mark.parametrize(
+    "exchange", ["binance", "bybit", "okx", "gateio", "kucoin", "mexc", "bitget"]
+)
 async def test_runtime_guard_blocks_non_get(exchange: str) -> None:
     adapter = exchange_registry.create(exchange, ExchangeCredentials(), AdapterOptions())
     try:
@@ -156,6 +162,36 @@ async def test_runtime_guard_blocks_implicit_withdraw_endpoint() -> None:
         withdraw = client.sapiPostCapitalWithdrawApply
         with pytest.raises(ReadOnlyViolationError):
             await withdraw({"coin": "USDT", "address": "x", "amount": "1"})
+    finally:
+        await adapter.close()
+
+
+@pytest.mark.parametrize(
+    ("exchange", "method"),
+    [
+        ("mexc", "spotPrivatePostCapitalWithdraw"),
+        ("bitget", "privateSpotPostV2SpotWalletWithdrawal"),
+    ],
+)
+async def test_runtime_guard_blocks_new_exchange_implicit_withdraw(
+    exchange: str, method: str
+) -> None:
+    adapter = exchange_registry.create(exchange, _CREDS[exchange], AdapterOptions())
+    try:
+        client = adapter._rest  # type: ignore[attr-defined]
+        client.markets = {}  # skip implicit market loading
+        withdraw = getattr(client, method)
+        with pytest.raises(ReadOnlyViolationError):
+            await withdraw({"coin": "USDT", "address": "x", "amount": "1"})
+    finally:
+        await adapter.close()
+
+
+@pytest.mark.parametrize("exchange", ["mexc", "bitget"])
+async def test_new_exchange_ws_client_has_no_post_allowlist(exchange: str) -> None:
+    adapter = exchange_registry.create(exchange, ExchangeCredentials(), AdapterOptions())
+    try:
+        assert adapter.ws_public_post_paths == frozenset()  # type: ignore[attr-defined]
     finally:
         await adapter.close()
 

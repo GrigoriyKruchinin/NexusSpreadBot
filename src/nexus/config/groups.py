@@ -120,7 +120,7 @@ class ExchangesSettings(NexusBaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="EXCHANGES_")
 
-    enabled: StrTuple = ("bybit", "binance", "okx", "gateio", "kucoin")
+    enabled: StrTuple = ("bybit", "binance", "okx", "gateio", "kucoin", "mexc", "bitget")
     request_timeout_ms: int = Field(default=10_000, ge=1_000, le=60_000)
 
     @field_validator("enabled")

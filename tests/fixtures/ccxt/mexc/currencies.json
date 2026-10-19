@@ -1,0 +1,57 @@
+{
+ "USDT": {
+  "code": "USDT",
+  "deposit": true,
+  "withdraw": true,
+  "networks": {
+   "TRC20": {
+    "id": "TRX",
+    "network": "TRC20",
+    "deposit": true,
+    "withdraw": true,
+    "fee": 1.0,
+    "active": null,
+    "info": {
+     "contract": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+    }
+   },
+   "ERC20": {
+    "id": "ETH",
+    "network": "ERC20",
+    "deposit": true,
+    "withdraw": true,
+    "fee": 2.0,
+    "active": null,
+    "info": {
+     "contract": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+    }
+   },
+   "BEP20": {
+    "id": "BSC",
+    "network": "BEP20",
+    "deposit": false,
+    "withdraw": true,
+    "fee": 0.0,
+    "active": null,
+    "info": {
+     "contract": "0x55d398326f99059fF775485246999027B3197955"
+    }
+   }
+  }
+ },
+ "BTC": {
+  "code": "BTC",
+  "deposit": true,
+  "withdraw": false,
+  "networks": {
+   "BTC": {
+    "id": "BTC",
+    "network": "BTC",
+    "deposit": true,
+    "withdraw": false,
+    "fee": 0.0003,
+    "active": null
+   }
+  }
+ }
+}
