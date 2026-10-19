@@ -282,12 +282,13 @@ real rebalancing stays manual.
 - [x] Transfer-status coverage persisted per metadata refresh (`exchange_metadata_stats`).
 
 ### 1.5.9 Coverage observability
-- [ ] Per-sweep log/metrics:
+- [x] Per-sweep log/metrics (`sweep_done`: `routes_by_pair`, `candidates`, `evaluated_symbols`, `quarantined`):
   - routes per exchange pair;
   - candidates;
   - evaluated symbols;
   - quarantined count.
-- [ ] Keep `SCANNER_MIN_QUOTE_VOLUME_USD=50000`; revisit the value with soak data.
+- [x] Keep `SCANNER_MIN_QUOTE_VOLUME_USD=50000`
+- [ ] Revisit the value with soak data (after 1.5.10 soak)
 
 ### 1.5.10 Stage 1.5 Exit
 - [ ] `make check` green; `/audit-risks` SAFE TO PROCEED for 1.5.1–1.5.7

@@ -1133,3 +1133,12 @@ async def test_metadata_refresh_records_coverage_stats() -> None:
         ("b", 1, 0),
         ("c", 0, None),
     ]
+
+
+async def test_sweep_reports_coverage_metrics(h: Harness) -> None:
+    await h.scanner.refresh_metadata()
+    result = await h.scanner.sweep()
+    assert result.evaluated_symbols == 1
+    assert result.routes == sum(result.routes_by_pair.values())
+    assert result.routes_by_pair["a>b"] == 1
+    assert all(">" in pair for pair in result.routes_by_pair)

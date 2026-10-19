@@ -9,8 +9,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import time
+from collections import Counter
 from collections.abc import Coroutine, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -131,6 +132,10 @@ class SweepResult:
     streamed_books: int = 0
     quarantined: int = 0
     """Routes skipped this sweep because they are quarantined."""
+    evaluated_symbols: int = 0
+    """Distinct symbols whose order books were evaluated."""
+    routes_by_pair: dict[str, int] = field(default_factory=dict)
+    """Positive-gross routes per directed exchange pair (``buy>sell``)."""
 
 
 class Scanner:
@@ -367,6 +372,7 @@ class Scanner:
         await self._quarantine_persistent_unverified()
         await self._announce_quarantines()
         links = [*(episode_ids or [None] * len(evaluations)), *[None] * len(parked_evaluations)]
+        evaluated_symbols = len({e.symbol for e in evaluations})
         evaluations = [*evaluations, *parked_evaluations]
         ids = await self._repos.evaluations.add_evaluations(evaluations, links)
         alerts = 0
@@ -395,6 +401,10 @@ class Scanner:
             timed_out=timed_out,
             streamed_books=self._streamed_books,
             quarantined=len(parked),
+            evaluated_symbols=evaluated_symbols,
+            routes_by_pair=dict(
+                sorted(Counter(f"{r.buy_exchange}>{r.sell_exchange}" for r in routes).items())
+            ),
         )
         log.info(
             "sweep_done",
@@ -406,6 +416,8 @@ class Scanner:
             timed_out=result.timed_out,
             streamed_books=result.streamed_books,
             quarantined=result.quarantined,
+            evaluated_symbols=result.evaluated_symbols,
+            routes_by_pair=result.routes_by_pair,
             active_streams=self._streams.active if self._streams is not None else 0,
         )
         return result
