@@ -264,6 +264,22 @@ async def test_bitget_extra_percentage_withdraw_fee_makes_fee_unknown() -> None:
     assert all(call[0] != "fetch_deposit_withdraw_fees" for call in client.calls)
 
 
+@pytest.mark.parametrize(
+    ("network", "expected"),
+    [
+        ({"fee": 0.8, "info": {"maxFee": "1.6"}}, D("0.8")),
+        ({"fee": None, "info": {"minFee": "0.8", "maxFee": "1.6"}}, D("1.6")),
+        ({"fee": None, "info": {}}, None),
+    ],
+)
+async def test_okx_fee_falls_back_to_max_fee(network: dict[str, Any], expected: D | None) -> None:
+    entry = {"withdraw": True, "deposit": True, **network}
+    client = FakeCcxtClient("okx", fetch_currencies={"USDT": {"networks": {"TRC20": entry}}})
+    info = await _adapter("okx", client).load_transfer_info()
+    assert info is not None
+    assert info["USDT"].networks[0].withdraw_fee == expected
+
+
 async def test_mexc_btc_withdraw_suspended_and_empty_contract_ignored() -> None:
     info = await _adapter("mexc").load_transfer_info()
     assert info is not None

@@ -202,6 +202,28 @@ async def test_unavailable_transfer_is_not_alerted(h: Harness) -> None:
     assert EvaluationStatus.TRANSFER_UNAVAILABLE in statuses
 
 
+async def test_transfer_coverage_per_exchange(h: Harness) -> None:
+    h.a.transfers = {
+        "ABC": AssetTransferInfo(
+            exchange="a",
+            asset="ABC",
+            networks=(NetworkInfo("ERC20", True, False, D(1)),),
+        )
+    }
+    h.b.transfers = {
+        "ABC": AssetTransferInfo(
+            exchange="b", asset="ABC", networks=(NetworkInfo("ERC20", None, True, D(1)),)
+        )
+    }
+    universe = await h.scanner.refresh_metadata()
+    assert universe.transfer_coverage_pct("a") == 100
+    assert universe.transfer_coverage_pct("b") == 0  # withdraw flag unreported
+    assert universe.transfer_coverage_pct("c") == 0  # no metadata at all
+    assert universe.transfer_coverage_pct("unknown") is None
+    h.b.transfers = {"ABC": AssetTransferInfo(exchange="b", asset="ABC", withdraw_enabled=False)}
+    assert (await h.scanner.refresh_metadata()).transfer_coverage_pct("b") == 100
+
+
 async def test_failed_order_book_skips_route(h: Harness) -> None:
     h.b.book_errors["ABC/USDT"] = ExchangeUnavailableError("b", "timeout")
     await h.scanner.refresh_metadata()
@@ -254,6 +276,7 @@ async def test_run_announces_start_and_stop(h: Harness) -> None:
     assert started.common_symbols == 1
     assert started.min_net_profit_pct == "0.3"
     assert [e.name for e in started.exchanges if e.authenticated] == ["a"]
+    assert {e.transfer_coverage_pct for e in started.exchanges} == {0}
     assert isinstance(h.dispatcher.events[-1], ScannerStopped)
 
 

@@ -55,6 +55,25 @@ class IMarketMetadata(ABC):
         """
 
 
+class ITransferStatusSource(ABC):
+    """Read-only source of per-asset deposit/withdrawal network status.
+
+    Used as a public fallback when an exchange serves currency data only to authenticated
+    clients and no key is configured (e.g. Binance's public capital config).
+    """
+
+    @abstractmethod
+    async def load_transfer_info(self) -> Mapping[str, AssetTransferInfo] | None:
+        """Per-asset transfer info, or ``None`` when the source has no data.
+
+        Raises ``ExchangeError`` on transport or payload failures.
+        """
+
+    @abstractmethod
+    async def close(self) -> None:
+        """Release network resources."""
+
+
 class ITradingFeeSource(ABC):
     """Per-symbol account-tier fee lookups (for exchanges without a bulk fee endpoint)."""
 

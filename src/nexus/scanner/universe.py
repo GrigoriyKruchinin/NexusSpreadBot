@@ -86,7 +86,29 @@ class MarketUniverse:
         """Market metadata, if scannable."""
         return self.markets.get(exchange, {}).get(symbol)
 
+    def transfer_coverage_pct(self, exchange: str) -> int | None:
+        """Share (floor %) of scanned base assets on ``exchange`` with a known transfer status.
+
+        Known = the exchange reports a deposit and a withdrawal flag for at least one network
+        of the asset, or disables the asset outright. ``None`` when nothing is scanned.
+        """
+        assets = {market.base for market in self.markets.get(exchange, {}).values()}
+        if not assets:
+            return None
+        known = sum(1 for asset in assets if _status_known(self.transfer_info(exchange, asset)))
+        return known * 100 // len(assets)
+
     def transfer_info(self, exchange: str, asset: str) -> AssetTransferInfo | None:
         """Transfer metadata of ``asset`` on ``exchange`` (``None`` if unknown)."""
         by_asset = self.transfers.get(exchange)
         return by_asset.get(asset) if by_asset is not None else None
+
+
+def _status_known(info: AssetTransferInfo | None) -> bool:
+    if info is None:
+        return False
+    if info.withdraw_enabled is False or info.deposit_enabled is False:
+        return True
+    return any(
+        n.withdraw_enabled is not None and n.deposit_enabled is not None for n in info.networks
+    )

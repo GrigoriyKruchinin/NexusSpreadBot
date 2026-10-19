@@ -36,3 +36,12 @@ class OkxAdapter(CcxtExchangeAdapter):
         if usdc_raw is None:
             return None  # cannot tell the applicable rate: keep the default fee
         return max(taker, -usdc_raw)
+
+    def _network_withdraw_fee(self, network: Mapping[str, Any]) -> Decimal | None:
+        """Use ``fee``; responses without it carry a ``minFee``..``maxFee`` range, so take
+        the maximum (conservative) instead of leaving the route unpriced."""
+        fee = super()._network_withdraw_fee(network)
+        if fee is not None:
+            return fee
+        info = network.get("info")
+        return to_decimal(info.get("maxFee")) if isinstance(info, Mapping) else None

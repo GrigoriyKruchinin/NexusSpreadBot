@@ -98,7 +98,7 @@ def test_system_events_roundtrip_and_render() -> None:
     formatter = SystemEventFormatter()
     events: list[SystemEvent] = [
         ScannerStarted(
-            exchanges=(ExchangeStatus("bybit", True, 511), ExchangeStatus("okx", False, 443)),
+            exchanges=(ExchangeStatus("bybit", True, 511, 87), ExchangeStatus("okx", False, 443)),
             min_net_profit_pct="0.3",
             min_net_profit_usd="5",
             reference_notional_usd="1000",
@@ -114,8 +114,8 @@ def test_system_events_roundtrip_and_render() -> None:
         assert restored == event
         rendered.append(formatter.render(restored))
     assert "🚀 <b>Nexus Spread Scanner started</b>" in rendered[0]
-    assert "🔑 <b>Bybit</b> — 511 markets" in rendered[0]
-    assert "🌐 <b>OKX</b> — 443 markets" in rendered[0]
+    assert "🔑 <b>Bybit</b> — 511 markets · transfers 87%" in rendered[0]
+    assert "🌐 <b>OKX</b> — 443 markets\n" in rendered[0]
     assert "<b>≥ 0.3%</b> and <b>≥ $5</b>" in rendered[0]
     assert "SIGTERM" in rendered[1]
     assert "&lt;script&gt;" in rendered[2]

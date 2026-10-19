@@ -1,0 +1,2093 @@
+{
+"_source": "fetch_currencies network codes recorded 2026-10-19 (Gate.io, KuCoin, Bitget via ccxt; Binance via public capital config + ccxt network_id_to_code). OKX/Bybit/MEXC need read-only keys.",
+"exchanges": {
+"gateio": {
+"3KM": [
+"KAIA"
+],
+"ACM": [
+"CHZ2"
+],
+"ACMOLD": [
+"CHZ2"
+],
+"AFC": [
+"CHZ2"
+],
+"AFCOLD": [
+"CHZ2"
+],
+"AIA": [
+"BEP20",
+"SUI",
+"SUINEW"
+],
+"AIA_OLD": [
+"SUI"
+],
+"ALA": [
+"CHZ2"
+],
+"ALAOLD": [
+"CHZ2"
+],
+"ALKIMI": [
+"SUI",
+"SUINEW"
+],
+"AM": [
+"CHZ2"
+],
+"AMOLD": [
+"CHZ2"
+],
+"ARG": [
+"CHZ2"
+],
+"ARGOLD": [
+"CHZ2"
+],
+"ARGON": [
+"AVAXC",
+"BEP20"
+],
+"ARROW": [
+"AVAXC"
+],
+"ARTFI": [
+"SUI",
+"SUINEW"
+],
+"ASR": [
+"CHZ2"
+],
+"ASROLD": [
+"CHZ2"
+],
+"ATM": [
+"CHZ2"
+],
+"ATMOLD": [
+"CHZ2"
+],
+"AVALOX": [
+"AVAXC"
+],
+"AVAX": [
+"AVAX",
+"AVAXC"
+],
+"AVAXAI": [
+"AVAXC",
+"BEP20"
+],
+"AVERY": [
+"TON"
+],
+"AXOL": [
+"SUI",
+"SUINEW"
+],
+"BBQ": [
+"TON"
+],
+"BEES": [
+"AVAXC"
+],
+"BENQI": [
+"AVAXC"
+],
+"BLS": [
+"AVAXC"
+],
+"BLUAI": [
+"BEP20",
+"SUI",
+"SUINEW"
+],
+"BLUE": [
+"SUI",
+"SUINEW"
+],
+"BLUM": [
+"TON"
+],
+"BONEBONE": [
+"BTRBTC"
+],
+"BORA": [
+"KAIA"
+],
+"BTR": [
+"BEP20",
+"BTRBTC"
+],
+"BTRBTC": [
+"BTRBTC"
+],
+"BYIN": [
+"TON"
+],
+"CATGOLD": [
+"TON"
+],
+"CATI": [
+"TON"
+],
+"CATS": [
+"TON"
+],
+"CAW": [
+"CRO"
+],
+"CETUS": [
+"SUI",
+"SUINEW"
+],
+"CGX": [
+"RON"
+],
+"CHEEMSOLD": [
+"ZKSYNC"
+],
+"CHIRP": [
+"SUI",
+"SUINEW"
+],
+"CHZ": [
+"CHZ2",
+"ERC20"
+],
+"CITY": [
+"CHZ2"
+],
+"CITYOLD": [
+"CHZ2"
+],
+"CLAY": [
+"TON"
+],
+"CLOT": [
+"B2BTC",
+"BTRBTC"
+],
+"COQ": [
+"AVAXC"
+],
+"CRAFT": [
+"AVAXC"
+],
+"CRO": [
+"CRO",
+"ERC20"
+],
+"CYCON": [
+"KAIA"
+],
+"DAI": [
+"AVAXC",
+"ERC20",
+"MATIC"
+],
+"DEEP": [
+"SUI",
+"SUINEW"
+],
+"DESCI": [
+"ERC20",
+"SUI",
+"SUINEW"
+],
+"DMC": [
+"SUI",
+"SUINEW"
+],
+"DOGS": [
+"TON"
+],
+"DOMI": [
+"AVAXC",
+"BEP20",
+"ERC20"
+],
+"DUCK": [
+"TON"
+],
+"DUREV": [
+"TON"
+],
+"DYP_OLD2": [
+"AVAXC"
+],
+"E4C": [
+"SUI",
+"SUINEW"
+],
+"ELDE": [
+"BEP20",
+"KAIA"
+],
+"ETH": [
+"ABS",
+"ARBITRUM",
+"ARBITRUM_NOVA",
+"BASE",
+"BEP20",
+"ETH",
+"LINEA",
+"MANTAETH",
+"OP",
+"ZKSYNC"
+],
+"EVAA": [
+"BEP20",
+"TON"
+],
+"EVADORE": [
+"TON"
+],
+"FER": [
+"CRO"
+],
+"FITFI": [
+"AVAXC"
+],
+"FNZ": [
+"TON"
+],
+"FTON": [
+"TON"
+],
+"FUD": [
+"SUI",
+"SUINEW"
+],
+"FUL": [
+"CRO"
+],
+"GALFAN": [
+"CHZ2"
+],
+"GALFANOLD": [
+"CHZ2"
+],
+"GALO": [
+"CHZ2"
+],
+"GALOOLD": [
+"CHZ2"
+],
+"GEC": [
+"AVAXC"
+],
+"GOATS": [
+"TON"
+],
+"GODL": [
+"TON"
+],
+"GOZ": [
+"CHZ2"
+],
+"GOZOLD": [
+"CHZ2"
+],
+"GRAM": [
+"TON"
+],
+"GRND": [
+"KAIA"
+],
+"GXA": [
+"KAIA"
+],
+"HAEDAL": [
+"SUI",
+"SUINEW"
+],
+"HCT": [
+"AVAXC"
+],
+"HECH": [
+"AVAXC"
+],
+"HEU": [
+"BASE",
+"ZKSYNC"
+],
+"HIBS": [
+"KAIA"
+],
+"HIPPO": [
+"SUI",
+"SUINEW"
+],
+"HMSTR": [
+"TON"
+],
+"HOLD": [
+"TON"
+],
+"HOLDSTATION_OLD": [
+"ZKSYNC"
+],
+"HYCO": [
+"ZKSYNC"
+],
+"IBFK": [
+"CHZ2"
+],
+"IBFKOLD": [
+"CHZ2"
+],
+"IKA": [
+"SUI",
+"SUINEW"
+],
+"INFRA": [
+"AVAXC",
+"ERC20"
+],
+"INTER": [
+"CHZ2"
+],
+"INTEROLD": [
+"CHZ2"
+],
+"INVITE": [
+"TON"
+],
+"ISK_OLD": [
+"KAIA"
+],
+"ISSP": [
+"SUI",
+"SUINEW"
+],
+"ITA": [
+"CHZ2"
+],
+"ITAOLD": [
+"CHZ2"
+],
+"JGN": [
+"AVAXC",
+"BEP20",
+"ERC20"
+],
+"JNS": [
+"AVAXC"
+],
+"JOE": [
+"AVAXC"
+],
+"JOY": [
+"KAIA"
+],
+"JUC": [
+"AVAXC"
+],
+"JUM": [
+"KAIA"
+],
+"JUV": [
+"CHZ2"
+],
+"JUVOLD": [
+"CHZ2"
+],
+"KAIA": [
+"KAIA"
+],
+"KATC": [
+"ZKSYNC"
+],
+"KDX": [
+"SUI",
+"SUINEW"
+],
+"KLAP": [
+"KAIA"
+],
+"KLO": [
+"AVAXC"
+],
+"LAIR": [
+"KAIA"
+],
+"LAMBO": [
+"AVAXC"
+],
+"LEMN": [
+"KAIA"
+],
+"LION": [
+"CRO"
+],
+"LOFI": [
+"SUI",
+"SUINEW"
+],
+"LWA": [
+"SUI",
+"SUINEW"
+],
+"MAF": [
+"KAIA"
+],
+"MAGMA": [
+"SUI",
+"SUINEW"
+],
+"MAJOR": [
+"TON"
+],
+"MBX": [
+"KAIA"
+],
+"MELD": [
+"ZKSYNC"
+],
+"MEMEFI": [
+"SUI",
+"SUINEW"
+],
+"MENGO": [
+"CHZ2"
+],
+"MENGOOLD": [
+"CHZ2"
+],
+"MERL": [
+"MERLBTC"
+],
+"MERLBTC": [
+"MERLBTC"
+],
+"METAGOLD": [
+"AVAXC"
+],
+"MFC": [
+"CHZ2"
+],
+"MISSION": [
+"TON"
+],
+"MMM": [
+"KAIA"
+],
+"MMT": [
+"SUI",
+"SUINEW"
+],
+"MNEMO": [
+"TON"
+],
+"MRSOON": [
+"TON"
+],
+"MSEND": [
+"SUI",
+"SUINEW"
+],
+"MSP": [
+"MERLBTC"
+],
+"MSTAR": [
+"MERLBTC"
+],
+"MTD": [
+"CRO"
+],
+"NAI": [
+"AVAXC"
+],
+"NAP": [
+"CHZ2"
+],
+"NAPOLD": [
+"CHZ2"
+],
+"NAVX": [
+"SUI",
+"SUINEW"
+],
+"NIKO": [
+"TON"
+],
+"NODL": [
+"ZKSYNC"
+],
+"NOT": [
+"TON"
+],
+"NPT": [
+"KAIA",
+"MATIC"
+],
+"NS": [
+"SUI",
+"SUINEW"
+],
+"NSTR": [
+"ERC20",
+"STRKETH"
+],
+"NXPC": [
+"AVAXC"
+],
+"OG": [
+"CHZ2"
+],
+"OGOLD": [
+"CHZ2"
+],
+"OLV": [
+"KAIA"
+],
+"ONE": [
+"ERC20"
+],
+"ONSTON": [
+"AVAXC",
+"ERC20",
+"MATIC"
+],
+"ORB_OLD": [
+"KAIA"
+],
+"ORNG": [
+"AVAXC"
+],
+"PEPPER": [
+"CHZ2"
+],
+"PERA": [
+"AVAXC"
+],
+"PFVS": [
+"ERC20",
+"RON"
+],
+"PGC": [
+"TON"
+],
+"PHONE": [
+"TON"
+],
+"PIKA": [
+"BEP20",
+"BTRBTC"
+],
+"PINGO": [
+"TON"
+],
+"PIX": [
+"TON"
+],
+"PIXEL": [
+"ERC20",
+"RON"
+],
+"PIXELVERSE": [
+"AVAXC",
+"BEP20",
+"ERC20"
+],
+"PNG": [
+"AVAXC"
+],
+"POR": [
+"CHZ2"
+],
+"POROLD": [
+"CHZ2"
+],
+"PSG": [
+"CHZ2"
+],
+"PSGOLD": [
+"CHZ2"
+],
+"PSUB": [
+"KAIA"
+],
+"PYBOBOOLD": [
+"TON"
+],
+"RACING": [
+"CHZ2"
+],
+"RBTC": [
+"TON"
+],
+"REDO": [
+"TON"
+],
+"RIF": [
+"SOVRBTC"
+],
+"RNDX": [
+"KAIA"
+],
+"ROCO": [
+"AVAXC"
+],
+"RON": [
+"RON"
+],
+"SAM": [
+"CHZ2"
+],
+"SAUBER": [
+"CHZ2"
+],
+"SAUBEROLD": [
+"CHZ2"
+],
+"SCA": [
+"SUI",
+"SUINEW"
+],
+"SCCP": [
+"CHZ2"
+],
+"SCCPOLD": [
+"CHZ2"
+],
+"SECOND": [
+"AVAXC"
+],
+"SEND": [
+"SUI",
+"SUINEW"
+],
+"SINGLE": [
+"CRO"
+],
+"SOV": [
+"ERC20",
+"SOVRBTC"
+],
+"SOVRBTC": [
+"SOVRBTC"
+],
+"SPFC": [
+"CHZ2"
+],
+"SPFCOLD": [
+"CHZ2"
+],
+"SPURS": [
+"CHZ2"
+],
+"SPURSOLD": [
+"CHZ2"
+],
+"SSG": [
+"KAIA"
+],
+"SSWP": [
+"SUI",
+"SUINEW"
+],
+"SSX": [
+"KAIA"
+],
+"STORM": [
+"TON"
+],
+"STRK": [
+"STRKETH"
+],
+"STRKETH": [
+"STRKETH"
+],
+"SUI": [
+"SUI",
+"SUINEW"
+],
+"SUIA": [
+"SUI",
+"SUINEW"
+],
+"SUIAGENT": [
+"ERC20",
+"SUI",
+"SUINEW"
+],
+"SUIAI": [
+"ERC20",
+"SUI",
+"SUINEW"
+],
+"SUIP": [
+"SUI",
+"SUINEW"
+],
+"SUIRWAPIN": [
+"ERC20",
+"SUI",
+"SUINEW"
+],
+"SYN_C": [
+"AVAXC"
+],
+"TAKE": [
+"SUI",
+"SUINEW"
+],
+"TARI": [
+"KAIA"
+],
+"TEDDY": [
+"AVAXC",
+"BEP20",
+"ERC20",
+"FTM",
+"MATIC"
+],
+"TELE": [
+"TON"
+],
+"TICO": [
+"AVAXC"
+],
+"TIME": [
+"AVAXC"
+],
+"TIMES": [
+"SUI",
+"SUINEW"
+],
+"TON": [
+"TON"
+],
+"TRA": [
+"CHZ2"
+],
+"TRAOLD": [
+"CHZ2"
+],
+"TRCL_OLD": [
+"KAIA"
+],
+"TURBOS": [
+"SUI",
+"SUINEW"
+],
+"UCH": [
+"CHZ2"
+],
+"UP_OLD": [
+"TON"
+],
+"US": [
+"SUI",
+"SUINEW"
+],
+"USDC": [
+"APT",
+"ARBITRUM",
+"ARC",
+"AVAXC",
+"BASE",
+"BEP20",
+"CC",
+"ERC20",
+"HBAR",
+"MATIC",
+"MON",
+"NEAR",
+"OP",
+"POLKADOT",
+"S",
+"SEIEVM",
+"SOL",
+"SUI",
+"SUINEW",
+"TRC20",
+"WLD",
+"XDC",
+"ZKSYNC"
+],
+"USDE": [
+"ERC20",
+"TON"
+],
+"USDT": [
+"0G",
+"ALGO",
+"APT",
+"ARBITRUM",
+"AVAXC",
+"BEP20",
+"BRC20",
+"CELO",
+"EOS",
+"ERC20",
+"GATECHAIN",
+"KAIA",
+"KAVAEVM",
+"KUSAMA",
+"MATIC",
+"MON",
+"NEAR",
+"OP",
+"OPBNB",
+"POLKADOT",
+"SOL",
+"TON",
+"TRC20",
+"XPL",
+"XTZ"
+],
+"VEE": [
+"AVAXC",
+"ERC20"
+],
+"VERT": [
+"TON"
+],
+"VNO": [
+"CRO"
+],
+"VOYA": [
+"MERLBTC"
+],
+"VSO": [
+"AVAXC"
+],
+"VVS": [
+"CRO"
+],
+"WAL": [
+"SUI",
+"SUINEW"
+],
+"WAT": [
+"TON"
+],
+"WEMIX_OLD": [
+"KAIA"
+],
+"WIKEN": [
+"KAIA"
+],
+"WOOF": [
+"ERC20",
+"TON"
+],
+"WXT": [
+"AVAXC",
+"XLM"
+],
+"X": [
+"TON"
+],
+"XAVA": [
+"AVAXC"
+],
+"XETA": [
+"AVAXC"
+],
+"XPL": [
+"XPL"
+],
+"XSEED": [
+"AVAXC"
+],
+"XSEED_OLD": [
+"AVAXC"
+],
+"XTAG": [
+"AVAXC",
+"SOL"
+],
+"XTAG_OLD": [
+"AVAXC"
+],
+"XTZ": [
+"XTZ",
+"XTZEVM"
+],
+"XU3O8": [
+"XTZEVM"
+],
+"YULI": [
+"KAIA"
+],
+"ZAT": [
+"ZKSYNC"
+],
+"ZF": [
+"ZKSYNC"
+],
+"ZIL": [
+"ZILEVM"
+],
+"ZK": [
+"ZKSYNC"
+],
+"ZOO": [
+"TON"
+],
+"ZP": [
+"KAIA"
+]
+},
+"kucoin": {
+"ALKIMI": [
+"sui"
+],
+"ARTFI": [
+"sui"
+],
+"AVAX": [
+"AVAXC",
+"AVAXX"
+],
+"BLUE": [
+"sui"
+],
+"BLUM": [
+"TON",
+"ton2"
+],
+"BOMB": [
+"BEP20",
+"KLAY",
+"TON",
+"ton2"
+],
+"BTR": [
+"bitlayer"
+],
+"CATI": [
+"TON",
+"ton2"
+],
+"CATS": [
+"TON",
+"ton2"
+],
+"CETUS": [
+"sui"
+],
+"CHIRP": [
+"sui"
+],
+"CLAY": [
+"TON",
+"ton2"
+],
+"COLS": [
+"AVAXC"
+],
+"COQ": [
+"AVAXC"
+],
+"DEEP": [
+"sui"
+],
+"DMC": [
+"sui"
+],
+"DOGS": [
+"TON",
+"ton2"
+],
+"DOMIN": [
+"KLAY"
+],
+"DUCK": [
+"TON",
+"ton2"
+],
+"E4C": [
+"sui"
+],
+"ELDE": [
+"BEP20",
+"KLAY"
+],
+"FITFI": [
+"AVAXC"
+],
+"FTON": [
+"TON",
+"ton2"
+],
+"GAS": [
+"NEON3"
+],
+"GMX": [
+"ARBITRUM",
+"AVAXC"
+],
+"GOATS": [
+"TON",
+"ton2"
+],
+"GODL": [
+"TON",
+"ton2"
+],
+"GRAM": [
+"TON",
+"ton2"
+],
+"GZIL": [
+"ZIL"
+],
+"HAEDAL": [
+"sui"
+],
+"HIPPO": [
+"sui"
+],
+"HMSTR": [
+"TON",
+"ton2"
+],
+"HOLD": [
+"BEP20",
+"bera",
+"zksync2"
+],
+"HOLDCOIN": [
+"TON",
+"ton2"
+],
+"IKA": [
+"sui"
+],
+"ISSP": [
+"sui"
+],
+"JUC": [
+"AVAXC"
+],
+"KAIA": [
+"KLAY"
+],
+"KLAY": [
+"KLAY"
+],
+"LOFI": [
+"sui"
+],
+"MAJOR": [
+"TON",
+"ton2"
+],
+"MEMEFI": [
+"sui"
+],
+"MEMHASH": [
+"TON",
+"ton2"
+],
+"MERL": [
+"merlin"
+],
+"MISSION": [
+"TON",
+"ton2"
+],
+"MMT": [
+"sui"
+],
+"NAVX": [
+"sui"
+],
+"NEO": [
+"NEON3"
+],
+"NHCT": [
+"AVAXC"
+],
+"NOT": [
+"TON",
+"ton2"
+],
+"NS": [
+"sui"
+],
+"NXPC": [
+"AVAXC",
+"BEP20"
+],
+"ONE": [
+"ERC20"
+],
+"PFVS": [
+"ERC20",
+"ronin"
+],
+"PGC": [
+"TON",
+"ton2"
+],
+"PONCH": [
+"TON",
+"ton2"
+],
+"QI": [
+"AVAXC"
+],
+"QUILL": [
+"AVAXC"
+],
+"RBTC": [
+"rbtc"
+],
+"RBTC1": [
+"TON",
+"ton2"
+],
+"REDO": [
+"TON",
+"ton2"
+],
+"RIF": [
+"rbtc"
+],
+"RONIN": [
+"ronin"
+],
+"SCA": [
+"sui"
+],
+"SEED": [
+"sui"
+],
+"SHRAP": [
+"AVAXC"
+],
+"SOV": [
+"ERC20",
+"rbtc"
+],
+"STON": [
+"TON",
+"ton2"
+],
+"STRK": [
+"starknet"
+],
+"SUI": [
+"sui"
+],
+"SUIA": [
+"sui"
+],
+"SUIP": [
+"sui"
+],
+"SUIRWAPIN": [
+"sui"
+],
+"TAC": [
+"TON",
+"ton2"
+],
+"TEVA": [
+"BASE",
+"zksync2"
+],
+"TRUTH": [
+"sui"
+],
+"TURBOS": [
+"sui"
+],
+"US": [
+"sui"
+],
+"USDC": [
+"ARBITRUM",
+"AVAXC",
+"BASE",
+"ERC20",
+"HBAR",
+"KCC",
+"MATIC",
+"NEAR",
+"OP",
+"SOL",
+"XDC",
+"arc",
+"monad",
+"move",
+"sonic",
+"statemint",
+"sui"
+],
+"USDT": [
+"APT",
+"ARBITRUM",
+"AVAXC",
+"BEP20",
+"CFX",
+"ERC20",
+"KCC",
+"MATIC",
+"NEAR",
+"OP",
+"SOL",
+"TON",
+"TRC20",
+"XTZ",
+"kavaevm",
+"plasma",
+"stable",
+"statemint",
+"ton2"
+],
+"VOYA": [
+"merlin"
+],
+"WAL": [
+"sui"
+],
+"WAT": [
+"TON",
+"ton2"
+],
+"WAV": [
+"sui"
+],
+"X": [
+"TON",
+"ton2"
+],
+"XAVA": [
+"AVAXC"
+],
+"XCAD": [
+"BEP20",
+"ERC20",
+"ZIL"
+],
+"XETA": [
+"AVAXC"
+],
+"XMN": [
+"sui"
+],
+"XPL": [
+"plasma"
+],
+"XTZ": [
+"XTZ",
+"etherlink"
+],
+"XU3O8": [
+"etherlink"
+],
+"YOM": [
+"AVAXC"
+],
+"YULI": [
+"KLAY"
+],
+"ZIL": [
+"zilliqa2"
+],
+"ZK": [
+"zksync2"
+],
+"ZOO": [
+"TON",
+"ton2"
+]
+},
+"bitget": {
+"3ULL": [
+"AVAXC-CHAIN"
+],
+"AAI": [
+"ZKSYNC"
+],
+"ACM": [
+"CAP20"
+],
+"AFC": [
+"CAP20"
+],
+"AIA": [
+"SUI"
+],
+"APPA": [
+"ZKSYNC"
+],
+"APRS": [
+"ERC20",
+"RONIN"
+],
+"ARG": [
+"CAP20"
+],
+"ARTFI": [
+"SUI"
+],
+"ASR": [
+"CAP20"
+],
+"ATM": [
+"CAP20"
+],
+"AVACN": [
+"TON"
+],
+"AVAVOLD": [
+"AVAXC-CHAIN"
+],
+"AVAX": [
+"AVAXC-CHAIN",
+"AVAXX-CHAIN"
+],
+"AXS": [
+"BEP20",
+"ERC20",
+"RONIN"
+],
+"AZIT": [
+"KAIA"
+],
+"BAR": [
+"CAP20"
+],
+"BLS": [
+"AVAXC-CHAIN"
+],
+"BLUE": [
+"SUI"
+],
+"BLUM": [
+"TON"
+],
+"BOMB": [
+"BEP20",
+"KAIA",
+"TON"
+],
+"BOOMUP": [
+"TON"
+],
+"BORA": [
+"KAIA"
+],
+"BWB": [
+"BASE",
+"ERC20",
+"SOL",
+"TON"
+],
+"CATGOLD": [
+"TON"
+],
+"CATI": [
+"TON"
+],
+"CATS": [
+"TON"
+],
+"CETUS": [
+"SUI"
+],
+"CHZ": [
+"CAP20",
+"ERC20"
+],
+"CITY": [
+"CAP20"
+],
+"CLAY": [
+"TON"
+],
+"COQ": [
+"AVAXC-CHAIN"
+],
+"CYCON": [
+"KAIA"
+],
+"DEEP": [
+"SUI"
+],
+"DEG": [
+"AVAXC-CHAIN"
+],
+"DFC": [
+"TON"
+],
+"DMC": [
+"SUI"
+],
+"DOGS": [
+"TON"
+],
+"DUCK": [
+"TON"
+],
+"ETH": [
+"ARBITRUM",
+"BASE",
+"BEP20",
+"ETH",
+"MORPH",
+"OPTIMISM",
+"ROBINHOOD",
+"SCROLL",
+"STARKNET",
+"ZKSYNC"
+],
+"FAVR": [
+"KAIA"
+],
+"FISH": [
+"TON"
+],
+"FITFI": [
+"AVAXC-CHAIN"
+],
+"FLM": [
+"NEO3"
+],
+"FTSY": [
+"KAIA"
+],
+"FUD": [
+"SUI"
+],
+"GALFAN": [
+"CAP20"
+],
+"GAS": [
+"NEO3"
+],
+"GDV": [
+"TON"
+],
+"GEC": [
+"AVAXC-CHAIN"
+],
+"GOATS": [
+"TON"
+],
+"GODL": [
+"TON"
+],
+"GRAM": [
+"TON"
+],
+"GRAMOLD": [
+"TON"
+],
+"HAEDAL": [
+"BEP20",
+"SUI"
+],
+"HIPPO": [
+"SUI"
+],
+"HMSTR": [
+"TON"
+],
+"HOLD": [
+"BEP20",
+"ZKSYNC"
+],
+"HOLDCOIN": [
+"TON"
+],
+"IKA": [
+"SUI"
+],
+"INTER": [
+"CAP20"
+],
+"INVITE": [
+"TON"
+],
+"ITA": [
+"CAP20"
+],
+"JNS": [
+"AVAXC-CHAIN"
+],
+"JOE": [
+"AVAXC-CHAIN"
+],
+"JUV": [
+"CAP20"
+],
+"KAIA": [
+"KAIA"
+],
+"KATOLD": [
+"ZKSYNC"
+],
+"MAGMA": [
+"SUI"
+],
+"MAJOR": [
+"TON"
+],
+"MBX": [
+"KAIA"
+],
+"MC": [
+"TON"
+],
+"MDOGS": [
+"TON"
+],
+"MEMEFI": [
+"SUI"
+],
+"MEMHASH": [
+"TON"
+],
+"MENGO": [
+"CAP20"
+],
+"MERL": [
+"MERLIN"
+],
+"MMT": [
+"SUI"
+],
+"MRSOON": [
+"TON"
+],
+"NAP": [
+"CAP20"
+],
+"NAVX": [
+"SUI"
+],
+"NEO": [
+"NEO3"
+],
+"NOT": [
+"TON"
+],
+"NPT": [
+"KAIA"
+],
+"NS": [
+"SUI"
+],
+"NXPC": [
+"AVAXC-CHAIN"
+],
+"OBX": [
+"AVAXC-CHAIN"
+],
+"OG": [
+"CAP20"
+],
+"ONE": [
+"ONE"
+],
+"ORB": [
+"KAIA"
+],
+"PEPPER": [
+"CAP20"
+],
+"PGC": [
+"TON"
+],
+"PHONE": [
+"TON"
+],
+"PIXEL": [
+"ERC20",
+"RONIN"
+],
+"POR": [
+"CAP20"
+],
+"PSG": [
+"CAP20"
+],
+"PSUB": [
+"KAIA"
+],
+"QUILL": [
+"AVAXC-CHAIN"
+],
+"RBTC": [
+"TON"
+],
+"RIF": [
+"RSK"
+],
+"RONIN": [
+"RONIN"
+],
+"RUNESX": [
+"BTCRUNES",
+"MERLIN"
+],
+"SCA": [
+"SUI"
+],
+"SEND": [
+"SUI"
+],
+"SEVILLA": [
+"CAP20"
+],
+"SHRAP": [
+"AVAXC-CHAIN"
+],
+"SLP": [
+"ERC20",
+"RONIN"
+],
+"SPURS": [
+"CAP20"
+],
+"SSX": [
+"KAIA"
+],
+"STRK": [
+"ERC20",
+"STARKNET"
+],
+"SUI": [
+"SUI"
+],
+"TAC": [
+"TON"
+],
+"TAPS": [
+"TON"
+],
+"TOKKI": [
+"KAIA"
+],
+"TOMA": [
+"APT",
+"TON"
+],
+"TOWER": [
+"BASE",
+"ERC20",
+"MATIC",
+"TON"
+],
+"TRA": [
+"CAP20"
+],
+"TUSD": [
+"AVAXC-CHAIN",
+"BEP20",
+"ERC20",
+"TRC20"
+],
+"UPOLD": [
+"ERC20",
+"TON"
+],
+"US": [
+"SUI"
+],
+"USDC": [
+"APT",
+"ARBITRUM",
+"ARC",
+"AVAXC-CHAIN",
+"BASE",
+"BEP20",
+"ERC20",
+"MONAD",
+"MORPH",
+"OPTIMISM",
+"POLYGON",
+"SEIEVM",
+"SOL",
+"SONIC"
+],
+"USDT": [
+"APT",
+"ARBITRUM",
+"AVAXC-CHAIN",
+"BEP20",
+"ERC20",
+"MATIC",
+"MORPH",
+"OPTIMISM",
+"PLASMA",
+"SOL",
+"TON",
+"TRC20"
+],
+"VERT": [
+"TON"
+],
+"VOYA": [
+"MERLIN"
+],
+"VVS": [
+"CRC20"
+],
+"WAL": [
+"SUI"
+],
+"WAT": [
+"TON"
+],
+"WOOF": [
+"TON"
+],
+"X": [
+"TON"
+],
+"XETA": [
+"AVAXC-CHAIN",
+"XANA"
+],
+"XPL": [
+"PLASMA"
+],
+"XUI": [
+"SUI"
+],
+"YULI": [
+"KAIA"
+],
+"ZIL": [
+"BEP20"
+],
+"ZK": [
+"ZKSYNC"
+],
+"ZKPEPE": [
+"ZKSYNC"
+],
+"ZOO": [
+"TON"
+]
+},
+"binance": {
+"1000PEPPER": [
+"CHZ2"
+],
+"ACM": [
+"CHZ2"
+],
+"ACMOLD": [
+"CHZ2"
+],
+"ASR": [
+"BEP20",
+"CHZ2"
+],
+"ASROLD": [
+"CHZ2"
+],
+"ATM": [
+"BEP20",
+"CHZ2"
+],
+"ATMOLD": [
+"CHZ2"
+],
+"AVAX": [
+"AVAX",
+"AVAXC",
+"BEP20"
+],
+"AXL": [
+"ARBITRUM",
+"AVAXC",
+"AXL",
+"BASE",
+"BEP20",
+"ERC20",
+"MATIC",
+"OP"
+],
+"AXS": [
+"BEP20",
+"ERC20",
+"RON"
+],
+"BAR": [
+"CHZ2"
+],
+"BAROLD": [
+"CHZ2"
+],
+"BUSD": [
+"AVAXC",
+"BEP20",
+"ERC20",
+"MATIC",
+"OP",
+"TRC20"
+],
+"CATI": [
+"TON"
+],
+"CETUS": [
+"SUI"
+],
+"CHZ": [
+"CHZ2",
+"ERC20"
+],
+"CITY": [
+"BEP20",
+"CHZ2"
+],
+"CITYOLD": [
+"CHZ2"
+],
+"DOGS": [
+"TON"
+],
+"ETH": [
+"ARBITRUM",
+"BASE",
+"BEP20",
+"ERC20",
+"MANTA",
+"OP",
+"SCROLL",
+"STARKNET",
+"ZKSYNCERA"
+],
+"FDUSD": [
+"BEP20",
+"ERC20",
+"OPBNB",
+"SOL",
+"SUI"
+],
+"FLM": [
+"NEO3"
+],
+"GAS": [
+"NEO3"
+],
+"GMX": [
+"ARBITRUM",
+"AVAXC"
+],
+"GRAM": [
+"TON",
+"TONMEMO"
+],
+"GUN": [
+"AVAXC",
+"GUNZ",
+"SOL"
+],
+"HAEDAL": [
+"BEP20",
+"SUI"
+],
+"HMSTR": [
+"TON"
+],
+"JOE": [
+"ARBITRUM",
+"AVAXC"
+],
+"JUV": [
+"BEP20",
+"CHZ2"
+],
+"JUVOLD": [
+"CHZ2"
+],
+"KAIA": [
+"KAIA"
+],
+"KLAY": [
+"KLAY"
+],
+"MAV": [
+"ARBITRUM",
+"BASE",
+"BEP20",
+"ERC20",
+"ZKSYNCERA"
+],
+"MMT": [
+"BEP20",
+"SUI"
+],
+"NEO": [
+"NEO3"
+],
+"NOT": [
+"TON"
+],
+"NXPC": [
+"AVAXC",
+"BEP20"
+],
+"OG": [
+"BEP20",
+"CHZ2"
+],
+"OGOLD": [
+"CHZ2"
+],
+"ONE": [
+"ERC20",
+"ONE"
+],
+"PIXEL": [
+"ERC20",
+"RON"
+],
+"PSG": [
+"BEP20",
+"CHZ2"
+],
+"PSGOLD": [
+"CHZ2"
+],
+"QI": [
+"AVAXC"
+],
+"RIF": [
+"RSK"
+],
+"RONIN": [
+"RON"
+],
+"SLP": [
+"BEP20",
+"ERC20",
+"RON"
+],
+"STG": [
+"ARBITRUM",
+"AVAXC",
+"BEP20",
+"ERC20",
+"FTM",
+"MATIC"
+],
+"STGOLD": [
+"ARBITRUM",
+"AVAXC",
+"BEP20",
+"ERC20",
+"FTM",
+"MATIC"
+],
+"STRK": [
+"ERC20",
+"STARKNET"
+],
+"SUI": [
+"BEP20",
+"SUI"
+],
+"TON": [
+"TON"
+],
+"USDC": [
+"ALGO",
+"APT",
+"ARBITRUM",
+"ARC",
+"AVAXC",
+"BASE",
+"BEP20",
+"CELO",
+"ERC20",
+"HBAR",
+"MATIC",
+"NEAR",
+"OP",
+"RON",
+"SEIEVM",
+"SOL",
+"SONIC",
+"STARKNET",
+"STATEMINT",
+"SUI",
+"WLD",
+"XLM",
+"ZKSYNCERA"
+],
+"USDCE": [
+"AVAXC"
+],
+"USDT": [
+"APT",
+"ARBITRUM",
+"AVAXC",
+"BEP20",
+"CELO",
+"ERC20",
+"KAIA",
+"KAVAEVM",
+"MATIC",
+"NEAR",
+"OP",
+"OPBNB",
+"PLASMA",
+"SCROLL",
+"SOL",
+"STATEMINT",
+"TON",
+"TRC20",
+"XTZ"
+],
+"USDTE": [
+"AVAXC"
+],
+"WAL": [
+"SUI"
+],
+"WETH": [
+"ERC20",
+"RON"
+],
+"XMN": [
+"SUI"
+],
+"XPL": [
+"BEP20",
+"PLASMA"
+],
+"YGG": [
+"BEP20",
+"ERC20",
+"RON"
+],
+"ZIL": [
+"BEP20",
+"ZIL",
+"ZILEVM"
+],
+"ZK": [
+"ZKSYNCERA"
+],
+"ZKUSDCE": [
+"ZKSYNCERA"
+],
+"ZRO": [
+"ARBITRUM",
+"AVAXC",
+"BASE",
+"BEP20",
+"ERC20",
+"MATIC",
+"OP"
+]
+}
+}
+}

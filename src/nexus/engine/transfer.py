@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 from typing import Final
 
@@ -9,7 +10,12 @@ from nexus.domain.models import AssetTransferInfo, NetworkInfo
 from nexus.domain.spread import TransferQuote, TransferStatus
 
 NETWORK_ALIASES: Final[dict[str, str]] = {
-    # Only unambiguous synonyms of the same chain; ccxt unifies most codes already.
+    # Only synonyms of the SAME chain: each pair was observed on different exchanges with
+    # identical token contracts (2026-10-19 metadata) or is the same chain in ccxt's network
+    # maps, and never as two networks of one asset on one exchange (enforced by a table test
+    # over tests/fixtures/networks/codes.json). ccxt unifies most codes already.
+    # Chain migrations stay distinct (ZIL vs ZILEVM, SUI vs SUINEW, TON vs TON2): they are
+    # different networks for deposits even when the ticker is the same.
     "ETH": "ERC20",
     "ETHEREUM": "ERC20",
     "TRX": "TRC20",
@@ -22,7 +28,26 @@ NETWORK_ALIASES: Final[dict[str, str]] = {
     "ARBITRUMONE": "ARB",
     "OPTIMISM": "OP",
     "MATIC": "POLYGON",
+    "AVAXCCHAIN": "AVAXC",  # Bitget
+    "CAP20": "CHZ2",  # Chiliz Chain (Bitget)
+    "RONIN": "RON",
+    "KLAY": "KAIA",  # Klaytn rebranded to Kaia (same chain)
+    "NEON3": "NEO3",
+    "MERLBTC": "MERLIN",
+    "STRKETH": "STARKNET",
+    "XTZEVM": "ETHERLINK",
+    "ZKSYNC2": "ZKSYNC",  # zkSync Era
+    "ZKSYNCERA": "ZKSYNC",
+    "CRC20": "CRO",  # Cronos
+    "XPL": "PLASMA",
+    "RSK": "RBTC",  # Rootstock
+    "SOVRBTC": "RBTC",
+    "BTRBTC": "BITLAYER",
 }
+
+PARTIAL_CONTRACT_MAX_LEN: Final = 12
+"""Some venues publish only a contract suffix (OKX ``ctAddr``, e.g. ``72315c``)."""
+_PARTIAL_CONTRACT_RE: Final = re.compile(r"(0x)?[0-9a-f]{4,12}")
 
 
 def normalize_network(network: str) -> str:
@@ -31,10 +56,36 @@ def normalize_network(network: str) -> str:
     return NETWORK_ALIASES.get(code, code)
 
 
+def _contract_key(network: NetworkInfo) -> str | None:
+    return network.contract.strip().lower() if network.contract else None
+
+
 def _contracts_conflict(a: NetworkInfo, b: NetworkInfo) -> bool:
-    if not (a.contract and b.contract):
+    ca, cb = _contract_key(a), _contract_key(b)
+    if not (ca and cb) or ca == cb:
         return False
-    return a.contract.strip().lower() != b.contract.strip().lower()
+    short, full = sorted((ca, cb), key=len)
+    if len(short) <= PARTIAL_CONTRACT_MAX_LEN < len(full):
+        # A published hex suffix is compared as a suffix; placeholders ("0", "x") conflict.
+        suffix = short.removeprefix("0x")
+        return not (_PARTIAL_CONTRACT_RE.fullmatch(short) and full.endswith(suffix))
+    return True
+
+
+def _index_networks(info: AssetTransferInfo) -> tuple[dict[str, NetworkInfo], set[str]]:
+    """Networks by normalized code, plus codes that two raw networks collapse into.
+
+    An ambiguous code (e.g. an alias colliding with a distinct network of the same asset)
+    is never treated as a usable route.
+    """
+    indexed: dict[str, NetworkInfo] = {}
+    ambiguous: set[str] = set()
+    for network in info.networks:
+        code = normalize_network(network.network)
+        if code in indexed:
+            ambiguous.add(code)
+        indexed[code] = network
+    return indexed, ambiguous
 
 
 def select_transfer_route(
@@ -64,14 +115,14 @@ def select_transfer_route(
     if not source.networks or not destination.networks:
         return TransferQuote(TransferStatus.UNKNOWN, note="network list not published")
 
-    src = {normalize_network(n.network): n for n in source.networks}
-    dst = {normalize_network(n.network): n for n in destination.networks}
+    src, src_ambiguous = _index_networks(source)
+    dst, dst_ambiguous = _index_networks(destination)
 
-    if all(n.withdraw_enabled is False for n in src.values()):
+    if all(n.withdraw_enabled is False for n in source.networks):
         return TransferQuote(
             TransferStatus.UNAVAILABLE, note=f"withdrawals disabled on {source.exchange}"
         )
-    if all(n.deposit_enabled is False for n in dst.values()):
+    if all(n.deposit_enabled is False for n in destination.networks):
         return TransferQuote(
             TransferStatus.UNAVAILABLE, note=f"deposits disabled on {destination.exchange}"
         )
@@ -84,6 +135,9 @@ def select_transfer_route(
     undetermined = False
     for code in shared:
         out, into = src[code], dst[code]
+        if code in src_ambiguous or code in dst_ambiguous:
+            undetermined = True
+            continue
         if out.withdraw_enabled is False or into.deposit_enabled is False:
             continue
         if _contracts_conflict(out, into):

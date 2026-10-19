@@ -38,6 +38,7 @@ _ALLOWED_CALLS = frozenset(
         "load_transfer_info",  # our read-only metadata interface
         "select_transfer_route",  # pure route selection (engine)
         "transfer_info",  # universe lookup
+        "transfer_coverage_pct",  # universe metric (pure)
     }
 )
 _ALLOWED_GETATTR_TARGETS = frozenset({"ccxt_async", "ccxt_pro"})  # adapter class lookup

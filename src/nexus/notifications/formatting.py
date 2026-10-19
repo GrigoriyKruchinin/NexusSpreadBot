@@ -190,6 +190,11 @@ class SystemEventFormatter:
         exchanges = "\n".join(
             f"{'🔑' if e.authenticated else '🌐'} <b>{esc(exchange_name(e.name))}</b>"
             f" — {e.markets} markets"
+            + (
+                f" · transfers {e.transfer_coverage_pct}%"
+                if e.transfer_coverage_pct is not None
+                else ""
+            )
             for e in event.exchanges
         )
         return _truncate(

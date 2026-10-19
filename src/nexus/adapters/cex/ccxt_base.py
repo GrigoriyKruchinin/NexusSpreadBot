@@ -47,6 +47,7 @@ from nexus.domain.models import (
 from nexus.interfaces.market_data import (
     BaseExchangeAdapter,
     ITradingFeeSource,
+    ITransferStatusSource,
     IWebSocketOrderbook,
 )
 from nexus.log import scrub
@@ -152,10 +153,12 @@ class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook, ITradingFeeS
         clock: Clock | None = None,
         rest_client: Any = None,
         ws_client: Any = None,
+        transfer_fallback: ITransferStatusSource | None = None,
     ) -> None:
         """Create the adapter.
 
-        ``rest_client`` / ``ws_client`` allow injecting ccxt-compatible test doubles.
+        ``rest_client`` / ``ws_client`` / ``transfer_fallback`` allow injecting test doubles;
+        with a real REST client the fallback defaults to :meth:`_make_transfer_fallback`.
         """
         if (
             self.requires_passphrase
@@ -174,6 +177,9 @@ class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook, ITradingFeeS
             msg = f"{self.name}: unsupported ccxt precision mode (expected TICK_SIZE)"
             raise ConfigurationError(msg)
         self._ws: Any = ws_client
+        self._transfer_fallback = transfer_fallback
+        if transfer_fallback is None and rest_client is None:
+            self._transfer_fallback = self._make_transfer_fallback()
         self._closed = False
         self._log = log.bind(exchange=self.name)
 
@@ -193,10 +199,14 @@ class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook, ITradingFeeS
                 config["password"] = creds.api_passphrase.get_secret_value()
         return config
 
+    def _make_transfer_fallback(self) -> ITransferStatusSource | None:
+        """Public transfer-status source used when currency data needs a missing key."""
+        return None
+
     async def close(self) -> None:
         """Close REST and WebSocket clients."""
         self._closed = True
-        clients = [c for c in (self._rest, self._ws) if c is not None]
+        clients = [c for c in (self._rest, self._ws, self._transfer_fallback) if c is not None]
         results = await asyncio.gather(*(c.close() for c in clients), return_exceptions=True)
         for result in results:
             if isinstance(result, Exception):
@@ -335,7 +345,21 @@ class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook, ITradingFeeS
         return to_decimal(raw.get("taker"))
 
     async def load_transfer_info(self) -> Mapping[str, AssetTransferInfo] | None:
-        """Per-asset network deposit/withdrawal status and withdrawal fees (read-only)."""
+        """Per-asset network deposit/withdrawal status and withdrawal fees (read-only).
+
+        Falls back to the public transfer-status source (if any) when ccxt has no data.
+        """
+        info = await self._load_ccxt_transfer_info()
+        if info is not None or self._transfer_fallback is None:
+            return info
+        fallback = self._transfer_fallback
+        try:
+            return await self._call("public_transfer_info", fallback.load_transfer_info)
+        except ExchangeError as exc:
+            self._log.warning("public_transfer_info_unavailable", error=str(exc))
+            return None
+
+    async def _load_ccxt_transfer_info(self) -> Mapping[str, AssetTransferInfo] | None:
         if not self._rest.has.get("fetchCurrencies"):
             return None
         try:

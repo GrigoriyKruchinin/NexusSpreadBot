@@ -20,6 +20,8 @@ class ExchangeStatus:
     name: str
     authenticated: bool
     markets: int
+    transfer_coverage_pct: int | None = None
+    """Scanned assets with a known deposit/withdrawal status (%); ``None`` if not measured."""
 
 
 @dataclass(frozen=True, slots=True)

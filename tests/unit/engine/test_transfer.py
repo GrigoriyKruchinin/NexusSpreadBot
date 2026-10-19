@@ -1,8 +1,13 @@
+import json
+import re
 from decimal import Decimal as D
+from pathlib import Path
+
+import pytest
 
 from nexus.domain.models import AssetTransferInfo, NetworkInfo
 from nexus.domain.spread import TransferStatus
-from nexus.engine.transfer import select_transfer_route
+from nexus.engine.transfer import NETWORK_ALIASES, normalize_network, select_transfer_route
 
 
 def _info(exchange: str, *networks: NetworkInfo) -> AssetTransferInfo:
@@ -151,3 +156,106 @@ def test_contract_verified_only_when_both_match() -> None:
     assert verified("0xAbC", "0xabc")
     assert not verified(None, "0xabc")
     assert not verified(None, None)
+
+
+# ------------------------------------------------------------------ network matching
+
+_CODES = json.loads(
+    (Path(__file__).resolve().parents[2] / "fixtures" / "networks" / "codes.json").read_text()
+)["exchanges"]
+_LEGACY_ALIASES = {
+    "ETH", "ETHEREUM", "TRX", "TRON", "BSC", "BNBSMARTCHAIN", "SOLANA", "ARBITRUM", "ARBONE",
+    "ARBITRUMONE", "OPTIMISM", "MATIC",
+}  # fmt: skip
+
+
+def test_recorded_codes_never_collapse_within_one_asset() -> None:
+    # An alias must never merge two distinct networks that one exchange lists for one asset.
+    for exchange, assets in _CODES.items():
+        for asset, codes in assets.items():
+            normalized = [normalize_network(code) for code in codes]
+            assert len(set(normalized)) == len(normalized), (exchange, asset, codes)
+
+
+def test_every_new_alias_is_backed_by_recorded_codes() -> None:
+    raw = {
+        re.sub(r"[-_ ]", "", code.upper())
+        for assets in _CODES.values()
+        for codes in assets.values()
+        for code in codes
+    }
+    recorded = {normalize_network(c) for c in raw}
+    for alias, target in NETWORK_ALIASES.items():
+        if alias in _LEGACY_ALIASES:
+            continue
+        assert alias in raw, f"alias {alias} not observed on any exchange"
+        assert target in recorded, f"alias target {target} not observed on any exchange"
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("ZIL", "ZILEVM"),
+        ("ZIL", "zilliqa2"),
+        ("SUI", "SUINEW"),
+        ("TON", "TON2"),
+        ("ERC20", "BEP20"),
+    ],
+)
+def test_chain_migrations_stay_distinct(a: str, b: str) -> None:
+    assert normalize_network(a) != normalize_network(b)
+    quote = select_transfer_route(_info("x", _net(a)), _info("y", _net(b)))
+    assert quote.status is TransferStatus.UNKNOWN
+
+
+@pytest.mark.parametrize(
+    ("bitget", "other"),
+    [("AVAXCCHAIN", "AVAXC"), ("CAP20", "CHZ2"), ("RONIN", "RON"), ("KLAY", "KAIA")],
+)
+def test_proven_synonyms_match(bitget: str, other: str) -> None:
+    quote = select_transfer_route(_info("bitget", _net(bitget)), _info("gateio", _net(other)))
+    assert quote.status is TransferStatus.VERIFIED
+
+
+def test_zil_native_suspended_and_zilevm_open_routes_over_zilevm_only() -> None:
+    # The ZIL pattern: Binance native ZIL suspended, ZILEVM open; Gate lists only ZILEVM.
+    binance = AssetTransferInfo(
+        exchange="binance",
+        asset="ZIL",
+        networks=(_net("ZIL", w=False, d=False), _net("ZILEVM", fee="20")),
+    )
+    okx_native_only = AssetTransferInfo(exchange="okx", asset="ZIL", networks=(_net("ZIL"),))
+    gate = AssetTransferInfo(exchange="gateio", asset="ZIL", networks=(_net("ZILEVM"),))
+    assert select_transfer_route(binance, okx_native_only).status is TransferStatus.UNAVAILABLE
+    quote = select_transfer_route(binance, gate)
+    assert (quote.status, quote.network) == (TransferStatus.VERIFIED, "ZILEVM")
+
+
+def test_colliding_codes_are_ambiguous_not_overwritten() -> None:
+    # Two raw networks normalizing to one code: neither is trusted (no silent overwrite).
+    source = _info("a", _net("ETH", w=False), _net("ERC20", fee="1"))
+    quote = select_transfer_route(source, _info("b", _net("ERC20")))
+    assert quote.status is TransferStatus.UNKNOWN
+
+
+def _with_contract(name: str, contract: str) -> NetworkInfo:
+    return NetworkInfo(name, True, True, D(1), contract=contract)
+
+
+def test_partial_contract_suffix_is_compared_as_suffix() -> None:
+    full = "0x64bc2ca1be492be7185faa2c8835d9b824c8a194"
+    match = select_transfer_route(
+        _info("okx", _with_contract("ERC20", "a194")), _info("b", _with_contract("ERC20", full))
+    )
+    assert match.status is TransferStatus.VERIFIED
+    assert not match.contract_verified  # a suffix never lifts the unverified caps
+    conflict = select_transfer_route(
+        _info("okx", _with_contract("ERC20", "72315c")), _info("b", _with_contract("ERC20", full))
+    )
+    assert conflict.status is TransferStatus.UNAVAILABLE
+    for placeholder in ("0", "x", "94", "zz194"):
+        quote = select_transfer_route(
+            _info("okx", _with_contract("ERC20", placeholder)),
+            _info("b", _with_contract("ERC20", full)),
+        )
+        assert quote.status is TransferStatus.UNAVAILABLE, placeholder

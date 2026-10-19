@@ -1,0 +1,157 @@
+{
+ "code": "000000",
+ "message": null,
+ "success": true,
+ "data": [
+  {
+   "coin": "ONE",
+   "name": "Harmony",
+   "depositAllEnable": true,
+   "withdrawAllEnable": true,
+   "isLegalMoney": false,
+   "trading": true,
+   "networkList": [
+    {
+     "network": "ONE",
+     "coin": "ONE",
+     "name": "Harmony",
+     "depositEnable": false,
+     "withdrawEnable": false,
+     "withdrawFee": "0.1",
+     "withdrawMin": "60",
+     "contractAddress": null,
+     "busy": false
+    },
+    {
+     "network": "ETH",
+     "coin": "ONE",
+     "name": "Ethereum (ERC20)",
+     "depositEnable": true,
+     "withdrawEnable": true,
+     "withdrawFee": "679",
+     "withdrawMin": "1358",
+     "contractAddress": "0xff74317e948695297acb79cb2de06111f5cc16b3",
+     "busy": false
+    }
+   ]
+  },
+  {
+   "coin": "ZIL",
+   "name": "Zilliqa",
+   "depositAllEnable": true,
+   "withdrawAllEnable": true,
+   "isLegalMoney": false,
+   "trading": true,
+   "networkList": [
+    {
+     "network": "BSC",
+     "coin": "ZIL",
+     "name": "BNB Smart Chain (BEP20)",
+     "depositEnable": true,
+     "withdrawEnable": false,
+     "withdrawFee": "9.52",
+     "withdrawMin": "19",
+     "contractAddress": "0xb86abcb37c3a4b64f74f59301aff131a1becc787",
+     "busy": false
+    },
+    {
+     "network": "ZIL",
+     "coin": "ZIL",
+     "name": "Zilliqa",
+     "depositEnable": false,
+     "withdrawEnable": false,
+     "withdrawFee": "1",
+     "withdrawMin": "2",
+     "contractAddress": null,
+     "busy": false
+    },
+    {
+     "network": "ZILEVM",
+     "coin": "ZIL",
+     "name": "Ziliqa EVM",
+     "depositEnable": true,
+     "withdrawEnable": true,
+     "withdrawFee": "20",
+     "withdrawMin": "50",
+     "contractAddress": null,
+     "busy": false
+    }
+   ]
+  },
+  {
+   "coin": "USDT",
+   "name": "TetherUS",
+   "depositAllEnable": true,
+   "withdrawAllEnable": true,
+   "isLegalMoney": false,
+   "trading": true,
+   "networkList": [
+    {
+     "network": "BSC",
+     "coin": "USDT",
+     "name": "BNB Smart Chain (BEP20)",
+     "depositEnable": true,
+     "withdrawEnable": true,
+     "withdrawFee": "0.01",
+     "withdrawMin": "5",
+     "contractAddress": "0x55d398326f99059ff775485246999027b3197955",
+     "busy": false
+    },
+    {
+     "network": "ETH",
+     "coin": "USDT",
+     "name": "Ethereum (ERC20)",
+     "depositEnable": true,
+     "withdrawEnable": true,
+     "withdrawFee": "0.4",
+     "withdrawMin": "3",
+     "contractAddress": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+     "busy": false
+    },
+    {
+     "network": "SOL",
+     "coin": "USDT",
+     "name": "Solana",
+     "depositEnable": true,
+     "withdrawEnable": true,
+     "withdrawFee": "0.3",
+     "withdrawMin": "5",
+     "contractAddress": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+     "busy": false
+    },
+    {
+     "network": "TRX",
+     "coin": "USDT",
+     "name": "Tron (TRC20)",
+     "depositEnable": true,
+     "withdrawEnable": true,
+     "withdrawFee": "1.5",
+     "withdrawMin": "5",
+     "contractAddress": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+     "busy": false
+    }
+   ]
+  },
+  {
+   "coin": "UGX",
+   "name": "Uganda Shilling",
+   "depositAllEnable": true,
+   "withdrawAllEnable": true,
+   "isLegalMoney": true,
+   "trading": false,
+   "networkList": [
+    {
+     "network": "FIAT_MONEY",
+     "coin": "UGX",
+     "name": "FIAT",
+     "depositEnable": true,
+     "withdrawEnable": true,
+     "withdrawFee": "0",
+     "withdrawMin": "0",
+     "contractAddress": null,
+     "busy": false
+    }
+   ]
+  }
+ ]
+}

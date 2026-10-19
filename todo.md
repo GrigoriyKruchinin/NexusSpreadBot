@@ -162,20 +162,25 @@ real rebalancing stays manual.
   - Bitget `extraWithdrawFee` (percentage on top of the flat fee) → network fee unknown.
 - [x] README exchange list and architecture diagram updated.
 
-### 1.5.2 Transfer-status coverage & network matching (R)
+### 1.5.2 Transfer-status coverage & network matching (R) — audited: SAFE TO PROCEED
 - [ ] With keys, statuses come from ccxt `fetch_currencies` on all 7 exchanges. Verify each adapter yields:
   - per-network deposit/withdraw flags;
   - withdrawal fee;
   - contract address where published.
-- [ ] Public fallback when a key is missing:
+  - Done without keys: parsers checked against ccxt 4.5.88 (Bybit/OKX publish no contract in
+    currency data; OKX `fee` falls back to `maxFee`); Gate/KuCoin/Bitget/Binance-public verified live.
+  - **Pending (user keys):** live check for OKX, Bybit, MEXC via the coverage log.
+- [x] Public fallback when a key is missing:
   - narrow `ITransferStatusSource`;
   - Binance public capital config (`GET /bapi/capital/v1/public/capital/getNetworkCoinAll`), GET-only, timeout, refreshed with metadata;
   - Gate.io / KuCoin / Bitget are already public through ccxt.
-- [ ] `NETWORK_ALIASES` (`engine/transfer.py`):
+- [x] `NETWORK_ALIASES` (`engine/transfer.py`):
   - only proven synonyms;
   - chain migrations (e.g. ZIL vs ZILEVM, Zilliqa 2) stay distinct unless the contract/chain matches;
-  - a table test built from recorded network codes of all 7 exchanges.
-- [ ] Per-exchange transfer-status coverage (% of scanned assets with known status):
+  - a table test built from recorded network codes of all 7 exchanges (Gate/KuCoin/Bitget/Binance recorded; OKX/Bybit/MEXC to add with keys);
+  - two networks of one asset collapsing into one code → ambiguous (UNKNOWN), never overwritten;
+  - OKX-style contract suffixes compared as suffixes (never `contract_verified`).
+- [x] Per-exchange transfer-status coverage (% of scanned assets with known status):
   - logged after each metadata refresh;
   - included in the start event.
 

@@ -215,6 +215,7 @@ class Scanner:
                     name=name,
                     authenticated=self._authenticated.get(name, False),
                     markets=len(self._universe.symbols_for(name)),
+                    transfer_coverage_pct=self._universe.transfer_coverage_pct(name),
                 )
                 for name in sorted(self._adapters)
             ),
@@ -259,6 +260,9 @@ class Scanner:
             "metadata_refreshed",
             exchanges={n: len(self._universe.symbols_for(n)) for n in self._adapters},
             common_symbols=len(self._universe.common_symbols),
+            transfer_coverage_pct={
+                n: self._universe.transfer_coverage_pct(n) for n in self._adapters
+            },
         )
         return self._universe
 
