@@ -114,7 +114,174 @@ Legend: `[ ]` todo · `[x]` done · `(R)` requires `/audit-risks` before ticking
 ### 1.10 Stage 1 Exit
 - [x] `make check` green, coverage `engine/` ≥ 90 % (engine 95–100 %, total 92 %)
 - [x] `/audit-risks` verdict SAFE TO PROCEED (config, engine, adapters, scanner/workers — all findings fixed or tracked here)
-- [ ] 24h local soak run with real Telegram + read-only keys; review false-positive rate from DB (user)
+- [ ] 24h local soak run with real Telegram + read-only keys; review false-positive rate from DB (user) — superseded by the multi-day soak in 1.5.10
+
+---
+
+## Stage 1.5 — Signal Quality & Profit Validation (Read-Only, local)
+
+**Why.** A 1.5 h keyless run (2026-10-18) produced 25 alerts. 21 of them were "dead" spreads:
+- ZIL Binance→OKX and ONE OKX→Binance/KuCoin: the native networks are suspended on Binance,
+  so the ~1 % spread persists for tens of minutes and cannot be closed;
+- the scanner saw `transfer_status=unknown` and re-alerted every 10 min.
+
+Only ERA showed short, plausible episodes. Stage 1.5 makes signals trustworthy and measures
+the real profit potential (paper inventory) before any trading code (Stage 2).
+
+**Decisions (confirmed by user):**
+- add MEXC and Bitget; HTX excluded (sanctions);
+- dead routes are excluded automatically, on the fly;
+- one alert per episode, plus a re-alert on growth;
+- full paper-inventory and rebalancing simulation;
+- daily Telegram digest;
+- `SPREAD_REQUIRE_VERIFIED_TRANSFER` default flips to `true`.
+
+Hard rule unchanged: the bot never withdraws or transfers. Rebalancing is **simulated only**;
+real rebalancing stays manual.
+
+### 1.5.0 User guide → `docs/guides/stage-1-local-setup.md` (Russian, file only)
+- [x] §3.6 MEXC, §3.7 Bitget read-only keys (Bitget passphrase), `.env` example, checklist; HTX not supported
+- [ ] User: read-only keys for all 7 exchanges in `.env`
+
+### 1.5.1 New exchanges: MEXC, Bitget (R)
+- [ ] `MexcAdapter` (ccxt `mexc`) and `BitgetAdapter` (ccxt `bitget`, passphrase required) as registered `CcxtExchangeAdapter` subclasses:
+  - follow `adapters/cex/okx.py` / `kucoin.py`;
+  - set REST/WS depth limits and the static-fee flag;
+  - WS public POST allowlist only if the exchange needs a public token endpoint.
+- [ ] Credentials:
+  - `MEXC_API_KEY/SECRET`, `BITGET_API_KEY/SECRET/PASSPHRASE` in `ExchangeCredentials`, `.env.example` and compose (scanner only, enforced by `test_compose.py`);
+  - `EXCHANGES_ENABLED` default gains `mexc`, `bitget`.
+- [ ] Recorded fixture payloads:
+  - markets, tickers, order book, currencies with networks/statuses/fees, trading fee;
+  - adapter tests.
+- [ ] Safety:
+  - read-only guard on REST + WS clients;
+  - the AST no-fund-movement test covers the new modules;
+  - live public smoke (tickers, books, WS).
+- [ ] README exchange list and architecture diagram updated.
+
+### 1.5.2 Transfer-status coverage & network matching (R)
+- [ ] With keys, statuses come from ccxt `fetch_currencies` on all 7 exchanges. Verify each adapter yields:
+  - per-network deposit/withdraw flags;
+  - withdrawal fee;
+  - contract address where published.
+- [ ] Public fallback when a key is missing:
+  - narrow `ITransferStatusSource`;
+  - Binance public capital config (`GET /bapi/capital/v1/public/capital/getNetworkCoinAll`), GET-only, timeout, refreshed with metadata;
+  - Gate.io / KuCoin / Bitget are already public through ccxt.
+- [ ] `NETWORK_ALIASES` (`engine/transfer.py`):
+  - only proven synonyms;
+  - chain migrations (e.g. ZIL vs ZILEVM, Zilliqa 2) stay distinct unless the contract/chain matches;
+  - a table test built from recorded network codes of all 7 exchanges.
+- [ ] Per-exchange transfer-status coverage (% of scanned assets with known status):
+  - logged after each metadata refresh;
+  - included in the start event.
+
+### 1.5.3 Alert policy: verified routes only (R)
+- [ ] `SPREAD_REQUIRE_VERIFIED_TRANSFER` default `true`:
+  - Telegram alerts only for `VERIFIED` transfer paths;
+  - `UNKNOWN` evaluations are still stored and reported as "unverified" in the digest;
+  - `UNAVAILABLE` excluded as before.
+  - Update `.env.example`, compose and the guide table.
+- [ ] Keep the 5 % unverified gross cap and the 20 % hard cap.
+
+### 1.5.4 Opportunity episodes (R)
+- [ ] Table `opportunity_episodes` (Alembic migration):
+  - route `symbol, buy_exchange, sell_exchange`;
+  - `opened_at`, `last_seen_at`, `closed_at`;
+  - `first/peak/last_net_usd`, `peak_net_pct`, `evaluations`;
+  - `transfer_status`, `transfer_network`;
+  - `alerted_at`, `realerts`, `close_reason` (`gap` / `quarantined` / `restart`);
+  - partial unique index: one open episode per route.
+- [ ] `EpisodeTracker` (scanner):
+  - a profitable evaluation opens or extends the route's episode;
+  - the episode closes after `EPISODE_CLOSE_GAP_S` (default 60) without a profitable evaluation;
+  - the evaluation row gets an `episode_id` FK.
+- [ ] Restart safety: on start, open episodes older than the gap are closed with `restart`. Close is idempotent.
+- [ ] "Survived latency" metric: was the route still profitable on a REST re-check ≥ `PAPER_LATENCY_MS` after detection?
+- [ ] Unit tests (open / extend / close / gap boundary / restart) and repository integration tests.
+
+### 1.5.5 One alert per episode
+- [ ] The episode id becomes the alert dedup key and replaces the per-route Redis cooldown as the primary guard. `SPREAD_ALERT_COOLDOWN_S` remains as a floor.
+- [ ] Re-alert only when the episode's peak net USD grows by ≥ `ALERT_REALERT_GROWTH_PCT` (default 50) over the last alerted value.
+- [ ] "Episode closed" message for alerted episodes: duration, peak $ / %, evaluations, survived-latency flag. Expires like system events.
+- [ ] Templates in `notifications/`, HTML-escaped, snapshot tests; alert-log claim semantics preserved.
+
+### 1.5.6 Automatic quarantine of dead routes (R)
+- [ ] An episode open longer than `QUARANTINE_PERSIST_MIN` (default 15) **without** a `VERIFIED` transfer path quarantines the route for `QUARANTINE_TTL_H` (default 24). This is the ZIL/ONE pattern.
+- [ ] A route whose transfer status becomes `UNAVAILABLE` is quarantined immediately. The quarantine lifts early when the status turns `VERIFIED` on a metadata refresh.
+- [ ] Storage and status:
+  - Redis key with TTL (source of truth for the scanner), mirrored to a DB table `route_quarantine` for the digest;
+  - evaluations of quarantined routes are stored with status `quarantined` and never alerted.
+- [ ] One expiring system event per quarantine start (route, reason, duration). No repeats.
+- [ ] Manual overrides `SCANNER_SYMBOLS_WHITELIST` / `SCANNER_SYMBOLS_BLACKLIST`: verify behaviour, document in the guide.
+- [ ] Unit tests: persistent-unverified → quarantined; verified persistent → not quarantined; expiry; early lift.
+
+### 1.5.7 Paper inventory & rebalancing simulation (R)
+- [ ] `PaperSettings` (`PAPER_` prefix):
+  - `ENABLED=true`;
+  - `USDT_PER_EXCHANGE=1000`;
+  - `COIN_PER_ROUTE_USD=1000` (virtual coin inventory seeded at first-seen mid price, counted as capital);
+  - `TRADE_NOTIONAL_USD=1000`;
+  - `LATENCY_MS=2000`;
+  - `REBALANCE_THRESHOLD_PCT=20` (of the starting balance);
+  - `REBALANCE_DELAY_MIN=30`.
+- [ ] `PaperPortfolio` (pure Decimal, new `simulation/` package, no I/O). On an episode open or re-alert it simulates the trade:
+  - uses the REST re-check book taken after `LATENCY_MS`;
+  - buys on A and sells on B with the same depth walker, fees and lot rounding as the estimator;
+  - updates USDT and coin balances on both venues;
+  - if a balance is short, skips the trade with reason `insufficient_usdt` / `insufficient_coin` / `rebalance_in_flight`.
+- [ ] Rebalancing:
+  - when a balance drops below the threshold, schedule a **virtual** transfer:
+    - coin A→B, or USDT B→A;
+    - via the cheapest `VERIFIED` network;
+    - cost = the real withdrawal fee from metadata;
+  - the funds are locked for `REBALANCE_DELAY_MIN`;
+  - no network path → the route is blocked and reported.
+  - **No real transfer: the simulation has no exchange access.**
+- [ ] P&L split:
+  - realized arbitrage profit;
+  - rebalance costs;
+  - inventory mark-to-market (price risk of held coins);
+  - capital deployed;
+  - return on capital.
+- [ ] Persistence: `paper_trades`, `paper_rebalances`, `paper_balance_snapshots` (Alembic) + repositories.
+- [ ] Unit tests with hand-computed scenarios:
+  - trade;
+  - insufficient balance;
+  - threshold-triggered rebalance with fee;
+  - lock period;
+  - MTM after a price move;
+  - no verified network.
+
+### 1.5.8 Daily Telegram digest
+- [ ] Celery beat task at `DIGEST_TIME` (default `09:00`) in `DIGEST_TZ` (default `Europe/Moscow`), configurable; `DIGEST_ENABLED=true`.
+- [ ] Content for the last 24 h:
+  - episodes: total / verified / unverified / quarantined;
+  - episodes that survived latency;
+  - median / max duration;
+  - top-5 routes by peak net $;
+  - paper P&L: trades, skipped by reason, realized $, rebalance $, MTM $, capital, ROC %;
+  - quarantined routes;
+  - exchange uptime;
+  - transfer-status coverage per exchange.
+- [ ] HTML template (escaped, `<b>`, `<blockquote>`, separators), snapshot test; repository aggregate queries with integration tests.
+- [ ] Retention covers the new tables (`MaintenanceSettings`).
+
+### 1.5.9 Coverage observability
+- [ ] Per-sweep log/metrics:
+  - routes per exchange pair;
+  - candidates;
+  - evaluated symbols;
+  - quarantined count.
+- [ ] Keep `SCANNER_MIN_QUOTE_VOLUME_USD=50000`; revisit the value with soak data.
+
+### 1.5.10 Stage 1.5 Exit
+- [ ] `make check` green; `/audit-risks` SAFE TO PROCEED for 1.5.1–1.5.7
+- [ ] Multi-day soak (≥ 3 days) with read-only keys on all 7 exchanges; laptop must not sleep (or run on a VPS) (user)
+- [ ] Go / no-go for Stage 2 from the digests:
+  - target ≥ 5–10 **verified** episodes per day with net ≥ $5 that survive ≥ 2 s latency;
+  - paper P&L positive after rebalance costs and MTM.
 
 ---
 

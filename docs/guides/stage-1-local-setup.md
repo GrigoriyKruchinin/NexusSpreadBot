@@ -135,6 +135,15 @@ read-only ключи по разделу 3, впишите их в `.env` и с�
 Без ключей сканер работает, но в алертах будет пометка
 **«⚠️ Transfer path unverified»** для бирж без данных.
 
+> **Пример из первого запуска.** За 1,5 часа без ключей пришёл 21 алерт по ZIL и ONE:
+> спред ~1 % держался десятки минут. Причина — на Binance нативные сети ZIL и ONE
+> приостановлены, монету нельзя перевести, поэтому спред и не закрывается. С ключами
+> сканер видит статус сетей и такие связки не алертит, а в Stage 1.5 ещё и автоматически
+> отправляет их в карантин.
+
+Ключи нужны для **всех 7 бирж**: Bybit, Binance, OKX, Gate.io, KuCoin, MEXC, Bitget
+(MEXC и Bitget подключаются в Stage 1.5). HTX не поддерживается — биржа под санкциями.
+
 ### Общие правила безопасности (для всех бирж)
 
 - ✅ Включайте **только чтение** (Read / Read-Only / General).
@@ -214,6 +223,38 @@ read-only ключи по разделу 3, впишите их в `.env` и с�
    - API Secret → `KUCOIN_API_SECRET`
    - Passphrase → `KUCOIN_API_PASSPHRASE`
 
+### 3.6 MEXC (Stage 1.5)
+
+1. mexc.com → профиль → **API Management** → **Create API Key**.
+2. Название (Notes): `nexus-scanner-readonly`.
+3. Permissions: отметьте **только просмотр** — в разделах Account и Spot пункты вида
+   **View account details / View order details** (Read). Пункты с правом записи
+   (**Trade**, **Withdraw**, **Transfer**, Futures) — **не отмечать**.
+4. IP binding: можно не указывать. У MEXC ключи без IP-привязки действуют ограниченный срок
+   (обычно 90 дней) — после истечения создайте новый.
+5. Подтвердите 2FA, сохраните:
+   - Access Key → `MEXC_API_KEY`
+   - Secret Key → `MEXC_API_SECRET`
+
+### 3.7 Bitget (Stage 1.5)
+
+1. bitget.com → профиль → **API Management** → **Create API** →
+   **System-generated API key**.
+2. Название: `nexus-scanner-readonly`.
+3. Придумайте **Passphrase** (8–32 символа, буквы и цифры) — запишите его, восстановить нельзя.
+4. Permissions: **Read-only** (только чтение). **Trade**, **Withdraw**, **Transfer** — **не
+   отмечать**.
+5. IP binding: можно не указывать (ключ без привязки может быть ограничен по сроку — при
+   ошибке `Invalid API key` создайте новый).
+6. Подтвердите 2FA, сохраните:
+   - API Key → `BITGET_API_KEY`
+   - Secret Key → `BITGET_API_SECRET`
+   - Passphrase → `BITGET_API_PASSPHRASE`
+
+> Переменные MEXC и Bitget сканер начнёт читать после реализации пункта 1.5.1 в
+> [todo.md](../../todo.md). Добавить их в `.env` можно уже сейчас — до этого они просто
+> игнорируются.
+
 > Если какую-то биржу вы не используете — оставьте её переменные пустыми, сканер будет
 > работать с ней через публичные данные. Чтобы полностью отключить биржу — уберите её из
 > `EXCHANGES_ENABLED`.
@@ -255,6 +296,13 @@ read-only ключи по разделу 3, впишите их в `.env` и с�
    KUCOIN_API_KEY=...
    KUCOIN_API_SECRET=...
    KUCOIN_API_PASSPHRASE=...
+
+   # Stage 1.5 (после реализации 1.5.1 добавьте "mexc","bitget" в EXCHANGES_ENABLED)
+   MEXC_API_KEY=...
+   MEXC_API_SECRET=...
+   BITGET_API_KEY=...
+   BITGET_API_SECRET=...
+   BITGET_API_PASSPHRASE=...
    ```
 
    Случайный пароль можно сгенерировать так: `openssl rand -base64 32`.
@@ -329,5 +377,6 @@ make logs s=scanner    # логи сканера
 - [ ] Бот создан, токен в `.env`, боту нажат **Start**
 - [ ] `TELEGRAM_CHAT_ID` в `.env`
 - [ ] Ключи бирж созданы **только с правом чтения**, вывод выключен
+      (Bybit, Binance, OKX, Gate.io, KuCoin, MEXC, Bitget)
 - [ ] `.env` заполнен, права `600`, в git не попал (`git status` его не показывает)
 - [ ] `make up-local` → все сервисы healthy → пришло сообщение о старте
