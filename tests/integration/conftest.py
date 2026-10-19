@@ -44,7 +44,8 @@ async def sessions(
     async with engine.begin() as conn:
         await conn.execute(
             text(
-                "TRUNCATE alert_log, spread_evaluations, spread_snapshots, market_pairs, "
+                "TRUNCATE alert_log, spread_evaluations, opportunity_episodes, spread_snapshots, "
+                "market_pairs, "
                 "exchange_health RESTART IDENTITY CASCADE"
             )
         )

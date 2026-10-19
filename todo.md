@@ -193,21 +193,21 @@ real rebalancing stays manual.
   - Update `.env.example`, compose and the guide table (+ note on stale local `.env`; effective value logged at start).
 - [x] Keep the 5 % unverified gross cap and the 20 % hard cap.
 
-### 1.5.4 Opportunity episodes (R)
-- [ ] Table `opportunity_episodes` (Alembic migration):
+### 1.5.4 Opportunity episodes (R) — audited: SAFE TO PROCEED
+- [x] Table `opportunity_episodes` (Alembic migration):
   - route `symbol, buy_exchange, sell_exchange`;
   - `opened_at`, `last_seen_at`, `closed_at`;
   - `first/peak/last_net_usd`, `peak_net_pct`, `evaluations`;
   - `transfer_status`, `transfer_network`;
-  - `alerted_at`, `realerts`, `close_reason` (`gap` / `quarantined` / `restart`);
+  - `alerted_at`, `alerted_net_usd` (re-alert baseline for 1.5.5), `realerts`, `close_reason` (`gap` / `quarantined` / `restart`), `survived_latency`;
   - partial unique index: one open episode per route.
-- [ ] `EpisodeTracker` (scanner):
+- [x] `EpisodeTracker` (scanner):
   - a profitable evaluation opens or extends the route's episode;
   - the episode closes after `EPISODE_CLOSE_GAP_S` (default 60) without a profitable evaluation;
   - the evaluation row gets an `episode_id` FK.
-- [ ] Restart safety: on start, open episodes older than the gap are closed with `restart`. Close is idempotent.
-- [ ] "Survived latency" metric: was the route still profitable on a REST re-check ≥ `PAPER_LATENCY_MS` after detection?
-- [ ] Unit tests (open / extend / close / gap boundary / restart) and repository integration tests.
+- [x] Restart safety: on start, open episodes older than the gap are closed with `restart`. Close is idempotent.
+- [x] "Survived latency" metric: was the route still profitable on a REST re-check ≥ `PAPER_LATENCY_MS` after detection?
+- [x] Unit tests (open / extend / close / gap boundary / restart) and repository integration tests.
 
 ### 1.5.5 One alert per episode
 - [ ] The episode id becomes the alert dedup key and replaces the per-route Redis cooldown as the primary guard. `SPREAD_ALERT_COOLDOWN_S` remains as a floor.

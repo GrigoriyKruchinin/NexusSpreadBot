@@ -262,6 +262,25 @@ class SpreadSettings(NexusBaseSettings):
         return self
 
 
+class EpisodeSettings(NexusBaseSettings):
+    """Opportunity episode tracking (``EPISODE_*``)."""
+
+    model_config = SettingsConfigDict(env_prefix="EPISODE_")
+
+    close_gap_s: int = Field(default=60, ge=10, le=3_600)
+    """An episode closes after this long without a qualifying evaluation of its route."""
+
+
+class PaperSettings(NexusBaseSettings):
+    """Paper trading simulation (``PAPER_*``)."""
+
+    model_config = SettingsConfigDict(env_prefix="PAPER_")
+
+    latency_ms: int = Field(default=2_000, ge=0, le=60_000)
+    """Simulated detection-to-execution latency: a new episode is re-checked on REST books
+    taken this long after detection ("survived latency")."""
+
+
 class MaintenanceSettings(NexusBaseSettings):
     """Housekeeping schedule & retention (``MAINTENANCE_*``)."""
 

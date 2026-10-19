@@ -21,6 +21,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -130,6 +131,48 @@ class SpreadEvaluationRow(Base):
     fee_sell_usd: Mapped[Decimal | None] = mapped_column(Money)
     transfer_fee_usd: Mapped[Decimal | None] = mapped_column(Money)
     slippage_usd: Mapped[Decimal | None] = mapped_column(Money)
+    episode_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("opportunity_episodes.id", ondelete="SET NULL"),
+        index=True,
+    )
+
+
+class OpportunityEpisodeRow(Base):
+    """A continuous run of one route meeting the thresholds (see ``domain.episodes``)."""
+
+    __tablename__ = "opportunity_episodes"
+    __table_args__ = (
+        Index(
+            "uq_opportunity_episodes_open_route",
+            "symbol",
+            "buy_exchange",
+            "sell_exchange",
+            unique=True,
+            postgresql_where=text("closed_at IS NULL"),
+        ),
+        Index("ix_opportunity_episodes_opened_at", "opened_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(64))
+    buy_exchange: Mapped[str] = mapped_column(String(32))
+    sell_exchange: Mapped[str] = mapped_column(String(32))
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    close_reason: Mapped[str | None] = mapped_column(String(16))
+    first_net_usd: Mapped[Decimal] = mapped_column(Money)
+    peak_net_usd: Mapped[Decimal] = mapped_column(Money)
+    last_net_usd: Mapped[Decimal] = mapped_column(Money)
+    peak_net_pct: Mapped[Decimal] = mapped_column(Money)
+    evaluations: Mapped[int] = mapped_column(Integer)
+    transfer_status: Mapped[str] = mapped_column(String(16))
+    transfer_network: Mapped[str | None] = mapped_column(String(64))
+    alerted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    alerted_net_usd: Mapped[Decimal | None] = mapped_column(Money)
+    realerts: Mapped[int] = mapped_column(Integer, server_default="0")
+    survived_latency: Mapped[bool | None] = mapped_column(Boolean)
 
 
 class AlertLogRow(Base):

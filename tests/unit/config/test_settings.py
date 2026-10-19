@@ -259,3 +259,14 @@ def test_empty_required_value_is_still_missing(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "1")
     with pytest.raises(ValidationError):
         TelegramSettings()
+
+
+def test_episode_gap_must_span_two_sweeps(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POSTGRES_PASSWORD", "a-strong-password")
+    assert ScannerRoleSettings.load().episodes.close_gap_s == 60
+    assert ScannerRoleSettings.load().paper.latency_ms == 2_000
+    monkeypatch.setenv("SCANNER_TICKER_INTERVAL_S", "31")
+    with pytest.raises(ValueError, match="EPISODE_CLOSE_GAP_S"):
+        ScannerRoleSettings.load()
+    monkeypatch.setenv("EPISODE_CLOSE_GAP_S", "62")
+    assert ScannerRoleSettings.load().episodes.close_gap_s == 62

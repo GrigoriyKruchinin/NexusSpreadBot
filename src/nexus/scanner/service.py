@@ -18,6 +18,7 @@ from typing import Any
 import structlog
 
 from nexus.domain.clock import Clock
+from nexus.domain.episodes import OpportunityEpisode
 from nexus.domain.errors import (
     DataValidationError,
     ExchangeError,
@@ -44,6 +45,7 @@ from nexus.interfaces.repositories import (
     IMarketRepository,
     ISnapshotRepository,
 )
+from nexus.scanner.episodes import EpisodeTracker
 from nexus.scanner.health import ExchangeHealthTracker
 from nexus.scanner.streams import OrderBookStreams
 from nexus.scanner.universe import MarketUniverse, UniverseFilter
@@ -79,6 +81,8 @@ class ScannerConfig:
     book_deadline_s: float
     """Overall budget for fetching + evaluating candidate books in one sweep; routes whose
     books are not ready in time are skipped (they would be stale anyway)."""
+    latency_check_ms: int = 2_000
+    """A newly opened episode is re-checked on REST books this long after detection."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +127,7 @@ class Scanner:
         config: ScannerConfig,
         clock: Clock,
         streams: OrderBookStreams | None = None,
+        episodes: EpisodeTracker | None = None,
     ) -> None:
         self._adapters = dict(adapters)
         self._authenticated = dict(authenticated)
@@ -138,6 +143,8 @@ class Scanner:
         self._clock = clock
         self._universe = MarketUniverse(markets={})
         self._streams = streams
+        self._episodes = episodes
+        self._latency_checks: set[asyncio.Task[None]] = set()
         self._streamed_books = 0
         self._account_fees: dict[BookKey, tuple[Decimal, int]] = {}
         """Per-symbol account taker fees ``(fee, fetched_at_ms)``; survive metadata refreshes
@@ -163,6 +170,8 @@ class Scanner:
         try:
             if not await self._until_stopped(self.refresh_metadata(), stop):
                 return
+            if self._episodes is not None:
+                await self._episodes.start()
             await self._announce_start()
             last_refresh = time.monotonic()
             while not stop.is_set():
@@ -178,6 +187,9 @@ class Scanner:
                         stop.wait(), timeout=max(0.0, self._config.ticker_interval_s - elapsed)
                     )
         finally:
+            for check in tuple(self._latency_checks):
+                check.cancel()
+            await asyncio.gather(*self._latency_checks, return_exceptions=True)
             if self._streams is not None:
                 with contextlib.suppress(Exception):
                     await asyncio.wait_for(self._streams.close(), EVENT_EMIT_TIMEOUT_S)
@@ -280,7 +292,13 @@ class Scanner:
         self._streamed_books = 0
         evaluations, timed_out = await self._evaluate_candidates(candidates)
         await self._update_streams(evaluations)
-        ids = await self._repos.evaluations.add_evaluations(evaluations)
+        try:
+            episode_ids = await self._track_episodes(evaluations)
+        except Exception:
+            # Episodes are analytics: never let them block storing evaluations or alerting.
+            log.exception("episode_tracking_failed")
+            episode_ids = None
+        ids = await self._repos.evaluations.add_evaluations(evaluations, episode_ids)
         alerts = 0
         for evaluation_id, evaluation in zip(ids, evaluations, strict=True):
             if evaluation.is_alertable and await self._alert(evaluation_id, evaluation):
@@ -309,6 +327,43 @@ class Scanner:
             active_streams=self._streams.active if self._streams is not None else 0,
         )
         return result
+
+    async def _track_episodes(
+        self, evaluations: Sequence[SpreadEvaluation]
+    ) -> list[int | None] | None:
+        """Close lapsed episodes, open/extend episodes of qualifying evaluations."""
+        if self._episodes is None:
+            return None
+        await self._episodes.close_expired()
+        observed = await self._episodes.observe(evaluations)
+        for episode in observed.opened:
+            task = asyncio.create_task(self._check_latency(episode))
+            self._latency_checks.add(task)
+            task.add_done_callback(self._latency_checks.discard)
+        return observed.episode_ids
+
+    async def _check_latency(self, episode: OpportunityEpisode) -> None:
+        """Did the opportunity survive the simulated execution latency (REST books)?"""
+        if self._episodes is None:  # pragma: no cover - only scheduled with a tracker
+            return
+        try:
+            await asyncio.sleep(self._config.latency_check_ms / 1000)
+            buy, sell = await asyncio.gather(
+                self._fetch_book(episode.buy_exchange, episode.symbol, allow_stream=False),
+                self._fetch_book(episode.sell_exchange, episode.symbol, allow_stream=False),
+            )
+            if buy is None or sell is None:
+                log.info("latency_check_unavailable", route=episode.route_key)
+                return
+            evaluation = self._evaluate(buy, sell)
+            survived = evaluation is not None and evaluation.meets_thresholds
+            if episode.id is not None:
+                await self._episodes.record_latency(episode.route_key, episode.id, survived)
+            log.info("latency_checked", route=episode.route_key, survived=survived)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("latency_check_failed", route=episode.route_key)
 
     async def _update_streams(self, evaluations: Sequence[SpreadEvaluation]) -> None:
         """Keep streaming both legs of every route that just showed a positive net spread.
@@ -426,7 +481,7 @@ class Scanner:
             )
             if buy_book is None or sell_book is None:
                 return None
-            evaluation = self._evaluate(route, buy_book, sell_book)
+            evaluation = self._evaluate(buy_book, sell_book)
             if (
                 evaluation is not None
                 and evaluation.is_alertable
@@ -546,7 +601,7 @@ class Scanner:
         if buy is None or sell is None:
             log.info("ws_confirmation_failed", route=route.symbol)
             return None
-        confirmed = self._evaluate(route, buy, sell)
+        confirmed = self._evaluate(buy, sell)
         log.info(
             "ws_opportunity_rechecked",
             route=route.symbol,
@@ -584,16 +639,14 @@ class Scanner:
                     self._health.pause(exchange, self._clock.now_ms())
                 return None
 
-    def _evaluate(
-        self, route: RouteQuote, buy_book: OrderBook, sell_book: OrderBook
-    ) -> SpreadEvaluation | None:
-        buy_market = self._universe.market(route.buy_exchange, route.symbol)
-        sell_market = self._universe.market(route.sell_exchange, route.symbol)
+    def _evaluate(self, buy_book: OrderBook, sell_book: OrderBook) -> SpreadEvaluation | None:
+        buy_market = self._universe.market(buy_book.exchange, buy_book.symbol)
+        sell_market = self._universe.market(sell_book.exchange, sell_book.symbol)
         if buy_market is None or sell_market is None:
             return None
         transfer = select_transfer_route(
-            self._universe.transfer_info(route.buy_exchange, buy_market.base),
-            self._universe.transfer_info(route.sell_exchange, sell_market.base),
+            self._universe.transfer_info(buy_book.exchange, buy_market.base),
+            self._universe.transfer_info(sell_book.exchange, sell_market.base),
         )
         try:
             return self._estimator.evaluate(
@@ -604,7 +657,7 @@ class Scanner:
                 transfer=transfer,
             )
         except (ValueError, ArithmeticError, DataValidationError):
-            log.exception("evaluation_failed", route=route.symbol)
+            log.exception("evaluation_failed", route=buy_book.symbol)
             return None
 
     async def _emit(self, event: SystemEvent) -> None:

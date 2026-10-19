@@ -1,5 +1,6 @@
 """Shared test builders."""
 
+from dataclasses import replace
 from decimal import Decimal as D
 
 from nexus.domain.spread import (
@@ -44,8 +45,13 @@ def make_evaluation(
     sell_exchange: str = "kucoin",
     evaluated_at_ms: int = EVALUATED_AT_MS,
     fees_estimated: bool = False,
+    net_usd: D | None = None,
 ) -> SpreadEvaluation:
+    """``net_usd`` overrides the breakdown's net profit (percent = net / $1,000 notional)."""
     base, quote = symbol.split("/")
+    breakdown = make_breakdown() if with_breakdown else None
+    if breakdown is not None and net_usd is not None:
+        breakdown = replace(breakdown, net_profit_usd=net_usd, net_profit_pct=net_usd / 10)
     return SpreadEvaluation(
         symbol=symbol,
         base=base,
@@ -59,7 +65,7 @@ def make_evaluation(
         sell_book_age_ms=340,
         evaluated_at_ms=evaluated_at_ms,
         gross_spread_pct=D(1),
-        breakdown=make_breakdown() if with_breakdown else None,
+        breakdown=breakdown,
         reason="" if with_breakdown else "sell side",
         fees_estimated=fees_estimated,
     )

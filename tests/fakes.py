@@ -1,10 +1,11 @@
 """In-memory test doubles for interfaces."""
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from decimal import Decimal as D
 
+from nexus.domain.episodes import OpportunityEpisode
 from nexus.domain.errors import ExchangeError
 from nexus.domain.events import SystemEvent
 from nexus.domain.models import AssetTransferInfo, MarketInfo, OrderBook, PriceLevel, Ticker
@@ -16,6 +17,7 @@ from nexus.interfaces.notifications import DeliveryReceipt, INotifier, OutgoingM
 from nexus.interfaces.repositories import (
     AlertDeliveryStatus,
     IAlertLogRepository,
+    IEpisodeRepository,
     IEvaluationRepository,
     IExchangeHealthRepository,
     IMarketRepository,
@@ -119,6 +121,7 @@ class MemoryRepos(
     health: list[tuple[str, str, bool]] = field(default_factory=list)
     alerts: dict[int, tuple[AlertDeliveryStatus, str | None]] = field(default_factory=dict)
     purged: list[tuple[datetime, datetime]] = field(default_factory=list)
+    evaluation_episodes: dict[int, int | None] = field(default_factory=dict)
 
     async def upsert_markets(self, markets: Sequence[MarketInfo]) -> int:
         self.markets = list(markets)
@@ -128,11 +131,17 @@ class MemoryRepos(
         self.snapshots.extend(routes)
         return len(routes)
 
-    async def add_evaluations(self, evaluations: Sequence[SpreadEvaluation]) -> list[int]:
+    async def add_evaluations(
+        self,
+        evaluations: Sequence[SpreadEvaluation],
+        episode_ids: Sequence[int | None] | None = None,
+    ) -> list[int]:
         ids = []
-        for evaluation in evaluations:
+        links = list(episode_ids) if episode_ids is not None else [None] * len(evaluations)
+        for evaluation, episode_id in zip(evaluations, links, strict=True):
             new_id = len(self.evaluations) + 1
             self.evaluations[new_id] = evaluation
+            self.evaluation_episodes[new_id] = episode_id
             ids.append(new_id)
         return ids
 
@@ -213,3 +222,32 @@ class RecordingNotifier(INotifier):
 
     async def close(self) -> None:
         return None
+
+
+class MemoryEpisodes(IEpisodeRepository):
+    """In-memory episode store with the same "never reopen a closed row" rule."""
+
+    def __init__(self) -> None:
+        self.rows: dict[int, OpportunityEpisode] = {}
+
+    async def open(self, episode: OpportunityEpisode) -> OpportunityEpisode:
+        assert episode.is_open
+        for row in self.rows.values():
+            if row.is_open and row.route_key == episode.route_key:
+                return row
+        new_id = len(self.rows) + 1
+        self.rows[new_id] = replace(episode, id=new_id)
+        return self.rows[new_id]
+
+    async def set_survived_latency(self, episode_id: int, survived: bool) -> None:
+        if self.rows[episode_id].is_open:
+            self.rows[episode_id] = replace(self.rows[episode_id], survived_latency=survived)
+
+    async def save(self, episodes: Sequence[OpportunityEpisode]) -> None:
+        for episode in episodes:
+            assert episode.id is not None
+            if self.rows[episode.id].is_open:
+                self.rows[episode.id] = episode
+
+    async def list_open(self) -> list[OpportunityEpisode]:
+        return [row for row in self.rows.values() if row.is_open]

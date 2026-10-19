@@ -23,12 +23,14 @@ from nexus.notifications.telegram import TelegramNotifier
 from nexus.persistence.db import create_engine, create_session_factory
 from nexus.persistence.repositories import (
     AlertLogRepository,
+    EpisodeRepository,
     EvaluationRepository,
     ExchangeHealthRepository,
     MarketRepository,
     RetentionRepository,
     SnapshotRepository,
 )
+from nexus.scanner.episodes import EpisodeTracker
 from nexus.scanner.health import ExchangeHealthTracker
 from nexus.scanner.service import Repositories, Scanner, ScannerConfig
 from nexus.scanner.streams import OrderBookStreams
@@ -129,9 +131,15 @@ async def scanner_scope(settings: ScannerRoleSettings) -> AsyncIterator[Scanner]
                 alert_cooldown_s=spread.alert_cooldown_s,
                 # Books older than the freshness limit are rejected anyway.
                 book_deadline_s=max(2.0, spread.max_orderbook_age_ms / 1000),
+                latency_check_ms=settings.paper.latency_ms,
             ),
             clock=clock,
             streams=streams,
+            episodes=EpisodeTracker(
+                EpisodeRepository(sessions),
+                close_gap_ms=settings.episodes.close_gap_s * 1000,
+                clock=clock,
+            ),
         )
 
 

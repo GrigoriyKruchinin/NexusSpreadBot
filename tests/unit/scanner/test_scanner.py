@@ -5,6 +5,7 @@ from decimal import Decimal as D
 
 import pytest
 
+from nexus.domain.episodes import OpportunityEpisode
 from nexus.domain.errors import (
     ExchangeAuthError,
     ExchangeError,
@@ -20,11 +21,12 @@ from nexus.domain.models import (
     PriceLevel,
     Ticker,
 )
-from nexus.domain.spread import EvaluationStatus
+from nexus.domain.spread import EvaluationStatus, TransferStatus
 from nexus.engine.candidates import CandidateFilter, CandidateFinder
 from nexus.engine.estimator import EstimatorConfig, NetSpreadEstimator
 from nexus.interfaces.market_data import ITradingFeeSource
 from nexus.scanner import service
+from nexus.scanner.episodes import EpisodeTracker
 from nexus.scanner.health import ExchangeHealthTracker
 from nexus.scanner.service import Repositories, Scanner, ScannerConfig
 from nexus.scanner.streams import OrderBookStreams
@@ -33,6 +35,7 @@ from tests.fakes import (
     FakeExchange,
     ManualClock,
     MemoryCooldowns,
+    MemoryEpisodes,
     MemoryHeartbeat,
     MemoryRepos,
     RecordingDispatcher,
@@ -64,7 +67,12 @@ class FeeLookupExchange(FakeExchange, ITradingFeeSource):
 
 class Harness:
     def __init__(
-        self, *, fee_lookup: bool = False, streaming: bool = False, require_verified: bool = False
+        self,
+        *,
+        fee_lookup: bool = False,
+        streaming: bool = False,
+        require_verified: bool = False,
+        episodes: bool = False,
     ) -> None:
         self.clock = ManualClock()
         self.a = (FeeLookupExchange if fee_lookup else FakeExchange)("a", self.clock)
@@ -75,6 +83,12 @@ class Harness:
         self.cooldowns = MemoryCooldowns()
         self.heartbeat = MemoryHeartbeat()
         self.dispatcher = RecordingDispatcher()
+        self.episode_repo = MemoryEpisodes()
+        self.episodes = (
+            EpisodeTracker(self.episode_repo, close_gap_ms=60_000, clock=self.clock)
+            if episodes
+            else None
+        )
         self.streams = (
             OrderBookStreams(
                 {"b": self.b},
@@ -120,9 +134,11 @@ class Harness:
                 heartbeat_ttl_s=60,
                 alert_cooldown_s=600,
                 book_deadline_s=2.0,
+                latency_check_ms=0,
             ),
             clock=self.clock,
             streams=self.streams,
+            episodes=self.episodes,
         )
 
 
@@ -547,3 +563,103 @@ async def test_phantom_streamed_level_is_not_alerted() -> None:
     assert len(h.dispatcher.opportunities) == 1  # only the first, REST-based alert
     assert h.streams is not None
     await h.streams.close()
+
+
+# ------------------------------------------------------------------ episodes
+
+
+def _episode_harness(**kwargs: bool) -> Harness:
+    h = Harness(episodes=True, **kwargs)
+    h.a.quote("ABC/USDT", "99.9", "100")
+    h.b.quote("ABC/USDT", "101", "101.1")
+    return h
+
+
+async def _settle(h: Harness) -> None:
+    for _ in range(20):
+        await asyncio.sleep(0)
+    await asyncio.gather(*h.scanner._latency_checks)
+
+
+async def test_sweep_links_evaluations_to_episodes_and_checks_latency() -> None:
+    h = _episode_harness()
+    await h.scanner.refresh_metadata()
+    await h.scanner.sweep()
+    await _settle(h)
+    (episode,) = h.episode_repo.rows.values()
+    assert episode.route_key == "ABC/USDT|a>b"
+    assert episode.survived_latency is True  # REST books still show the spread
+    linked = {i for i, e in h.repos.evaluation_episodes.items() if e == episode.id}
+    assert linked
+    assert all(h.repos.evaluations[i].meets_thresholds for i in linked)
+    unlinked = [i for i, e in h.repos.evaluation_episodes.items() if e is None]
+    assert all(not h.repos.evaluations[i].meets_thresholds for i in unlinked)
+    h.clock.now += 10_000
+    await h.scanner.sweep()
+    assert h.episode_repo.rows[episode.id].evaluations == 2  # type: ignore[index]
+
+
+async def test_vanished_spread_fails_latency_check_and_closes_after_gap() -> None:
+    h = _episode_harness()
+    await h.scanner.refresh_metadata()
+    await h.scanner.sweep()
+    h.b.book_quotes["ABC/USDT"] = ("100", "100.1")  # gone before the re-check
+    await _settle(h)
+    (episode,) = h.episode_repo.rows.values()
+    assert episode.survived_latency is False
+    h.clock.now += 60_000
+    await h.scanner.sweep()  # no qualifying evaluation any more
+    closed = h.episode_repo.rows[1]
+    assert closed.close_reason is not None
+    assert closed.close_reason.value == "gap"
+
+
+async def test_unverified_routes_open_episodes_without_alerting() -> None:
+    h = _episode_harness(require_verified=True)
+    await h.scanner.refresh_metadata()
+    result = await h.scanner.sweep()
+    assert result.alerts == 0
+    (episode,) = h.episode_repo.rows.values()
+    assert episode.transfer_status.value == "unknown"
+
+
+async def test_episode_storage_failure_does_not_block_alerts() -> None:
+    h = _episode_harness()
+
+    async def broken(*_: object) -> None:
+        raise ConnectionError("db down")
+
+    h.episode_repo.open = broken  # type: ignore[assignment,method-assign]
+    await h.scanner.refresh_metadata()
+    result = await h.scanner.sweep()
+    assert result.alerts == 1
+    assert result.evaluations >= 1
+    assert all(e is None for e in h.repos.evaluation_episodes.values())
+
+
+async def test_run_resumes_episodes_on_start() -> None:
+    h = _episode_harness()
+    stale = OpportunityEpisode(
+        symbol="OLD/USDT",
+        buy_exchange="a",
+        sell_exchange="b",
+        opened_at_ms=h.clock.now - 600_000,
+        last_seen_at_ms=h.clock.now - 300_000,
+        first_net_usd=D(6),
+        peak_net_usd=D(6),
+        last_net_usd=D(6),
+        peak_net_pct=D("0.6"),
+        evaluations=3,
+        transfer_status=TransferStatus.VERIFIED,
+        transfer_network="TRC20",
+    )
+    await h.episode_repo.open(stale)
+    stop = asyncio.Event()
+
+    async def beat_then_stop(service: str, ttl_s: int) -> None:
+        stop.set()
+
+    h.heartbeat.beat = beat_then_stop  # type: ignore[method-assign]
+    await asyncio.wait_for(h.scanner.run(stop), timeout=5)
+    assert h.episode_repo.rows[1].close_reason is not None
+    assert h.episode_repo.rows[1].close_reason.value == "restart"
