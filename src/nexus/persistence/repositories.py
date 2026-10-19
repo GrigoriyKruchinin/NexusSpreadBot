@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from nexus.domain.episodes import EpisodeCloseReason, OpportunityEpisode
 from nexus.domain.models import MarketInfo
+from nexus.domain.quarantine import RouteQuarantine
 from nexus.domain.spread import (
     EvaluationStatus,
     SpreadBreakdown,
@@ -28,6 +29,7 @@ from nexus.interfaces.repositories import (
     IEvaluationRepository,
     IExchangeHealthRepository,
     IMarketRepository,
+    IQuarantineRepository,
     IRetentionRepository,
     ISnapshotRepository,
 )
@@ -36,6 +38,7 @@ from nexus.persistence.models import (
     ExchangeHealthRow,
     MarketPairRow,
     OpportunityEpisodeRow,
+    RouteQuarantineRow,
     SpreadEvaluationRow,
     SpreadSnapshotRow,
 )
@@ -237,6 +240,7 @@ def _episode_state(episode: OpportunityEpisode) -> dict[str, Any]:
         "alerted_net_usd": episode.alerted_net_usd,
         "realerts": episode.realerts,
         "survived_latency": episode.survived_latency,
+        "unverified_since": _optional_dt(episode.unverified_since_ms),
     }
 
 
@@ -274,6 +278,7 @@ def row_to_episode(row: OpportunityEpisodeRow) -> OpportunityEpisode:
         alerted_net_usd=row.alerted_net_usd,
         realerts=row.realerts,
         survived_latency=row.survived_latency,
+        unverified_since_ms=_optional_ms(row.unverified_since),
     )
 
 
@@ -348,6 +353,43 @@ class EpisodeRepository(_Repository, IEpisodeRepository):
                 select(OpportunityEpisodeRow).where(OpportunityEpisodeRow.closed_at.is_(None))
             )
             return [row_to_episode(row) for row in rows]
+
+
+class QuarantineRepository(_Repository, IQuarantineRepository):
+    """Stores the quarantine history."""
+
+    async def record_start(self, quarantine: RouteQuarantine) -> None:
+        """Store a started quarantine."""
+        async with self._sessions.begin() as session:
+            session.add(
+                RouteQuarantineRow(
+                    symbol=quarantine.symbol,
+                    buy_exchange=quarantine.buy_exchange,
+                    sell_exchange=quarantine.sell_exchange,
+                    reason=quarantine.reason.value,
+                    note=quarantine.note[:2000],
+                    started_at=ms_to_datetime(quarantine.started_at_ms),
+                    expires_at=ms_to_datetime(quarantine.expires_at_ms),
+                )
+            )
+
+    async def record_lift(self, route_key: str, at_ms: int) -> None:
+        """Mark the route's active quarantine row as lifted."""
+        symbol, _, legs = route_key.partition("|")
+        buy_exchange, _, sell_exchange = legs.partition(">")
+        at = ms_to_datetime(at_ms)
+        async with self._sessions.begin() as session:
+            await session.execute(
+                update(RouteQuarantineRow)
+                .where(
+                    RouteQuarantineRow.symbol == symbol,
+                    RouteQuarantineRow.buy_exchange == buy_exchange,
+                    RouteQuarantineRow.sell_exchange == sell_exchange,
+                    RouteQuarantineRow.lifted_at.is_(None),
+                    RouteQuarantineRow.expires_at > at,
+                )
+                .values(lifted_at=at)
+            )
 
 
 class AlertLogRepository(_Repository, IAlertLogRepository):

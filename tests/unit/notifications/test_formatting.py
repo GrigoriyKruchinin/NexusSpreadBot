@@ -8,6 +8,8 @@ from nexus.domain.events import (
     ExchangeDown,
     ExchangeRecovered,
     ExchangeStatus,
+    QuarantinedRoute,
+    RoutesQuarantined,
     ScannerStarted,
     ScannerStopped,
     SystemEvent,
@@ -191,3 +193,29 @@ def test_episode_closed_latency_labels_and_escaping(survived: bool | None, label
 )
 def test_fmt_duration(seconds: int, expected: str) -> None:
     assert fmt_duration(seconds) == expected
+
+
+def test_routes_quarantined_message_snapshot_and_cap() -> None:
+    route = QuarantinedRoute("ZIL/USDT", "binance", "okx", "unverified_persistent", "15 min")
+    event = RoutesQuarantined(routes=(route,), duration_h=24)
+    assert event_from_payload(event_to_payload(event)) == event
+    assert SystemEventFormatter().render(event) == (
+        "🚫 <b>1 route(s) quarantined</b> for <b>24 h</b>\n"
+        "<i>No alerts and no order-book checks; lifted early if the transfer path "
+        "becomes verified.</i>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "• <code>ZIL/USDT</code> Binance → OKX: spread persists without a verified "
+        "transfer path\n"
+        "  <i>15 min</i>"
+    )
+    many = RoutesQuarantined(
+        routes=tuple(
+            QuarantinedRoute(f"T{i}/USDT", "a", "b", "transfer_unavailable", "<x>")
+            for i in range(13)
+        ),
+        duration_h=24,
+    )
+    text = SystemEventFormatter().render(many)
+    assert text.count("•") == 10
+    assert "… and 3 more" in text
+    assert "&lt;x&gt;" in text

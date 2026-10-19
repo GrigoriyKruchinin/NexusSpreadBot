@@ -17,6 +17,7 @@ from nexus.domain.events import (
     EpisodeClosed,
     ExchangeDown,
     ExchangeRecovered,
+    RoutesQuarantined,
     ScannerStarted,
     ScannerStopped,
 )
@@ -35,6 +36,7 @@ from nexus.interfaces.market_data import ITradingFeeSource
 from nexus.scanner import service
 from nexus.scanner.episodes import EpisodeTracker
 from nexus.scanner.health import ExchangeHealthTracker
+from nexus.scanner.quarantine import QuarantineManager
 from nexus.scanner.service import Repositories, Scanner, ScannerConfig
 from nexus.scanner.streams import OrderBookStreams
 from nexus.scanner.universe import UniverseFilter
@@ -44,6 +46,7 @@ from tests.fakes import (
     MemoryCooldowns,
     MemoryEpisodes,
     MemoryHeartbeat,
+    MemoryQuarantine,
     MemoryRepos,
     RecordingDispatcher,
 )
@@ -80,6 +83,7 @@ class Harness:
         streaming: bool = False,
         require_verified: bool = False,
         episodes: bool = False,
+        quarantine: bool = False,
     ) -> None:
         self.clock = ManualClock()
         self.a = (FeeLookupExchange if fee_lookup else FakeExchange)("a", self.clock)
@@ -90,6 +94,18 @@ class Harness:
         self.cooldowns = MemoryCooldowns()
         self.heartbeat = MemoryHeartbeat()
         self.dispatcher = RecordingDispatcher()
+        self.quarantine_store = MemoryQuarantine(self.clock)
+        self.quarantine = (
+            QuarantineManager(
+                self.quarantine_store,
+                self.quarantine_store,
+                persist_ms=15 * 60_000,
+                ttl_ms=24 * 3_600_000,
+                clock=self.clock,
+            )
+            if quarantine
+            else None
+        )
         self.episode_repo = MemoryEpisodes()
         self.episodes = (
             EpisodeTracker(self.episode_repo, close_gap_ms=60_000, clock=self.clock)
@@ -146,6 +162,7 @@ class Harness:
             clock=self.clock,
             streams=self.streams,
             episodes=self.episodes,
+            quarantine=self.quarantine,
         )
 
 
@@ -747,3 +764,198 @@ async def test_episode_dispatch_failure_releases_dedup_and_floor() -> None:
     assert (await h.scanner.sweep()).alerts == 0
     assert not h.cooldowns.active
     assert not h.episode_repo.rows[1].alerted
+
+
+# ------------------------------------------------------------------ quarantine
+
+
+def _verified_transfers(h: Harness) -> None:
+    for exchange in (h.a, h.b):
+        exchange.transfers = {
+            "ABC": AssetTransferInfo(
+                exchange=exchange.name,
+                asset="ABC",
+                networks=(NetworkInfo("TRC20", True, True, D("0.001")),),
+            )
+        }
+
+
+async def _persist(h: Harness, minutes: int) -> None:
+    """Keep the spread alive with a sweep every 50 s (inside the 60 s episode gap)."""
+    for _ in range(minutes * 60 // 50 + 1):
+        await h.scanner.sweep()
+        h.clock.now += 50_000
+
+
+async def test_persistent_unverified_route_is_quarantined_once() -> None:
+    h = _episode_harness(require_verified=True, quarantine=True)
+    await h.scanner.refresh_metadata()
+    await _persist(h, 15)
+    (event,) = [e for e in h.dispatcher.events if isinstance(e, RoutesQuarantined)]
+    (quarantined,) = event.routes
+    assert (quarantined.symbol, quarantined.reason, event.duration_h) == (
+        "ABC/USDT",
+        "unverified_persistent",
+        24,
+    )
+    assert h.episode_repo.rows[1].close_reason is not None
+    assert h.episode_repo.rows[1].close_reason.value == "quarantined"
+    assert len(h.quarantine_store.history) == 1
+
+    books_before = len(h.b.book_calls)
+    result = await h.scanner.sweep()
+    assert result.quarantined == 1
+    assert result.candidates == 0  # the dead route no longer takes a book slot
+    assert len(h.b.book_calls) == books_before
+    stored = h.repos.evaluations[max(h.repos.evaluations)]
+    assert stored.status is EvaluationStatus.QUARANTINED
+    h.clock.now += 10_000
+    stored_count = len(h.repos.evaluations)
+    await h.scanner.sweep()
+    assert len(h.repos.evaluations) == stored_count  # parked records: once a minute
+    h.clock.now += 60_000
+    assert stored.gross_spread_pct is not None
+    assert not stored.is_alertable
+    assert 2 not in h.episode_repo.rows  # parked routes do not reopen episodes
+    await _persist(h, 30)
+    assert len([e for e in h.dispatcher.events if isinstance(e, RoutesQuarantined)]) == 1
+    assert h.dispatcher.opportunities == []
+
+
+async def test_verified_persistent_route_is_not_quarantined() -> None:
+    h = _episode_harness(quarantine=True)
+    _verified_transfers(h)
+    await h.scanner.refresh_metadata()
+    await _persist(h, 20)
+    assert h.quarantine_store.history == []
+    assert len(h.episode_repo.rows) == 1  # one long, alerted episode
+    assert len(h.dispatcher.opportunities) == 1
+
+
+async def test_quarantine_expires_after_ttl() -> None:
+    h = _episode_harness(require_verified=True, quarantine=True)
+    await h.scanner.refresh_metadata()
+    await _persist(h, 15)
+    assert (await h.scanner.sweep()).quarantined == 1
+    h.clock.now += 24 * 3_600_000
+    result = await h.scanner.sweep()
+    assert (result.quarantined, result.candidates) == (0, 1)
+
+
+async def test_quarantine_lifts_early_when_transfer_becomes_verified() -> None:
+    h = _episode_harness(require_verified=True, quarantine=True)
+    await h.scanner.refresh_metadata()
+    await _persist(h, 15)
+    assert h.quarantine is not None
+    assert h.quarantine.active
+    _verified_transfers(h)
+    await h.scanner.refresh_metadata()
+    assert h.quarantine.active == {}
+    assert [key for key, _ in h.quarantine_store.lifted] == ["ABC/USDT|a>b"]
+    result = await h.scanner.sweep()
+    assert result.alerts == 1  # verified now: alertable again
+
+
+async def test_unavailable_transfer_quarantines_immediately() -> None:
+    h = _episode_harness(quarantine=True)
+    _verified_transfers(h)
+    h.a.transfers = {
+        "ABC": AssetTransferInfo(
+            exchange="a", asset="ABC", networks=(NetworkInfo("TRC20", False, True, D(1)),)
+        )
+    }
+    await h.scanner.refresh_metadata()
+    await h.scanner.sweep()
+    (event,) = [e for e in h.dispatcher.events if isinstance(e, RoutesQuarantined)]
+    assert event.routes[0].reason == "transfer_unavailable"
+    assert "withdrawals disabled on a" in event.routes[0].note
+    assert (await h.scanner.sweep()).quarantined == 1
+
+
+async def test_quarantine_store_failure_fails_open() -> None:
+    h = _episode_harness(quarantine=True)
+    _verified_transfers(h)
+
+    async def broken() -> dict[str, object]:
+        raise ConnectionError("redis down")
+
+    h.quarantine_store.active = broken  # type: ignore[method-assign,assignment]
+    await h.scanner.refresh_metadata()
+    result = await h.scanner.sweep()
+    assert result.alerts == 1  # verified route still alerts
+
+
+def test_manual_symbol_overrides() -> None:
+    market = MarketInfo(
+        exchange="a", symbol="ABC/USDT", base="ABC", quote="USDT", taker_fee=D("0.001")
+    )
+    other = replace(market, symbol="XYZ/USDT", base="XYZ")
+    usdt = frozenset({"USDT"})
+    assert UniverseFilter(quote_assets=usdt).accepts(market)
+    only_abc = UniverseFilter(quote_assets=usdt, whitelist=frozenset({"ABC/USDT"}))
+    assert only_abc.accepts(market)
+    assert not only_abc.accepts(other)  # whitelist: scan ONLY the listed symbols
+    both = UniverseFilter(
+        quote_assets=usdt, whitelist=frozenset({"ABC/USDT"}), blacklist=frozenset({"ABC/USDT"})
+    )
+    assert not both.accepts(market)  # blacklist wins over whitelist
+
+
+async def test_verified_episode_is_not_quarantined_on_a_metadata_glitch() -> None:
+    h = _episode_harness(quarantine=True)
+    _verified_transfers(h)
+    await h.scanner.refresh_metadata()
+    await _persist(h, 20)  # long verified episode
+    h.a.transfers = None  # one refresh loses the transfer data -> UNKNOWN from now on
+    await h.scanner.refresh_metadata()
+    await _persist(h, 10)
+    assert h.quarantine_store.history == []  # unverified for 10 min only
+    await _persist(h, 6)
+    (quarantine,) = h.quarantine_store.history
+    assert "spread persisted 15 min" in quarantine.note or "16 min" in quarantine.note
+
+
+async def test_requarantine_of_a_dead_route_is_announced_weekly_at_most() -> None:
+    h = _episode_harness(require_verified=True, quarantine=True)
+    await h.scanner.refresh_metadata()
+    await _persist(h, 15)
+    h.clock.now += 24 * 3_600_000  # quarantine expired; the route is still dead
+    await _persist(h, 16)
+    assert len(h.quarantine_store.history) == 2
+    assert len([e for e in h.dispatcher.events if isinstance(e, RoutesQuarantined)]) == 1
+
+
+async def test_quarantines_of_one_sweep_share_one_message() -> None:
+    h = _episode_harness(quarantine=True)
+    blocked = {
+        "ABC": AssetTransferInfo(exchange="a", asset="ABC", withdraw_enabled=False),
+        "DEF": AssetTransferInfo(exchange="a", asset="DEF", withdraw_enabled=False),
+    }
+    h.a.quote("DEF/USDT", "9.99", "10")
+    h.b.quote("DEF/USDT", "10.1", "10.11")
+    h.a.transfers = blocked
+    h.b.transfers = {
+        asset: AssetTransferInfo(
+            exchange="b", asset=asset, networks=(NetworkInfo("TRC20", True, True, D(0)),)
+        )
+        for asset in ("ABC", "DEF")
+    }
+    await h.scanner.refresh_metadata()
+    await h.scanner.sweep()
+    (event,) = [e for e in h.dispatcher.events if isinstance(e, RoutesQuarantined)]
+    assert sorted(r.symbol for r in event.routes) == ["ABC/USDT", "DEF/USDT"]
+
+
+async def test_stale_snapshot_expires_while_the_store_is_down() -> None:
+    h = _episode_harness(require_verified=True, quarantine=True)
+    await h.scanner.refresh_metadata()
+    await _persist(h, 15)
+    assert (await h.scanner.sweep()).quarantined == 1
+
+    async def broken() -> dict[str, object]:
+        raise ConnectionError("redis down")
+
+    h.quarantine_store.active = broken  # type: ignore[method-assign,assignment]
+    assert (await h.scanner.sweep()).quarantined == 1  # last snapshot still applies
+    h.clock.now += 24 * 3_600_000
+    assert (await h.scanner.sweep()).quarantined == 0  # but it expires on the clock

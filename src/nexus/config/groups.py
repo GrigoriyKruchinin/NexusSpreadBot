@@ -281,6 +281,17 @@ class EpisodeSettings(NexusBaseSettings):
     """An episode closes after this long without a qualifying evaluation of its route."""
 
 
+class QuarantineSettings(NexusBaseSettings):
+    """Automatic quarantine of dead routes (``QUARANTINE_*``)."""
+
+    model_config = SettingsConfigDict(env_prefix="QUARANTINE_")
+
+    persist_min: int = Field(default=15, ge=1, le=24 * 60)
+    """An episode open this long without a verified transfer path quarantines its route."""
+    ttl_h: int = Field(default=24, ge=1, le=24 * 30)
+    """Quarantine duration (lifted early when the transfer path becomes verified)."""
+
+
 class PaperSettings(NexusBaseSettings):
     """Paper trading simulation (``PAPER_*``)."""
 

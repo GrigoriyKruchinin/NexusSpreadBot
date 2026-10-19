@@ -9,9 +9,15 @@ from nexus.domain.episodes import OpportunityEpisode
 from nexus.domain.errors import ExchangeError
 from nexus.domain.events import AlertContext, SystemEvent
 from nexus.domain.models import AssetTransferInfo, MarketInfo, OrderBook, PriceLevel, Ticker
+from nexus.domain.quarantine import RouteQuarantine
 from nexus.domain.spread import SpreadEvaluation
 from nexus.engine.candidates import RouteQuote
-from nexus.interfaces.coordination import IAlertDispatcher, ICooldownStore, IHeartbeat
+from nexus.interfaces.coordination import (
+    IAlertDispatcher,
+    ICooldownStore,
+    IHeartbeat,
+    IQuarantineStore,
+)
 from nexus.interfaces.market_data import BaseExchangeAdapter
 from nexus.interfaces.notifications import DeliveryReceipt, INotifier, OutgoingMessage
 from nexus.interfaces.repositories import (
@@ -21,6 +27,7 @@ from nexus.interfaces.repositories import (
     IEvaluationRepository,
     IExchangeHealthRepository,
     IMarketRepository,
+    IQuarantineRepository,
     IRetentionRepository,
     ISnapshotRepository,
 )
@@ -255,3 +262,34 @@ class MemoryEpisodes(IEpisodeRepository):
 
     async def list_open(self) -> list[OpportunityEpisode]:
         return [row for row in self.rows.values() if row.is_open]
+
+
+class MemoryQuarantine(IQuarantineStore, IQuarantineRepository):
+    """Quarantine store + history in memory; expiry follows the injected clock."""
+
+    def __init__(self, clock: ManualClock) -> None:
+        self.clock = clock
+        self.entries: dict[str, RouteQuarantine] = {}
+        self.history: list[RouteQuarantine] = []
+        self.lifted: list[tuple[str, int]] = []
+
+    async def add(self, quarantine: RouteQuarantine) -> bool:
+        await self.active()
+        if quarantine.route_key in self.entries:
+            return False
+        self.entries[quarantine.route_key] = quarantine
+        return True
+
+    async def active(self) -> dict[str, RouteQuarantine]:
+        now = self.clock.now_ms()
+        self.entries = {k: q for k, q in self.entries.items() if q.expires_at_ms > now}
+        return dict(self.entries)
+
+    async def lift(self, route_key: str) -> bool:
+        return self.entries.pop(route_key, None) is not None
+
+    async def record_start(self, quarantine: RouteQuarantine) -> None:
+        self.history.append(quarantine)
+
+    async def record_lift(self, route_key: str, at_ms: int) -> None:
+        self.lifted.append((route_key, at_ms))

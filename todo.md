@@ -216,14 +216,15 @@ real rebalancing stays manual.
 - [x] Templates in `notifications/`, HTML-escaped, snapshot tests; alert-log claim semantics preserved.
 
 ### 1.5.6 Automatic quarantine of dead routes (R)
-- [ ] An episode open longer than `QUARANTINE_PERSIST_MIN` (default 15) **without** a `VERIFIED` transfer path quarantines the route for `QUARANTINE_TTL_H` (default 24). This is the ZIL/ONE pattern.
-- [ ] A route whose transfer status becomes `UNAVAILABLE` is quarantined immediately. The quarantine lifts early when the status turns `VERIFIED` on a metadata refresh.
-- [ ] Storage and status:
+- [x] An episode open longer than `QUARANTINE_PERSIST_MIN` (default 15) **without** a `VERIFIED` transfer path quarantines the route for `QUARANTINE_TTL_H` (default 24). This is the ZIL/ONE pattern.
+- [x] A route whose transfer status becomes `UNAVAILABLE` is quarantined immediately. The quarantine lifts early when the status turns `VERIFIED` on a metadata refresh.
+- [x] Storage and status:
   - Redis key with TTL (source of truth for the scanner), mirrored to a DB table `route_quarantine` for the digest;
-  - evaluations of quarantined routes are stored with status `quarantined` and never alerted.
-- [ ] One expiring system event per quarantine start (route, reason, duration). No repeats.
-- [ ] Manual overrides `SCANNER_SYMBOLS_WHITELIST` / `SCANNER_SYMBOLS_BLACKLIST`: verify behaviour, document in the guide.
-- [ ] Unit tests: persistent-unverified → quarantined; verified persistent → not quarantined; expiry; early lift.
+  - evaluations of quarantined routes are stored with status `quarantined` and never alerted
+    (ticker-level records: quarantined routes take no candidate/order-book slots).
+- [x] One expiring system event per quarantine start (route, reason, duration). No repeats.
+- [x] Manual overrides `SCANNER_SYMBOLS_WHITELIST` / `SCANNER_SYMBOLS_BLACKLIST`: verify behaviour, document in the guide.
+- [x] Unit tests: persistent-unverified → quarantined; verified persistent → not quarantined; expiry; early lift.
 
 ### 1.5.7 Paper inventory & rebalancing simulation (R)
 - [ ] `PaperSettings` (`PAPER_` prefix):

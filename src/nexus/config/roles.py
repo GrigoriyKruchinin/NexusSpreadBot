@@ -21,6 +21,7 @@ from nexus.config.groups import (
     LoggingSettings,
     MaintenanceSettings,
     PaperSettings,
+    QuarantineSettings,
     RedisSettings,
     ScannerSettings,
     SpreadSettings,
@@ -74,6 +75,7 @@ class ScannerRoleSettings(_RoleSettings):
     episodes: EpisodeSettings
     paper: PaperSettings
     alerts: AlertPolicySettings
+    quarantine: QuarantineSettings
     logging: LoggingSettings
 
     @model_validator(mode="after")
@@ -100,6 +102,7 @@ class ScannerRoleSettings(_RoleSettings):
             episodes=EpisodeSettings(),
             paper=PaperSettings(),
             alerts=AlertPolicySettings(),
+            quarantine=QuarantineSettings(),
             logging=LoggingSettings(),
         )
 

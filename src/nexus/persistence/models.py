@@ -173,6 +173,7 @@ class OpportunityEpisodeRow(Base):
     alerted_net_usd: Mapped[Decimal | None] = mapped_column(Money)
     realerts: Mapped[int] = mapped_column(Integer, server_default="0")
     survived_latency: Mapped[bool | None] = mapped_column(Boolean)
+    unverified_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AlertLogRow(Base):
@@ -207,3 +208,23 @@ class ExchangeHealthRow(Base):
     ok: Mapped[bool] = mapped_column(Boolean)
     latency_ms: Mapped[int | None] = mapped_column(Integer)
     error: Mapped[str | None] = mapped_column(Text)
+
+
+class RouteQuarantineRow(Base):
+    """History of route quarantines (the live state lives in Redis)."""
+
+    __tablename__ = "route_quarantine"
+    __table_args__ = (
+        Index("ix_route_quarantine_started_at", "started_at"),
+        Index("ix_route_quarantine_route", "symbol", "buy_exchange", "sell_exchange"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(64))
+    buy_exchange: Mapped[str] = mapped_column(String(32))
+    sell_exchange: Mapped[str] = mapped_column(String(32))
+    reason: Mapped[str] = mapped_column(String(32))
+    note: Mapped[str] = mapped_column(Text, default="")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    lifted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

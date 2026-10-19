@@ -7,6 +7,7 @@ from decimal import Decimal
 from enum import StrEnum
 
 from nexus.domain.models import ZERO
+from nexus.domain.quarantine import route_key
 
 
 class EvaluationStatus(StrEnum):
@@ -22,6 +23,8 @@ class EvaluationStatus(StrEnum):
     MARKET_INACTIVE = "market_inactive"
     TRANSFER_UNAVAILABLE = "transfer_unavailable"
     TRANSFER_UNVERIFIED = "transfer_unverified"
+    QUARANTINED = "quarantined"
+    """The route is quarantined: stored from tickers only (no books), never alerted."""
 
 
 class TransferStatus(StrEnum):
@@ -117,4 +120,4 @@ class SpreadEvaluation:
     @property
     def route_key(self) -> str:
         """Stable identifier of the route, used for alert de-duplication."""
-        return f"{self.symbol}|{self.buy_exchange}>{self.sell_exchange}"
+        return route_key(self.symbol, self.buy_exchange, self.sell_exchange)

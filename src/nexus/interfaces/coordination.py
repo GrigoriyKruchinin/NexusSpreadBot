@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from nexus.domain.events import AlertContext, SystemEvent
+from nexus.domain.quarantine import RouteQuarantine
 
 
 class ICooldownStore(ABC):
@@ -43,3 +44,19 @@ class IAlertDispatcher(ABC):
     @abstractmethod
     async def dispatch_event(self, event: SystemEvent) -> None:
         """Queue a system event notification."""
+
+
+class IQuarantineStore(ABC):
+    """Shared, expiring route quarantines (source of truth for the scanner)."""
+
+    @abstractmethod
+    async def add(self, quarantine: RouteQuarantine) -> bool:
+        """Start a quarantine; False (no change) if the route is already quarantined."""
+
+    @abstractmethod
+    async def active(self) -> dict[str, RouteQuarantine]:
+        """Unexpired quarantines by route key."""
+
+    @abstractmethod
+    async def lift(self, route_key: str) -> bool:
+        """End a quarantine early; True if one was active."""

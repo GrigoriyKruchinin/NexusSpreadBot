@@ -9,6 +9,7 @@ from enum import StrEnum
 
 from nexus.domain.episodes import OpportunityEpisode
 from nexus.domain.models import MarketInfo
+from nexus.domain.quarantine import RouteQuarantine
 from nexus.domain.spread import SpreadEvaluation
 from nexus.engine.candidates import RouteQuote
 
@@ -78,6 +79,18 @@ class IEpisodeRepository(ABC):
     @abstractmethod
     async def list_open(self) -> list[OpportunityEpisode]:
         """All episodes that are not closed."""
+
+
+class IQuarantineRepository(ABC):
+    """History of route quarantines (mirror of the shared store, for reports)."""
+
+    @abstractmethod
+    async def record_start(self, quarantine: RouteQuarantine) -> None:
+        """Store a started quarantine."""
+
+    @abstractmethod
+    async def record_lift(self, route_key: str, at_ms: int) -> None:
+        """Mark the route's unlifted, unexpired quarantine as lifted early at ``at_ms``."""
 
 
 class IAlertLogRepository(ABC):

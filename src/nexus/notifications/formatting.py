@@ -16,6 +16,7 @@ from nexus.domain.events import (
     EpisodeClosed,
     ExchangeDown,
     ExchangeRecovered,
+    RoutesQuarantined,
     ScannerStarted,
     ScannerStopped,
     SystemEvent,
@@ -33,6 +34,13 @@ EXCHANGE_DISPLAY_NAMES: Final[dict[str, str]] = {
     "kucoin": "KuCoin",
     "mexc": "MEXC",
     "bitget": "Bitget",
+}
+
+
+QUARANTINE_ROUTES_SHOWN: Final = 10
+QUARANTINE_REASONS: Final[dict[str, str]] = {
+    "unverified_persistent": "spread persists without a verified transfer path",
+    "transfer_unavailable": "deposits/withdrawals are disabled",
 }
 
 
@@ -212,6 +220,29 @@ class SystemEventFormatter:
                 )
             case EpisodeClosed():
                 return self._episode_closed(event)
+            case RoutesQuarantined():
+                return self._quarantined(event)
+
+    @staticmethod
+    def _quarantined(event: RoutesQuarantined) -> str:
+        shown = event.routes[:QUARANTINE_ROUTES_SHOWN]
+        lines = [
+            f"🚫 <b>{len(event.routes)} route(s) quarantined</b> for <b>{event.duration_h} h</b>",
+            "<i>No alerts and no order-book checks; lifted early if the transfer path "
+            "becomes verified.</i>",
+            SEPARATOR,
+        ]
+        for route in shown:
+            why = QUARANTINE_REASONS.get(route.reason, route.reason)
+            lines.append(
+                f"• <code>{esc(route.symbol)}</code> {esc(exchange_name(route.buy_exchange))}"
+                f" → {esc(exchange_name(route.sell_exchange))}: {esc(why)}"
+            )
+            if route.note:
+                lines.append(f"  <i>{esc(route.note[:200])}</i>")
+        if hidden := len(event.routes) - len(shown):
+            lines.append(f"… and {hidden} more")
+        return _truncate("\n".join(lines))
 
     @staticmethod
     def _episode_closed(event: EpisodeClosed) -> str:

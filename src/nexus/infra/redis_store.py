@@ -1,11 +1,17 @@
-"""Redis-backed cooldowns and heartbeats."""
+"""Redis-backed cooldowns, heartbeats and route quarantines."""
 
 from __future__ import annotations
 
+import json
+
+import structlog
 from redis.asyncio import Redis
 
 from nexus.domain.clock import Clock
-from nexus.interfaces.coordination import ICooldownStore, IHeartbeat
+from nexus.domain.quarantine import QuarantineReason, RouteQuarantine
+from nexus.interfaces.coordination import ICooldownStore, IHeartbeat, IQuarantineStore
+
+log = structlog.get_logger(__name__)
 
 _PREFIX = "nexus:"
 
@@ -48,3 +54,62 @@ class RedisHeartbeat(IHeartbeat):
             return int(value)
         except (TypeError, ValueError):
             return None
+
+
+class RedisQuarantineStore(IQuarantineStore):
+    """One key per route (``SET NX PX``): expiry is enforced by Redis itself."""
+
+    _KEY = f"{_PREFIX}quarantine:"
+
+    def __init__(self, redis: Redis, clock: Clock) -> None:
+        self._redis = redis
+        self._clock = clock
+
+    async def add(self, quarantine: RouteQuarantine) -> bool:
+        """Start a quarantine unless the route already has one."""
+        ttl_ms = quarantine.expires_at_ms - self._clock.now_ms()
+        if ttl_ms <= 0:
+            return False
+        payload = json.dumps(
+            {
+                "symbol": quarantine.symbol,
+                "buy_exchange": quarantine.buy_exchange,
+                "sell_exchange": quarantine.sell_exchange,
+                "reason": quarantine.reason.value,
+                "started_at_ms": quarantine.started_at_ms,
+                "expires_at_ms": quarantine.expires_at_ms,
+                "note": quarantine.note[:300],
+            }
+        )
+        key = f"{self._KEY}{quarantine.route_key}"
+        return bool(await self._redis.set(key, payload, nx=True, px=ttl_ms))
+
+    async def active(self) -> dict[str, RouteQuarantine]:
+        """Unexpired quarantines by route key (malformed entries are dropped)."""
+        keys = [key async for key in self._redis.scan_iter(match=f"{self._KEY}*", count=500)]
+        if not keys:
+            return {}
+        result: dict[str, RouteQuarantine] = {}
+        for key, raw in zip(keys, await self._redis.mget(keys), strict=True):
+            if raw is None:
+                continue  # expired between SCAN and MGET
+            try:
+                data = json.loads(raw)
+                quarantine = RouteQuarantine(
+                    symbol=str(data["symbol"]),
+                    buy_exchange=str(data["buy_exchange"]),
+                    sell_exchange=str(data["sell_exchange"]),
+                    reason=QuarantineReason(data["reason"]),
+                    started_at_ms=int(data["started_at_ms"]),
+                    expires_at_ms=int(data["expires_at_ms"]),
+                    note=str(data.get("note") or ""),
+                )
+            except (ValueError, KeyError, TypeError):
+                log.warning("quarantine_entry_malformed", key=str(key)[:200])
+                continue
+            result[quarantine.route_key] = quarantine
+        return result
+
+    async def lift(self, route_key: str) -> bool:
+        """End a quarantine early."""
+        return bool(await self._redis.delete(f"{self._KEY}{route_key}"))

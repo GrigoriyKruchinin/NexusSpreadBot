@@ -103,3 +103,27 @@ def test_alert_kind_first_then_growth_based_realerts() -> None:
     assert realerted.alert_kind(D("17.99"), D(50)) is None  # baseline moved to $12
     assert realerted.alert_kind(D(18), D(50)) is AlertKind.REALERT
     assert realerted.close(T0 + 3, EpisodeCloseReason.GAP).alert_kind(D(99), D(50)) is None
+
+
+def test_unverified_since_tracks_the_current_unverified_run() -> None:
+    unknown = TransferQuote(TransferStatus.UNKNOWN)
+    episode = OpportunityEpisode.open(make_evaluation())
+    assert episode.unverified_since_ms is None
+    episode = episode.extend(
+        make_evaluation(
+            status=EvaluationStatus.TRANSFER_UNVERIFIED, transfer=unknown, evaluated_at_ms=T0 + 5
+        )
+    )
+    assert episode.unverified_since_ms == T0 + 5
+    episode = episode.extend(
+        make_evaluation(
+            status=EvaluationStatus.TRANSFER_UNVERIFIED, transfer=unknown, evaluated_at_ms=T0 + 9
+        )
+    )
+    assert episode.unverified_since_ms == T0 + 5  # run continues
+    episode = episode.extend(make_evaluation(evaluated_at_ms=T0 + 12))
+    assert episode.unverified_since_ms is None  # verified again: run reset
+    opened_unverified = OpportunityEpisode.open(
+        make_evaluation(status=EvaluationStatus.TRANSFER_UNVERIFIED, transfer=unknown)
+    )
+    assert opened_unverified.unverified_since_ms == T0

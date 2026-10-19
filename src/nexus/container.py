@@ -17,7 +17,7 @@ from nexus.config.roles import (
 from nexus.domain.clock import SystemClock
 from nexus.engine.candidates import CandidateFilter, CandidateFinder
 from nexus.engine.estimator import EstimatorConfig, NetSpreadEstimator
-from nexus.infra.redis_store import RedisCooldownStore, RedisHeartbeat
+from nexus.infra.redis_store import RedisCooldownStore, RedisHeartbeat, RedisQuarantineStore
 from nexus.interfaces.market_data import BaseExchangeAdapter
 from nexus.notifications.telegram import TelegramNotifier
 from nexus.persistence.db import create_engine, create_session_factory
@@ -27,11 +27,13 @@ from nexus.persistence.repositories import (
     EvaluationRepository,
     ExchangeHealthRepository,
     MarketRepository,
+    QuarantineRepository,
     RetentionRepository,
     SnapshotRepository,
 )
 from nexus.scanner.episodes import EpisodeTracker
 from nexus.scanner.health import ExchangeHealthTracker
+from nexus.scanner.quarantine import QuarantineManager
 from nexus.scanner.service import Repositories, Scanner, ScannerConfig
 from nexus.scanner.streams import OrderBookStreams
 from nexus.scanner.universe import UniverseFilter
@@ -139,6 +141,13 @@ async def scanner_scope(settings: ScannerRoleSettings) -> AsyncIterator[Scanner]
             episodes=EpisodeTracker(
                 EpisodeRepository(sessions),
                 close_gap_ms=settings.episodes.close_gap_s * 1000,
+                clock=clock,
+            ),
+            quarantine=QuarantineManager(
+                RedisQuarantineStore(redis, clock),
+                QuarantineRepository(sessions),
+                persist_ms=settings.quarantine.persist_min * 60_000,
+                ttl_ms=settings.quarantine.ttl_h * 3_600_000,
                 clock=clock,
             ),
         )

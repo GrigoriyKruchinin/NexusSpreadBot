@@ -11,7 +11,12 @@ from decimal import Decimal
 from typing import Any, ClassVar, Literal
 
 EventKind = Literal[
-    "scanner_started", "scanner_stopped", "exchange_down", "exchange_recovered", "episode_closed"
+    "scanner_started",
+    "scanner_stopped",
+    "exchange_down",
+    "exchange_recovered",
+    "episode_closed",
+    "routes_quarantined",
 ]
 
 
@@ -82,11 +87,45 @@ class EpisodeClosed:
     survived_latency: bool | None
 
 
-SystemEvent = ScannerStarted | ScannerStopped | ExchangeDown | ExchangeRecovered | EpisodeClosed
+@dataclass(frozen=True, slots=True)
+class QuarantinedRoute:
+    """One newly quarantined route (part of :class:`RoutesQuarantined`)."""
+
+    symbol: str
+    buy_exchange: str
+    sell_exchange: str
+    reason: str
+    note: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class RoutesQuarantined:
+    """Routes quarantined in one sweep (one message, not one per route)."""
+
+    kind: ClassVar[EventKind] = "routes_quarantined"
+    routes: tuple[QuarantinedRoute, ...]
+    duration_h: int
+
+
+SystemEvent = (
+    ScannerStarted
+    | ScannerStopped
+    | ExchangeDown
+    | ExchangeRecovered
+    | EpisodeClosed
+    | RoutesQuarantined
+)
 
 _EVENT_TYPES: dict[str, type[Any]] = {
     cls.kind: cls
-    for cls in (ScannerStarted, ScannerStopped, ExchangeDown, ExchangeRecovered, EpisodeClosed)
+    for cls in (
+        ScannerStarted,
+        ScannerStopped,
+        ExchangeDown,
+        ExchangeRecovered,
+        EpisodeClosed,
+        RoutesQuarantined,
+    )
 }
 
 
@@ -137,6 +176,8 @@ def event_from_payload(payload: dict[str, Any]) -> SystemEvent:
     data = dict(payload.get("data") or {})
     if cls is ScannerStarted:
         data["exchanges"] = tuple(ExchangeStatus(**e) for e in data.get("exchanges", ()))
+    if cls is RoutesQuarantined:
+        data["routes"] = tuple(QuarantinedRoute(**r) for r in data.get("routes", ()))
     event: SystemEvent = cls(**data)
     return event
 
@@ -152,6 +193,8 @@ __all__ = [
     "ExchangeDown",
     "ExchangeRecovered",
     "ExchangeStatus",
+    "QuarantinedRoute",
+    "RoutesQuarantined",
     "ScannerStarted",
     "ScannerStopped",
     "SystemEvent",

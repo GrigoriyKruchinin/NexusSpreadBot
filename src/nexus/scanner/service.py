@@ -18,7 +18,7 @@ from typing import Any
 import structlog
 
 from nexus.domain.clock import Clock
-from nexus.domain.episodes import AlertKind, OpportunityEpisode
+from nexus.domain.episodes import AlertKind, EpisodeCloseReason, OpportunityEpisode
 from nexus.domain.errors import (
     DataValidationError,
     ExchangeError,
@@ -29,13 +29,21 @@ from nexus.domain.events import (
     AlertContext,
     EpisodeClosed,
     ExchangeStatus,
+    QuarantinedRoute,
+    RoutesQuarantined,
     ScannerStarted,
     ScannerStopped,
     SystemEvent,
     decimal_str,
 )
 from nexus.domain.models import AssetTransferInfo, MarketInfo, OrderBook, Ticker
-from nexus.domain.spread import SpreadEvaluation
+from nexus.domain.quarantine import QuarantineReason, RouteQuarantine, route_key
+from nexus.domain.spread import (
+    EvaluationStatus,
+    SpreadEvaluation,
+    TransferQuote,
+    TransferStatus,
+)
 from nexus.engine.candidates import CandidateFinder, RouteQuote
 from nexus.engine.estimator import NetSpreadEstimator
 from nexus.engine.transfer import select_transfer_route
@@ -49,6 +57,7 @@ from nexus.interfaces.repositories import (
 )
 from nexus.scanner.episodes import EpisodeTracker
 from nexus.scanner.health import ExchangeHealthTracker
+from nexus.scanner.quarantine import QuarantineManager
 from nexus.scanner.streams import OrderBookStreams
 from nexus.scanner.universe import MarketUniverse, UniverseFilter
 
@@ -63,6 +72,10 @@ FEE_LOOKUP_TIMEOUT_S = 2.0
 """A slow fee endpoint must not hold up evaluation: the leg keeps its (estimated) default fee."""
 FEE_LOOKUP_MAX_ATTEMPTS = 3
 FEE_CACHE_TTL_MS = 6 * 3600 * 1000
+QUARANTINE_ANNOUNCE_COOLDOWN_S = 7 * 24 * 3600
+"""A route that stays dead re-quarantines daily; the message is repeated at most weekly."""
+PARKED_RECORD_INTERVAL_MS = 60_000
+"""Quarantined routes are recorded (ticker level) at most once per minute per route."""
 EPISODE_ALERT_KEY_TTL_S = 24 * 3600
 """Redis dedup key per (episode, alert number): an episode alert is queued at most once."""
 """Account fee tiers change (30-day volume, promos): looked-up fees are re-fetched after this."""
@@ -112,6 +125,8 @@ class SweepResult:
     alerts: int
     timed_out: int = 0
     streamed_books: int = 0
+    quarantined: int = 0
+    """Routes skipped this sweep because they are quarantined."""
 
 
 class Scanner:
@@ -134,6 +149,7 @@ class Scanner:
         clock: Clock,
         streams: OrderBookStreams | None = None,
         episodes: EpisodeTracker | None = None,
+        quarantine: QuarantineManager | None = None,
     ) -> None:
         self._adapters = dict(adapters)
         self._authenticated = dict(authenticated)
@@ -150,6 +166,10 @@ class Scanner:
         self._universe = MarketUniverse(markets={})
         self._streams = streams
         self._episodes = episodes
+        self._quarantine = quarantine
+        self._new_quarantines: list[RouteQuarantine] = []
+        self._parked_at: dict[str, int] = {}
+        """Last stored ticker-level record per quarantined route (rate limit)."""
         self._latency_checks: set[asyncio.Task[None]] = set()
         self._streamed_books = 0
         self._account_fees: dict[BookKey, tuple[Decimal, int]] = {}
@@ -270,6 +290,7 @@ class Scanner:
         self._universe = MarketUniverse.build(markets, transfers, self._filter).with_taker_fees(
             self._fresh_account_fees()
         )
+        await self._lift_verified_quarantines()
         all_markets = [
             m for by_symbol in self._universe.markets.values() for m in by_symbol.values()
         ]
@@ -294,9 +315,14 @@ class Scanner:
             await self._repos.snapshots.add_snapshots(
                 datetime.now(tz=UTC), routes[: self._config.snapshot_top_k]
             )
-        candidates = self._finder.select(routes, self._config.max_candidates_per_sweep)
+        quarantined = await self._refresh_quarantine()
+        live = [r for r in routes if _route_key(r) not in quarantined]
+        parked = [r for r in routes if _route_key(r) in quarantined]
+        candidates = self._finder.select(live, self._config.max_candidates_per_sweep)
+        parked_evaluations = self._parked_evaluations(parked, quarantined)
         self._streamed_books = 0
         evaluations, timed_out = await self._evaluate_candidates(candidates)
+        await self._quarantine_unavailable(evaluations)
         await self._update_streams(evaluations)
         try:
             episode_ids = await self._track_episodes(evaluations)
@@ -304,11 +330,14 @@ class Scanner:
             # Episodes are analytics: never let them block storing evaluations or alerting.
             log.exception("episode_tracking_failed")
             episode_ids = None
-        ids = await self._repos.evaluations.add_evaluations(evaluations, episode_ids)
+        await self._quarantine_persistent_unverified()
+        await self._announce_quarantines()
+        links = [*(episode_ids or [None] * len(evaluations)), *[None] * len(parked_evaluations)]
+        evaluations = [*evaluations, *parked_evaluations]
+        ids = await self._repos.evaluations.add_evaluations(evaluations, links)
         alerts = 0
-        links = episode_ids or [None] * len(evaluations)
         for evaluation_id, evaluation, episode_id in zip(ids, evaluations, links, strict=True):
-            if not evaluation.is_alertable:
+            if not evaluation.is_alertable or self._is_quarantined(evaluation.route_key):
                 continue
             if episode_id is None:
                 sent = await self._alert(evaluation_id, evaluation)  # no episode: route cooldown
@@ -326,6 +355,7 @@ class Scanner:
             alerts=alerts,
             timed_out=timed_out,
             streamed_books=self._streamed_books,
+            quarantined=len(parked),
         )
         log.info(
             "sweep_done",
@@ -336,6 +366,7 @@ class Scanner:
             alerts=result.alerts,
             timed_out=result.timed_out,
             streamed_books=result.streamed_books,
+            quarantined=result.quarantined,
             active_streams=self._streams.active if self._streams is not None else 0,
         )
         return result
@@ -353,6 +384,175 @@ class Scanner:
             self._latency_checks.add(task)
             task.add_done_callback(self._latency_checks.discard)
         return observed.episode_ids
+
+    # ------------------------------------------------------------------ quarantine
+
+    def _is_quarantined(self, key: str) -> bool:
+        return self._quarantine is not None and self._quarantine.get(key) is not None
+
+    async def _refresh_quarantine(self) -> dict[str, RouteQuarantine]:
+        if self._quarantine is None:
+            return {}
+        try:
+            return await self._quarantine.refresh()
+        except Exception:
+            # Fail open: alerts stay gated by the verified-transfer policy either way.
+            log.exception("quarantine_refresh_failed")
+            return self._quarantine.active
+
+    async def _start_quarantine(
+        self,
+        symbol: str,
+        buy_exchange: str,
+        sell_exchange: str,
+        reason: QuarantineReason,
+        note: str,
+    ) -> None:
+        if self._quarantine is None:
+            return
+        key = route_key(symbol, buy_exchange, sell_exchange)
+        try:
+            started = await self._quarantine.quarantine(
+                symbol, buy_exchange, sell_exchange, reason, note
+            )
+        except Exception:
+            log.exception("quarantine_failed", route=key)
+            return
+        if started is None:
+            return
+        self._new_quarantines.append(started)  # announced even if closing the episode fails
+        if self._episodes is None:
+            return
+        try:
+            closed = await self._episodes.close_route(key, EpisodeCloseReason.QUARANTINED)
+            await self._announce_closed([closed] if closed is not None else [])
+        except Exception:
+            log.exception("quarantine_episode_close_failed", route=key)
+
+    async def _announce_quarantines(self) -> None:
+        """One message per sweep; a route re-quarantined for the same reason is announced at
+        most once per :data:`QUARANTINE_ANNOUNCE_COOLDOWN_S`."""
+        started, self._new_quarantines = self._new_quarantines, []
+        routes: list[QuarantinedRoute] = []
+        for quarantine in started:
+            announce_key = f"quarantine-announced:{quarantine.route_key}:{quarantine.reason}"
+            try:
+                fresh = await self._cooldowns.acquire(announce_key, QUARANTINE_ANNOUNCE_COOLDOWN_S)
+            except Exception:
+                log.exception("quarantine_announce_check_failed", route=quarantine.route_key)
+                fresh = True
+            if fresh:
+                routes.append(
+                    QuarantinedRoute(
+                        symbol=quarantine.symbol,
+                        buy_exchange=quarantine.buy_exchange,
+                        sell_exchange=quarantine.sell_exchange,
+                        reason=quarantine.reason.value,
+                        note=quarantine.note,
+                    )
+                )
+        if routes:
+            await self._emit(
+                RoutesQuarantined(routes=tuple(routes), duration_h=started[0].ttl_ms // 3_600_000)
+            )
+
+    async def _quarantine_unavailable(self, evaluations: Sequence[SpreadEvaluation]) -> None:
+        """A route whose asset cannot be moved is dead right away."""
+        for evaluation in evaluations:
+            if evaluation.status is EvaluationStatus.TRANSFER_UNAVAILABLE:
+                await self._start_quarantine(
+                    evaluation.symbol,
+                    evaluation.buy_exchange,
+                    evaluation.sell_exchange,
+                    QuarantineReason.TRANSFER_UNAVAILABLE,
+                    evaluation.transfer.note,
+                )
+
+    async def _quarantine_persistent_unverified(self) -> None:
+        """The ZIL/ONE pattern: a spread that persists while the transfer is unverified."""
+        if self._quarantine is None or self._episodes is None:
+            return
+        open_episodes = self._episodes.open_episodes.values()
+        for episode in self._quarantine.persistent_unverified(open_episodes):
+            since = episode.unverified_since_ms or episode.opened_at_ms
+            minutes = (self._clock.now_ms() - since) // 60_000
+            await self._start_quarantine(
+                episode.symbol,
+                episode.buy_exchange,
+                episode.sell_exchange,
+                QuarantineReason.UNVERIFIED_PERSISTENT,
+                f"spread persisted {minutes} min with transfer {episode.transfer_status.value}",
+            )
+
+    async def _lift_verified_quarantines(self) -> None:
+        """After a metadata refresh, lift quarantines whose transfer path is now verified."""
+        if self._quarantine is None:
+            return
+        try:
+            await self._quarantine.refresh()
+            await self._quarantine.lift_where(
+                lambda q: (
+                    self._route_transfer(q.symbol, q.buy_exchange, q.sell_exchange).status
+                    is TransferStatus.VERIFIED
+                )
+            )
+        except Exception:
+            log.exception("quarantine_lift_failed")
+
+    def _route_transfer(self, symbol: str, buy_exchange: str, sell_exchange: str) -> TransferQuote:
+        buy_market = self._universe.market(buy_exchange, symbol)
+        sell_market = self._universe.market(sell_exchange, symbol)
+        if buy_market is None or sell_market is None:
+            return TransferQuote(TransferStatus.UNKNOWN, note="market not scanned")
+        return select_transfer_route(
+            self._universe.transfer_info(buy_exchange, buy_market.base),
+            self._universe.transfer_info(sell_exchange, sell_market.base),
+        )
+
+    def _parked_evaluations(
+        self, parked: list[RouteQuote], quarantined: Mapping[str, RouteQuarantine]
+    ) -> list[SpreadEvaluation]:
+        """Ticker-level records of quarantined routes, at most once a minute per route."""
+        now = self._clock.now_ms()
+        self._parked_at = {
+            k: t for k, t in self._parked_at.items() if now - t < PARKED_RECORD_INTERVAL_MS
+        }
+        records: list[SpreadEvaluation] = []
+        for route in self._finder.select(parked, self._config.max_candidates_per_sweep):
+            key = _route_key(route)
+            if key in self._parked_at:
+                continue
+            if evaluation := self._quarantined_evaluation(route, quarantined[key]):
+                records.append(evaluation)
+                self._parked_at[key] = now
+        return records
+
+    def _quarantined_evaluation(
+        self, route: RouteQuote, quarantine: RouteQuarantine
+    ) -> SpreadEvaluation | None:
+        """Ticker-level record of a quarantined route (no order books are fetched)."""
+        buy_market = self._universe.market(route.buy_exchange, route.symbol)
+        sell_market = self._universe.market(route.sell_exchange, route.symbol)
+        if buy_market is None or sell_market is None:
+            return None
+        return SpreadEvaluation(
+            symbol=route.symbol,
+            base=buy_market.base,
+            quote=buy_market.quote,
+            buy_exchange=route.buy_exchange,
+            sell_exchange=route.sell_exchange,
+            notional_usd=self._estimator.config.reference_notional_usd,
+            status=EvaluationStatus.QUARANTINED,
+            transfer=self._route_transfer(route.symbol, route.buy_exchange, route.sell_exchange),
+            buy_book_age_ms=0,
+            sell_book_age_ms=0,
+            evaluated_at_ms=self._clock.now_ms(),
+            gross_spread_pct=route.gross_spread_pct,
+            reason=f"route quarantined: {quarantine.reason.value}",
+            fees_estimated=buy_market.taker_fee_is_default or sell_market.taker_fee_is_default,
+        )
+
+    # ------------------------------------------------------------------ episodes
 
     async def _announce_closed(self, closed: Sequence[OpportunityEpisode]) -> None:
         """Tell the user how alerted episodes ended (unalerted ones stay silent)."""
@@ -730,10 +930,7 @@ class Scanner:
         sell_market = self._universe.market(sell_book.exchange, sell_book.symbol)
         if buy_market is None or sell_market is None:
             return None
-        transfer = select_transfer_route(
-            self._universe.transfer_info(buy_book.exchange, buy_market.base),
-            self._universe.transfer_info(sell_book.exchange, sell_market.base),
-        )
+        transfer = self._route_transfer(buy_book.symbol, buy_book.exchange, sell_book.exchange)
         try:
             return self._estimator.evaluate(
                 buy_book=buy_book,
@@ -751,3 +948,7 @@ class Scanner:
             await self._dispatcher.dispatch_event(event)
         except Exception:
             log.exception("event_dispatch_failed", kind=event.kind)
+
+
+def _route_key(route: RouteQuote) -> str:
+    return route_key(route.symbol, route.buy_exchange, route.sell_exchange)

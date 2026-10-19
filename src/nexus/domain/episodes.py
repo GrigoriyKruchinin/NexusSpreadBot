@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from enum import StrEnum
 
+from nexus.domain.quarantine import route_key
 from nexus.domain.spread import SpreadBreakdown, SpreadEvaluation, TransferStatus
 
 HUNDRED = Decimal(100)
@@ -56,6 +57,8 @@ class OpportunityEpisode:
     """Net USD of the last alert (first alert or re-alert) - the re-alert growth baseline."""
     realerts: int = 0
     survived_latency: bool | None = None
+    unverified_since_ms: int | None = None
+    """Start of the current run of non-``VERIFIED`` transfer statuses (``None`` = verified)."""
     """Still meeting the thresholds on a REST re-check after the paper latency (``None`` =
     not checked yet / books unavailable)."""
 
@@ -76,12 +79,15 @@ class OpportunityEpisode:
             evaluations=1,
             transfer_status=evaluation.transfer.status,
             transfer_network=evaluation.transfer.network,
+            unverified_since_ms=None
+            if evaluation.transfer_verified
+            else evaluation.evaluated_at_ms,
         )
 
     @property
     def route_key(self) -> str:
         """Same key format as :attr:`SpreadEvaluation.route_key`."""
-        return f"{self.symbol}|{self.buy_exchange}>{self.sell_exchange}"
+        return route_key(self.symbol, self.buy_exchange, self.sell_exchange)
 
     @property
     def is_open(self) -> bool:
@@ -111,6 +117,9 @@ class OpportunityEpisode:
             evaluations=self.evaluations + 1,
             transfer_status=evaluation.transfer.status,
             transfer_network=evaluation.transfer.network,
+            unverified_since_ms=None
+            if evaluation.transfer_verified
+            else (self.unverified_since_ms or evaluation.evaluated_at_ms),
         )
 
     def close(self, at_ms: int, reason: EpisodeCloseReason) -> OpportunityEpisode:
