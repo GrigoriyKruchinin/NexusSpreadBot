@@ -22,7 +22,8 @@ cost, and alerts you on Telegram. Every evaluation is stored in PostgreSQL for l
 > authenticated exchange client is wrapped in a runtime guard that blocks any non-GET request,
 > and a static (AST) test forbids fund-moving calls in the source tree.
 
-**Status:** Stage 1 (MVP: detector + alerts) implemented — see [todo.md](todo.md).
+**Status:** Stage 1 (detector + alerts) and Stage 1.5 (signal quality & paper profit
+validation) implemented; Stage 1.5 soak run pending — see [todo.md](todo.md).
 Supported exchanges: Bybit, Binance, OKX, Gate.io, KuCoin, MEXC, Bitget (spot, USDT/USDC
 quotes). HTX is not supported.
 
@@ -80,6 +81,23 @@ while they stay fresh; otherwise the scanner falls back to REST.
 False-positive guards: stale/skewed books, crossed books, exchange minimums, suspended
 deposits/withdrawals (`transfer_unavailable`), a hard gross-spread cap, and a stricter cap
 unless both the transfer path and the token contract are verified (ticker collisions).
+
+### Signal quality and paper validation (Stage 1.5)
+
+- **Verified routes only:** alerts require a verified transfer path (withdraw on the buy
+  venue, deposit on the sell venue, known fee, no contract conflict). Without a key, Binance
+  status comes from its public capital config; Gate.io, KuCoin and Bitget are public.
+- **Opportunity episodes:** one alert per continuous run of a route, a re-alert only when the
+  net profit grows by `ALERT_REALERT_GROWTH_PCT`, and an "opportunity closed" summary.
+  Each new episode is re-checked on REST books after `PAPER_LATENCY_MS` ("survived latency").
+- **Automatic quarantine:** a route whose spread persists without a verified transfer path
+  (the classic "withdrawals suspended" spread) or whose transfer is unavailable is excluded
+  for `QUARANTINE_TTL_H`; it takes no order-book slots and never alerts.
+- **Paper trading:** every alert is executed on paper against fresh books with a virtual
+  inventory; low balances trigger *virtual* rebalances priced with the real network fee.
+  Nothing is ever traded or transferred.
+- **Daily digest:** episodes, survived latency, top routes, paper P&L (realized, transfer
+  costs, mark-to-market, capital, ROC), quarantines, exchange uptime and transfer coverage.
 
 ## Quickstart (local, Version 1)
 

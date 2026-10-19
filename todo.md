@@ -291,7 +291,8 @@ real rebalancing stays manual.
 - [ ] Revisit the value with soak data (after 1.5.10 soak)
 
 ### 1.5.10 Stage 1.5 Exit
-- [ ] `make check` green; `/audit-risks` SAFE TO PROCEED for 1.5.1–1.5.7
+- [x] `make check` green; `/audit-risks` SAFE TO PROCEED for 1.5.1–1.5.7 (each audited; findings fixed or tracked)
+- [x] Keyless end-to-end smoke on live data (7 exchanges, 4 min): episodes, survived latency, quarantine of ZIL/ONE-type routes, one alert + paper trade + virtual rebalances, digest rendered from the DB
 - [ ] Multi-day soak (≥ 3 days) with read-only keys on all 7 exchanges; laptop must not sleep (or run on a VPS) (user)
 - [ ] Go / no-go for Stage 2 from the digests:
   - target ≥ 5–10 **verified** episodes per day with net ≥ $5 that survive ≥ 2 s latency;
