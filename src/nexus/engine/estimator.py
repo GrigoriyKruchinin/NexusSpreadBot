@@ -161,8 +161,6 @@ class NetSpreadEstimator:
         # ---- transfer path -----------------------------------------------------------
         if transfer.status is TransferStatus.UNAVAILABLE:
             return result(EvaluationStatus.TRANSFER_UNAVAILABLE, transfer.note, gross=gross)
-        if transfer.status is TransferStatus.UNKNOWN and cfg.require_verified_transfer:
-            return result(EvaluationStatus.TRANSFER_UNVERIFIED, transfer.note, gross=gross)
         unverified_cap = cfg.max_unverified_gross_spread_pct
         identity_verified = (
             transfer.status is TransferStatus.VERIFIED and transfer.contract_verified
@@ -240,8 +238,17 @@ class NetSpreadEstimator:
             slippage_usd=slippage_usd,
         )
         profitable = net_pct >= cfg.min_net_profit_pct and net_usd >= cfg.min_net_profit_usd
-        status = EvaluationStatus.PROFITABLE if profitable else EvaluationStatus.BELOW_THRESHOLD
-        return result(status, gross=gross, breakdown=breakdown)
+        if not profitable:
+            return result(EvaluationStatus.BELOW_THRESHOLD, gross=gross, breakdown=breakdown)
+        if transfer.status is TransferStatus.UNKNOWN and cfg.require_verified_transfer:
+            # Fully priced and stored (episodes, digest, quarantine), but never alerted.
+            return result(
+                EvaluationStatus.TRANSFER_UNVERIFIED,
+                transfer.note,
+                gross=gross,
+                breakdown=breakdown,
+            )
+        return result(EvaluationStatus.PROFITABLE, gross=gross, breakdown=breakdown)
 
 
 def _meets_minimums(market: MarketInfo, amount: Decimal, cost: Decimal | None) -> bool:

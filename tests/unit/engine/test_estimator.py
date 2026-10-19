@@ -263,6 +263,24 @@ def test_unknown_transfer_rejected_when_verification_required(config: EstimatorC
         transfer=UNKNOWN,
     )
     assert ev.status is EvaluationStatus.TRANSFER_UNVERIFIED
+    assert ev.meets_thresholds
+    assert not ev.is_alertable
+    assert ev.breakdown is not None  # fully priced for episodes / digest
+    assert ev.breakdown.transfer_fee_usd == D(0)
+
+
+def test_unverified_below_threshold_stays_below_threshold(config: EstimatorConfig) -> None:
+    buy, sell = _simple_books()
+    strict = replace(config, require_verified_transfer=True, min_net_profit_usd=D(10_000))
+    ev = _estimator(strict).evaluate(
+        buy_book=buy,
+        sell_book=sell,
+        buy_market=market("a"),
+        sell_market=market("b"),
+        transfer=UNKNOWN,
+    )
+    assert ev.status is EvaluationStatus.BELOW_THRESHOLD
+    assert not ev.meets_thresholds
 
 
 def test_transfer_cost_can_be_excluded(config: EstimatorConfig) -> None:

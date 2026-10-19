@@ -237,7 +237,8 @@ class SpreadSettings(NexusBaseSettings):
     max_unverified_gross_spread_pct: Decimal = Field(default=Decimal(5), gt=0, le=100)
     default_taker_fee_pct: Decimal = Field(default=Decimal("0.2"), ge=Decimal("0.01"), lt=5)
     include_transfer_cost: bool = True
-    require_verified_transfer: bool = False
+    require_verified_transfer: bool = True
+    """Alert only routes with a ``VERIFIED`` transfer path (unverified ones are still stored)."""
     alert_cooldown_s: int = Field(default=600, ge=30)
 
     @model_validator(mode="after")

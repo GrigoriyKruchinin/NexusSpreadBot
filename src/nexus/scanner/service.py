@@ -311,11 +311,18 @@ class Scanner:
         return result
 
     async def _update_streams(self, evaluations: Sequence[SpreadEvaluation]) -> None:
-        """Keep streaming both legs of every route that just showed a positive net spread."""
+        """Keep streaming both legs of every route that just showed a positive net spread.
+
+        Routes that can never alert (unverified transfer while verification is required) do
+        not take stream slots from alertable ones.
+        """
         if self._streams is None:
             return
+        require_verified = self._estimator.config.require_verified_transfer
         for evaluation in evaluations:
             breakdown = evaluation.breakdown
+            if require_verified and not evaluation.transfer_verified:
+                continue
             if breakdown is not None and breakdown.net_profit_usd > 0:
                 self._streams.mark_hot(evaluation.buy_exchange, evaluation.symbol)
                 self._streams.mark_hot(evaluation.sell_exchange, evaluation.symbol)

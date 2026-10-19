@@ -26,7 +26,11 @@ async def _run_scanner() -> None:
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop.set)
-    log.info("scanner_starting", exchanges=list(settings.exchanges.enabled))
+    log.info(
+        "scanner_starting",
+        exchanges=list(settings.exchanges.enabled),
+        require_verified_transfer=settings.spread.require_verified_transfer,
+    )
     async with scanner_scope(settings) as scanner:
         await scanner.run(stop)
     log.info("scanner_stopped")

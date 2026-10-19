@@ -104,6 +104,12 @@ class SpreadEvaluation:
         return self.status is EvaluationStatus.PROFITABLE
 
     @property
+    def meets_thresholds(self) -> bool:
+        """True if the net profit passed both thresholds, whether or not it is alertable
+        (``TRANSFER_UNVERIFIED`` opportunities are priced but never alerted)."""
+        return self.status in (EvaluationStatus.PROFITABLE, EvaluationStatus.TRANSFER_UNVERIFIED)
+
+    @property
     def transfer_verified(self) -> bool:
         """False when the transfer path could not be verified (must be shown in alerts)."""
         return self.transfer.status is TransferStatus.VERIFIED

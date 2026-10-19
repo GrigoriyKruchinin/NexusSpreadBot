@@ -63,7 +63,9 @@ class FeeLookupExchange(FakeExchange, ITradingFeeSource):
 
 
 class Harness:
-    def __init__(self, *, fee_lookup: bool = False, streaming: bool = False) -> None:
+    def __init__(
+        self, *, fee_lookup: bool = False, streaming: bool = False, require_verified: bool = False
+    ) -> None:
         self.clock = ManualClock()
         self.a = (FeeLookupExchange if fee_lookup else FakeExchange)("a", self.clock)
         self.streaming_b = StreamingExchange("b", self.clock)
@@ -93,7 +95,7 @@ class Harness:
             max_book_skew_ms=3_000,
             max_gross_spread_pct=D(20),
             include_transfer_cost=True,
-            require_verified_transfer=False,
+            require_verified_transfer=require_verified,
         )
         self.scanner = Scanner(
             adapters={"a": self.a, "b": self.b, "c": self.c},
@@ -499,6 +501,21 @@ async def test_profitable_route_legs_are_streamed() -> None:
     assert second.evaluations == 1
     await h.streams.close()
     assert h.streaming_b.unwatched == ["ABC/USDT"]
+
+
+async def test_unverified_route_is_stored_not_alerted_and_not_streamed() -> None:
+    h = Harness(streaming=True, require_verified=True)  # fakes publish no transfer metadata
+    h.a.quote("ABC/USDT", "99.9", "100")
+    h.b.quote("ABC/USDT", "101", "101.1")
+    await h.scanner.refresh_metadata()
+    result = await h.scanner.sweep()
+    assert result.alerts == 0
+    assert h.dispatcher.opportunities == []
+    stored = next(iter(h.repos.evaluations.values()))
+    assert stored.status is EvaluationStatus.TRANSFER_UNVERIFIED
+    assert stored.meets_thresholds
+    assert h.streams is not None
+    assert h.streams.active == 0  # never-alertable routes take no stream slots
 
 
 async def test_phantom_streamed_level_is_not_alerted() -> None:

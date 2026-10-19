@@ -184,13 +184,14 @@ real rebalancing stays manual.
   - logged after each metadata refresh;
   - included in the start event.
 
-### 1.5.3 Alert policy: verified routes only (R)
-- [ ] `SPREAD_REQUIRE_VERIFIED_TRANSFER` default `true`:
+### 1.5.3 Alert policy: verified routes only (R) — audited: SAFE TO PROCEED
+- [x] `SPREAD_REQUIRE_VERIFIED_TRANSFER` default `true`:
   - Telegram alerts only for `VERIFIED` transfer paths;
-  - `UNKNOWN` evaluations are still stored and reported as "unverified" in the digest;
+  - `UNKNOWN` evaluations are still stored (fully priced, status `transfer_unverified`,
+    `meets_thresholds`) for the digest/episodes; they take no WS hot-set slots;
   - `UNAVAILABLE` excluded as before.
-  - Update `.env.example`, compose and the guide table.
-- [ ] Keep the 5 % unverified gross cap and the 20 % hard cap.
+  - Update `.env.example`, compose and the guide table (+ note on stale local `.env`; effective value logged at start).
+- [x] Keep the 5 % unverified gross cap and the 20 % hard cap.
 
 ### 1.5.4 Opportunity episodes (R)
 - [ ] Table `opportunity_episodes` (Alembic migration):
