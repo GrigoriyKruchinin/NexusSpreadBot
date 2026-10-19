@@ -22,7 +22,13 @@ from nexus.config.roles import AlertsWorkerSettings, MaintenanceWorkerSettings
 from nexus.domain.errors import NotificationError, NotificationRejectedError
 from nexus.domain.events import AlertContext
 from nexus.log import configure_logging
-from nexus.workers.app import TASK_PURGE, TASK_SEND_EVENT, TASK_SEND_OPPORTUNITY, celery_app
+from nexus.workers.app import (
+    TASK_PURGE,
+    TASK_SEND_DIGEST,
+    TASK_SEND_EVENT,
+    TASK_SEND_OPPORTUNITY,
+    celery_app,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -112,6 +118,25 @@ def send_event(self: Task[Any, Any], payload: dict[str, Any]) -> str:
         return "rejected"
     except NotificationError as exc:
         raise self.retry(exc=exc, countdown=_retry_countdown(self, exc)) from None
+
+
+@celery_app.task(name=TASK_SEND_DIGEST, bind=True, max_retries=MAX_RETRIES, **_INFRA_RETRY)
+def send_digest(self: Task[Any, Any], tz: str) -> str:
+    """Deliver the daily digest (``tz``: display time zone from ``DIGEST_TZ``)."""
+    from nexus.container import digest_scope
+
+    async def run() -> str:
+        async with digest_scope(_alerts_settings()) as service:
+            return await service.send(tz)
+
+    try:
+        asyncio.run(run())
+    except NotificationRejectedError as exc:
+        log.error("digest_rejected", error=str(exc))
+        return "rejected"
+    except NotificationError as exc:
+        raise self.retry(exc=exc, countdown=_retry_countdown(self, exc)) from None
+    return "sent"
 
 
 @celery_app.task(name=TASK_PURGE, max_retries=3, **_INFRA_RETRY)

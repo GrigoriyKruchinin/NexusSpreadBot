@@ -14,6 +14,7 @@ _PREFIXES = (
     "MAINTENANCE_",
     "EPISODE_",
     "ALERT_",
+    "DIGEST_",
     "QUARANTINE_",
     "PAPER_",
     "MEXC_",

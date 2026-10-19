@@ -33,6 +33,7 @@ from nexus.domain.spread import EvaluationStatus, TransferStatus
 from nexus.engine.candidates import CandidateFilter, CandidateFinder
 from nexus.engine.estimator import EstimatorConfig, NetSpreadEstimator
 from nexus.interfaces.market_data import ITradingFeeSource
+from nexus.interfaces.repositories import ExchangeMetadataStats, IMetadataStatsRepository
 from nexus.scanner import service
 from nexus.scanner.episodes import EpisodeTracker
 from nexus.scanner.health import ExchangeHealthTracker
@@ -1111,3 +1112,24 @@ async def test_resume_failure_disables_paper_trading() -> None:
     await asyncio.wait_for(h.scanner.run(stop), timeout=5)
     assert h.scanner._paper is None
     assert h.paper_repo.trades == []
+
+
+async def test_metadata_refresh_records_coverage_stats() -> None:
+    recorded: list[tuple[int, list[ExchangeMetadataStats]]] = []
+
+    class _Stats(IMetadataStatsRepository):
+        async def record(self, at_ms: int, stats: Sequence[ExchangeMetadataStats]) -> None:
+            recorded.append((at_ms, list(stats)))
+
+    h = Harness()
+    h.a.quote("ABC/USDT", "99.9", "100")
+    h.b.quote("ABC/USDT", "101", "101.1")
+    h.scanner._repos = replace(h.scanner._repos, metadata_stats=_Stats())
+    await h.scanner.refresh_metadata()
+    (at_ms, stats) = recorded[0]
+    assert at_ms == h.clock.now
+    assert [(s.exchange, s.markets, s.transfer_coverage_pct) for s in stats] == [
+        ("a", 1, 0),
+        ("b", 1, 0),
+        ("c", 0, None),
+    ]

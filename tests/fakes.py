@@ -131,7 +131,7 @@ class MemoryRepos(
     evaluations: dict[int, SpreadEvaluation] = field(default_factory=dict)
     health: list[tuple[str, str, bool]] = field(default_factory=list)
     alerts: dict[int, tuple[AlertDeliveryStatus, str | None]] = field(default_factory=dict)
-    purged: list[tuple[datetime, datetime]] = field(default_factory=list)
+    purged: list[tuple[datetime, datetime, datetime]] = field(default_factory=list)
     evaluation_episodes: dict[int, int | None] = field(default_factory=dict)
 
     async def upsert_markets(self, markets: Sequence[MarketInfo]) -> int:
@@ -177,9 +177,13 @@ class MemoryRepos(
         return True
 
     async def purge(
-        self, *, snapshots_before: datetime, evaluations_before: datetime
+        self,
+        *,
+        snapshots_before: datetime,
+        evaluations_before: datetime,
+        episodes_before: datetime,
     ) -> dict[str, int]:
-        self.purged.append((snapshots_before, evaluations_before))
+        self.purged.append((snapshots_before, evaluations_before, episodes_before))
         return {"spread_snapshots": 0}
 
 

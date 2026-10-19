@@ -9,6 +9,7 @@ from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 
+from nexus.domain.digest import DigestData
 from nexus.domain.episodes import OpportunityEpisode
 from nexus.domain.models import MarketInfo
 from nexus.domain.quarantine import RouteQuarantine
@@ -137,6 +138,31 @@ class IPaperRepository(ABC):
         """Latest snapshot, in-flight rebalances and running totals (``None`` = fresh)."""
 
 
+@dataclass(frozen=True, slots=True)
+class ExchangeMetadataStats:
+    """Metadata quality of one exchange after a refresh."""
+
+    exchange: str
+    markets: int
+    transfer_coverage_pct: int | None
+
+
+class IMetadataStatsRepository(ABC):
+    """Metadata refresh statistics."""
+
+    @abstractmethod
+    async def record(self, at_ms: int, stats: Sequence[ExchangeMetadataStats]) -> None:
+        """Store the stats of one refresh."""
+
+
+class IDigestRepository(ABC):
+    """Read-only aggregates for the daily digest."""
+
+    @abstractmethod
+    async def collect(self, since_ms: int, until_ms: int) -> DigestData:
+        """Aggregate the window ``[since_ms, until_ms)`` (portfolio values: latest state)."""
+
+
 class IAlertLogRepository(ABC):
     """Alert delivery log (idempotency)."""
 
@@ -184,6 +210,14 @@ class IRetentionRepository(ABC):
 
     @abstractmethod
     async def purge(
-        self, *, snapshots_before: datetime, evaluations_before: datetime
+        self,
+        *,
+        snapshots_before: datetime,
+        evaluations_before: datetime,
+        episodes_before: datetime,
     ) -> dict[str, int]:
-        """Delete old snapshots and non-profitable evaluations; returns counts per table."""
+        """Delete rows past their retention window; returns counts per table.
+
+        Paper trades and transfers are kept (portfolio totals are summed from them), and the
+        latest paper balance snapshot set always survives.
+        """

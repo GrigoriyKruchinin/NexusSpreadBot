@@ -292,3 +292,18 @@ class PaperBalanceSnapshotRow(Base):
     seed_amount: Mapped[Decimal | None] = mapped_column(Money)
     seed_price: Mapped[Decimal | None] = mapped_column(Money)
     price_usd: Mapped[Decimal | None] = mapped_column(Money)
+
+
+class ExchangeMetadataStatsRow(Base):
+    """Per-exchange metadata quality after each refresh (digest: transfer coverage)."""
+
+    __tablename__ = "exchange_metadata_stats"
+    __table_args__ = (
+        Index("ix_exchange_metadata_stats_exchange_captured_at", "exchange", "captured_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    exchange: Mapped[str] = mapped_column(String(32))
+    markets: Mapped[int] = mapped_column(Integer)
+    transfer_coverage_pct: Mapped[int | None] = mapped_column(Integer)

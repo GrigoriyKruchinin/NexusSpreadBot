@@ -267,8 +267,8 @@ real rebalancing stays manual.
   - no verified network.
 
 ### 1.5.8 Daily Telegram digest
-- [ ] Celery beat task at `DIGEST_TIME` (default `09:00`) in `DIGEST_TZ` (default `Europe/Moscow`), configurable; `DIGEST_ENABLED=true`.
-- [ ] Content for the last 24 h:
+- [x] Celery beat task at `DIGEST_TIME` (default `09:00`) in `DIGEST_TZ` (default `Europe/Moscow`), configurable; `DIGEST_ENABLED=true`.
+- [x] Content for the last 24 h:
   - episodes: total / verified / unverified / quarantined;
   - episodes that survived latency;
   - median / max duration;
@@ -277,8 +277,9 @@ real rebalancing stays manual.
   - quarantined routes;
   - exchange uptime;
   - transfer-status coverage per exchange.
-- [ ] HTML template (escaped, `<b>`, `<blockquote>`, separators), snapshot test; repository aggregate queries with integration tests.
-- [ ] Retention covers the new tables (`MaintenanceSettings`).
+- [x] HTML template (escaped, `<b>`, `<blockquote>`, separators), snapshot test; repository aggregate queries with integration tests.
+- [x] Retention covers the new tables (`MaintenanceSettings`): episodes/quarantine history (`MAINTENANCE_EPISODE_RETENTION_DAYS`, closed only), paper balance snapshots and metadata stats (snapshot retention; the latest paper set is kept). Paper trades/transfers are kept (portfolio totals).
+- [x] Transfer-status coverage persisted per metadata refresh (`exchange_metadata_stats`).
 
 ### 1.5.9 Coverage observability
 - [ ] Per-sweep log/metrics:

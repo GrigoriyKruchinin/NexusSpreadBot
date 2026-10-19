@@ -15,6 +15,7 @@ from nexus.config.groups import (
     AlertPolicySettings,
     CelerySettings,
     DatabaseSettings,
+    DigestSettings,
     EpisodeSettings,
     ExchangeCredentials,
     ExchangesSettings,
@@ -50,6 +51,7 @@ class SchedulerSettings(_RoleSettings):
 
     celery: CelerySettings
     maintenance: MaintenanceSettings
+    digest: DigestSettings
     logging: LoggingSettings
 
     @classmethod
@@ -58,6 +60,7 @@ class SchedulerSettings(_RoleSettings):
         return cls(
             celery=CelerySettings(),
             maintenance=MaintenanceSettings(),
+            digest=DigestSettings(),
             logging=LoggingSettings(),
         )
 

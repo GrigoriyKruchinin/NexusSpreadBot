@@ -25,10 +25,12 @@ from nexus.notifications.telegram import TelegramNotifier
 from nexus.persistence.db import create_engine, create_session_factory
 from nexus.persistence.repositories import (
     AlertLogRepository,
+    DigestRepository,
     EpisodeRepository,
     EvaluationRepository,
     ExchangeHealthRepository,
     MarketRepository,
+    MetadataStatsRepository,
     PaperRepository,
     QuarantineRepository,
     RetentionRepository,
@@ -42,6 +44,7 @@ from nexus.scanner.service import Repositories, Scanner, ScannerConfig
 from nexus.scanner.streams import OrderBookStreams
 from nexus.scanner.universe import UniverseFilter
 from nexus.services.alerts import AlertService
+from nexus.services.digest import DigestService
 from nexus.services.maintenance import RetentionService
 from nexus.simulation.portfolio import PaperConfig
 from nexus.workers.dispatch import CeleryAlertDispatcher
@@ -146,6 +149,7 @@ async def scanner_scope(settings: ScannerRoleSettings) -> AsyncIterator[Scanner]
                 snapshots=SnapshotRepository(sessions),
                 evaluations=EvaluationRepository(sessions),
                 health=ExchangeHealthRepository(sessions),
+                metadata_stats=MetadataStatsRepository(sessions),
             ),
             cooldowns=RedisCooldownStore(redis),
             heartbeat=RedisHeartbeat(redis, clock),
@@ -200,6 +204,20 @@ async def alert_service_scope(settings: AlertsWorkerSettings) -> AsyncIterator[A
             clock=SystemClock(),
             max_age_s=settings.telegram.alert_max_age_s,
             event_max_age_s=settings.telegram.event_max_age_s,
+        )
+    finally:
+        await notifier.close()
+        await engine.dispose()
+
+
+@asynccontextmanager
+async def digest_scope(settings: AlertsWorkerSettings) -> AsyncIterator[DigestService]:
+    """Digest service for one Celery task (read-only aggregates + Telegram)."""
+    engine = create_engine(settings.database, pooled=False)
+    notifier = TelegramNotifier(settings.telegram)
+    try:
+        yield DigestService(
+            DigestRepository(create_session_factory(engine)), notifier, SystemClock()
         )
     finally:
         await notifier.close()

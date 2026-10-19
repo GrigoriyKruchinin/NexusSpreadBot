@@ -50,9 +50,11 @@ from nexus.engine.transfer import select_transfer_route
 from nexus.interfaces.coordination import IAlertDispatcher, ICooldownStore, IHeartbeat
 from nexus.interfaces.market_data import BaseExchangeAdapter, ITradingFeeSource
 from nexus.interfaces.repositories import (
+    ExchangeMetadataStats,
     IEvaluationRepository,
     IExchangeHealthRepository,
     IMarketRepository,
+    IMetadataStatsRepository,
     ISnapshotRepository,
 )
 from nexus.scanner.episodes import EpisodeTracker
@@ -113,6 +115,7 @@ class Repositories:
     snapshots: ISnapshotRepository
     evaluations: IEvaluationRepository
     health: IExchangeHealthRepository
+    metadata_stats: IMetadataStatsRepository | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -314,7 +317,25 @@ class Scanner:
                 n: self._universe.transfer_coverage_pct(n) for n in self._adapters
             },
         )
+        await self._record_metadata_stats()
         return self._universe
+
+    async def _record_metadata_stats(self) -> None:
+        """Persist per-exchange market count and transfer coverage (daily digest)."""
+        if self._repos.metadata_stats is None:
+            return
+        stats = [
+            ExchangeMetadataStats(
+                exchange=name,
+                markets=len(self._universe.symbols_for(name)),
+                transfer_coverage_pct=self._universe.transfer_coverage_pct(name),
+            )
+            for name in sorted(self._adapters)
+        ]
+        try:
+            await self._repos.metadata_stats.record(self._clock.now_ms(), stats)
+        except Exception:
+            log.exception("metadata_stats_record_failed")
 
     # ------------------------------------------------------------------ sweep
 

@@ -116,7 +116,7 @@ def test_migrator_needs_only_database(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_scheduler_has_no_secrets_groups() -> None:
     settings = SchedulerSettings.load()  # no env at all is enough
-    assert set(SchedulerSettings.model_fields) == {"celery", "maintenance", "logging"}
+    assert set(SchedulerSettings.model_fields) == {"celery", "maintenance", "digest", "logging"}
     assert settings.maintenance.cleanup_interval_s > 0
 
 
@@ -270,3 +270,27 @@ def test_episode_gap_must_span_two_sweeps(monkeypatch: pytest.MonkeyPatch) -> No
         ScannerRoleSettings.load()
     monkeypatch.setenv("EPISODE_CLOSE_GAP_S", "62")
     assert ScannerRoleSettings.load().episodes.close_gap_s == 62
+
+
+@pytest.mark.parametrize(
+    ("env", "value"),
+    [("DIGEST_TIME", "9:00"), ("DIGEST_TIME", "24:00"), ("DIGEST_TZ", "Mars/Olympus")],
+)
+def test_digest_settings_validation(monkeypatch: pytest.MonkeyPatch, env: str, value: str) -> None:
+    from nexus.config.groups import DigestSettings
+
+    monkeypatch.setenv(env, value)
+    with pytest.raises(ValueError, match=env):
+        DigestSettings()
+
+
+def test_digest_settings_defaults() -> None:
+    from nexus.config.groups import DigestSettings
+
+    digest = DigestSettings()
+    assert (digest.enabled, digest.hour, digest.minute, digest.tz) == (
+        True,
+        9,
+        0,
+        "Europe/Moscow",
+    )

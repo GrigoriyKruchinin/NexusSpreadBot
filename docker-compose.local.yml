@@ -38,7 +38,13 @@ x-log-env: &log-env
 x-maintenance-env: &maintenance-env
   MAINTENANCE_SNAPSHOT_RETENTION_DAYS: ${MAINTENANCE_SNAPSHOT_RETENTION_DAYS:-}
   MAINTENANCE_EVALUATION_RETENTION_DAYS: ${MAINTENANCE_EVALUATION_RETENTION_DAYS:-}
+  MAINTENANCE_EPISODE_RETENTION_DAYS: ${MAINTENANCE_EPISODE_RETENTION_DAYS:-}
   MAINTENANCE_CLEANUP_INTERVAL_S: ${MAINTENANCE_CLEANUP_INTERVAL_S:-}
+
+x-digest-env: &digest-env
+  DIGEST_ENABLED: ${DIGEST_ENABLED:-}
+  DIGEST_TIME: ${DIGEST_TIME:-}
+  DIGEST_TZ: ${DIGEST_TZ:-}
 
 x-scanner-env: &scanner-env
   REDIS_URL: redis://redis:6379/0
@@ -202,7 +208,7 @@ services:
     command: ["celery", "-A", "nexus.workers.app:celery_app", "beat", "--loglevel", "INFO",
               "--schedule", "/tmp/celerybeat-schedule", "--pidfile", "/tmp/celerybeat.pid"]
     environment:
-      <<: [*celery-env, *log-env, *maintenance-env]
+      <<: [*celery-env, *log-env, *maintenance-env, *digest-env]
     depends_on:
       redis: {condition: service_healthy}
       worker-maintenance: {condition: service_healthy}

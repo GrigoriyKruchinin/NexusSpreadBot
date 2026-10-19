@@ -119,3 +119,43 @@ def test_send_opportunity_task_retries(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(RuntimeError, match="retry scheduled"):
         tasks.send_opportunity.run(1)
     assert retries == [4.0]
+
+
+def test_digest_beat_schedule_uses_local_time() -> None:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from nexus.config.groups import DigestSettings
+    from nexus.workers.app import TASK_SEND_DIGEST, create_celery_app
+
+    digest = DigestSettings(time="09:30", tz="Europe/Moscow")
+    app = create_celery_app(CelerySettings(), MaintenanceSettings(), digest)
+    entry = app.conf.beat_schedule["daily-digest"]
+    assert (entry["task"], entry["args"]) == (TASK_SEND_DIGEST, ["Europe/Moscow"])
+    schedule = entry["schedule"]
+    assert schedule.hour == {9}
+    assert schedule.minute == {30}
+    assert schedule.nowfun().tzinfo == ZoneInfo("Europe/Moscow")
+    assert isinstance(schedule.nowfun(), datetime)
+    disabled = create_celery_app(
+        CelerySettings(), MaintenanceSettings(), DigestSettings(enabled=False)
+    )
+    assert "daily-digest" not in disabled.conf.beat_schedule
+
+
+def test_send_digest_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    class _Digest:
+        async def send(self, tz: str) -> str:
+            calls.append(tz)
+            return "1"
+
+    @asynccontextmanager
+    async def scope(_: object) -> Any:
+        yield _Digest()
+
+    monkeypatch.setattr("nexus.container.digest_scope", scope)
+    monkeypatch.setattr(tasks, "_alerts_settings", lambda: object())
+    assert tasks.send_digest.apply(args=("UTC",)).get() == "sent"
+    assert calls == ["UTC"]

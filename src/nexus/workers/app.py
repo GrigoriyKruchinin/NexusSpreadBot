@@ -6,9 +6,14 @@ Beat:    ``celery -A nexus.workers.app:celery_app beat``.
 
 from __future__ import annotations
 
-from celery import Celery
+from datetime import datetime
+from typing import Any
+from zoneinfo import ZoneInfo
 
-from nexus.config.groups import CelerySettings, MaintenanceSettings
+from celery import Celery
+from celery.schedules import crontab
+
+from nexus.config.groups import CelerySettings, DigestSettings, MaintenanceSettings
 
 ALERTS_QUEUE = "alerts"
 MAINTENANCE_QUEUE = "maintenance"
@@ -16,15 +21,38 @@ MAINTENANCE_QUEUE = "maintenance"
 TASK_SEND_OPPORTUNITY = "nexus.alerts.send_opportunity"
 TASK_SEND_EVENT = "nexus.alerts.send_event"
 TASK_PURGE = "nexus.maintenance.purge"
+TASK_SEND_DIGEST = "nexus.alerts.send_digest"
+
+
+def digest_schedule(digest: DigestSettings) -> dict[str, Any]:
+    """Beat entry sending the digest daily at ``DIGEST_TIME`` in ``DIGEST_TZ``.
+
+    ``Any``: Celery beat entries are untyped dicts.
+    """
+    zone = ZoneInfo(digest.tz)
+    return {
+        "task": TASK_SEND_DIGEST,
+        "schedule": crontab(
+            minute=digest.minute, hour=digest.hour, nowfun=lambda: datetime.now(tz=zone)
+        ),
+        "args": [digest.tz],
+    }
 
 
 def create_celery_app(
     celery_settings: CelerySettings | None = None,
     maintenance_settings: MaintenanceSettings | None = None,
+    digest_settings: DigestSettings | None = None,
 ) -> Celery:
     """Build the Celery app with routing and the beat schedule."""
     settings = celery_settings or CelerySettings()
     maintenance = maintenance_settings or MaintenanceSettings()
+    digest = digest_settings or DigestSettings()
+    schedule: dict[str, Any] = {
+        "purge-old-rows": {"task": TASK_PURGE, "schedule": maintenance.cleanup_interval_s},
+    }
+    if digest.enabled:
+        schedule["daily-digest"] = digest_schedule(digest)
     app = Celery("nexus", broker=settings.broker_url.get_secret_value())
     app.conf.update(
         task_routes={
@@ -40,9 +68,7 @@ def create_celery_app(
         broker_connection_retry_on_startup=True,
         timezone=settings.timezone,
         enable_utc=True,
-        beat_schedule={
-            "purge-old-rows": {"task": TASK_PURGE, "schedule": maintenance.cleanup_interval_s},
-        },
+        beat_schedule=schedule,
         include=["nexus.workers.tasks"],
     )
     return app

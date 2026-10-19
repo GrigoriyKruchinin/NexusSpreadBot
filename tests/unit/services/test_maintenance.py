@@ -10,4 +10,6 @@ async def test_retention_windows() -> None:
     now = datetime(2026, 10, 18, tzinfo=UTC)
     settings = MaintenanceSettings(snapshot_retention_days=7, evaluation_retention_days=30)
     await RetentionService(repos, settings).purge(now)
-    assert repos.purged == [(now - timedelta(days=7), now - timedelta(days=30))]
+    assert repos.purged == [
+        (now - timedelta(days=7), now - timedelta(days=30), now - timedelta(days=90))
+    ]

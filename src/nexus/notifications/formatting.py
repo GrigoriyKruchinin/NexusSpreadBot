@@ -104,7 +104,8 @@ def fmt_duration(seconds: int) -> str:
     return f"{hours}h {minutes:02d}m"
 
 
-def _truncate(text: str) -> str:
+def truncate(text: str) -> str:
+    """Cut a message to Telegram's length limit."""
     if len(text) <= TELEGRAM_MAX_LENGTH:
         return text
     return text[: TELEGRAM_MAX_LENGTH - 1] + "…"
@@ -171,7 +172,7 @@ class OpportunityFormatter:
             f"{evaluation.sell_book_age_ms} ms\n"
             f"🕒 {fmt_time(evaluation.evaluated_at_ms)}</blockquote>",
         ]
-        return _truncate("\n".join(lines))
+        return truncate("\n".join(lines))
 
     @staticmethod
     def _transfer_cost(evaluation: SpreadEvaluation) -> str:
@@ -242,7 +243,7 @@ class SystemEventFormatter:
                 lines.append(f"  <i>{esc(route.note[:200])}</i>")
         if hidden := len(event.routes) - len(shown):
             lines.append(f"… and {hidden} more")
-        return _truncate("\n".join(lines))
+        return truncate("\n".join(lines))
 
     @staticmethod
     def _episode_closed(event: EpisodeClosed) -> str:
@@ -276,7 +277,7 @@ class SystemEventFormatter:
             )
             for e in event.exchanges
         )
-        return _truncate(
+        return truncate(
             "\n".join(
                 [
                     "🚀 <b>Nexus Spread Scanner started</b>",

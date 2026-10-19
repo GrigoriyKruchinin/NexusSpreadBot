@@ -45,6 +45,7 @@ async def sessions(
         await conn.execute(
             text(
                 "TRUNCATE alert_log, paper_trades, paper_rebalances, paper_balance_snapshots, "
+                "exchange_metadata_stats, "
                 "spread_evaluations, opportunity_episodes, route_quarantine, "
                 "spread_snapshots, "
                 "market_pairs, "

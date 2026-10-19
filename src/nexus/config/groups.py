@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from decimal import Decimal
 from typing import Literal, Self
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
@@ -312,11 +313,54 @@ class PaperSettings(NexusBaseSettings):
     taken this long after detection ("survived latency")."""
 
 
+class DigestSettings(NexusBaseSettings):
+    """Daily Telegram digest (``DIGEST_*``)."""
+
+    model_config = SettingsConfigDict(env_prefix="DIGEST_")
+
+    enabled: bool = True
+    time: str = "09:00"
+    """Local send time ``HH:MM`` in :attr:`tz`."""
+    tz: str = "Europe/Moscow"
+
+    @field_validator("time")
+    @classmethod
+    def _valid_time(cls, value: str) -> str:
+        match = re.fullmatch(r"([01]\d|2[0-3]):([0-5]\d)", value.strip())
+        if match is None:
+            msg = "DIGEST_TIME must be HH:MM (24h), e.g. 09:00"
+            raise ValueError(msg)
+        return match.group(0)
+
+    @field_validator("tz")
+    @classmethod
+    def _valid_tz(cls, value: str) -> str:
+        try:
+            ZoneInfo(value.strip())
+        except (ZoneInfoNotFoundError, ValueError):
+            msg = f"DIGEST_TZ is not a known IANA time zone: {value!r}"
+            raise ValueError(msg) from None
+        return value.strip()
+
+    @property
+    def hour(self) -> int:
+        """Send hour."""
+        return int(self.time[:2])
+
+    @property
+    def minute(self) -> int:
+        """Send minute."""
+        return int(self.time[3:])
+
+
 class MaintenanceSettings(NexusBaseSettings):
     """Housekeeping schedule & retention (``MAINTENANCE_*``)."""
 
     model_config = SettingsConfigDict(env_prefix="MAINTENANCE_")
 
     snapshot_retention_days: int = Field(default=7, ge=1)
+    """Spread snapshots, exchange health, metadata stats, old paper balance snapshots."""
     evaluation_retention_days: int = Field(default=30, ge=1)
+    episode_retention_days: int = Field(default=90, ge=1)
+    """Closed opportunity episodes and the quarantine history (digest analytics)."""
     cleanup_interval_s: int = Field(default=3_600, ge=60)

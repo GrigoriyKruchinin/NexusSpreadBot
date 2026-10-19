@@ -108,9 +108,19 @@ async def test_snapshots_health_and_retention(sessions: Sessions) -> None:
     )
 
     counts = await RetentionRepository(sessions).purge(
-        snapshots_before=now - timedelta(days=7), evaluations_before=now - timedelta(days=30)
+        snapshots_before=now - timedelta(days=7),
+        evaluations_before=now - timedelta(days=30),
+        episodes_before=now - timedelta(days=90),
     )
-    assert counts == {"spread_snapshots": 1, "exchange_health": 0, "spread_evaluations": 1}
+    assert counts == {
+        "spread_snapshots": 1,
+        "exchange_health": 0,
+        "spread_evaluations": 1,
+        "paper_balance_snapshots": 0,
+        "exchange_metadata_stats": 0,
+        "opportunity_episodes": 0,
+        "route_quarantine": 0,
+    }
     async with sessions() as session:
         assert await session.scalar(select(func.count()).select_from(SpreadSnapshotRow)) == 2
         assert await session.scalar(select(func.count()).select_from(ExchangeHealthRow)) == 1

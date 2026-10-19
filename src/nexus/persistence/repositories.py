@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import statistics
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -12,6 +13,13 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from nexus.domain.digest import (
+    DigestData,
+    EpisodeStats,
+    EpisodeSummary,
+    PaperStats,
+    QuarantineSummary,
+)
 from nexus.domain.episodes import EpisodeCloseReason, OpportunityEpisode
 from nexus.domain.models import MarketInfo
 from nexus.domain.quarantine import RouteQuarantine
@@ -25,11 +33,14 @@ from nexus.domain.spread import (
 from nexus.engine.candidates import RouteQuote
 from nexus.interfaces.repositories import (
     AlertDeliveryStatus,
+    ExchangeMetadataStats,
     IAlertLogRepository,
+    IDigestRepository,
     IEpisodeRepository,
     IEvaluationRepository,
     IExchangeHealthRepository,
     IMarketRepository,
+    IMetadataStatsRepository,
     IPaperRepository,
     IQuarantineRepository,
     IRetentionRepository,
@@ -40,6 +51,7 @@ from nexus.interfaces.repositories import (
 from nexus.persistence.models import (
     AlertLogRow,
     ExchangeHealthRow,
+    ExchangeMetadataStatsRow,
     MarketPairRow,
     OpportunityEpisodeRow,
     PaperBalanceSnapshotRow,
@@ -621,14 +633,295 @@ class ExchangeHealthRepository(_Repository, IExchangeHealthRepository):
             )
 
 
+class MetadataStatsRepository(_Repository, IMetadataStatsRepository):
+    """Stores per-refresh metadata statistics."""
+
+    async def record(self, at_ms: int, stats: Sequence[ExchangeMetadataStats]) -> None:
+        """Store the stats of one refresh."""
+        if not stats:
+            return
+        captured_at = ms_to_datetime(at_ms)
+        async with self._sessions.begin() as session:
+            session.add_all(
+                ExchangeMetadataStatsRow(
+                    captured_at=captured_at,
+                    exchange=s.exchange,
+                    markets=s.markets,
+                    transfer_coverage_pct=s.transfer_coverage_pct,
+                )
+                for s in stats
+            )
+
+
+_TOP_EPISODES = 5
+_QUARANTINES_LISTED = 10
+
+
+class DigestRepository(_Repository, IDigestRepository):
+    """Read-only aggregates for the daily digest."""
+
+    async def collect(self, since_ms: int, until_ms: int) -> DigestData:
+        """Aggregate the window ``[since_ms, until_ms)``."""
+        since, until = ms_to_datetime(since_ms), ms_to_datetime(until_ms)
+        async with self._sessions() as session:
+            episodes = await self._episodes(session, since, until)
+            unverified = await session.scalar(
+                select(func.count()).where(
+                    SpreadEvaluationRow.evaluated_at >= since,
+                    SpreadEvaluationRow.evaluated_at < until,
+                    SpreadEvaluationRow.status == EvaluationStatus.TRANSFER_UNVERIFIED.value,
+                )
+            )
+            paper = await self._paper(session, since, until)
+            quarantines, active = await self._quarantines(session, since, until)
+            uptime = await self._uptime(session, since, until)
+            coverage = await self._coverage(session, until)
+        return DigestData(
+            window_start_ms=since_ms,
+            window_end_ms=until_ms,
+            episodes=episodes,
+            paper=paper,
+            quarantines=quarantines,
+            active_quarantines=active,
+            uptime_pct=uptime,
+            coverage_pct=coverage,
+            unverified_evaluations=int(unverified or 0),
+        )
+
+    @staticmethod
+    async def _episodes(session: AsyncSession, since: datetime, until: datetime) -> EpisodeStats:
+        rows = (
+            await session.scalars(
+                select(OpportunityEpisodeRow).where(
+                    OpportunityEpisodeRow.opened_at >= since,
+                    OpportunityEpisodeRow.opened_at < until,
+                )
+            )
+        ).all()
+        if not rows:
+            return EpisodeStats()
+        quarantined = [r for r in rows if r.close_reason == EpisodeCloseReason.QUARANTINED.value]
+        rest = [r for r in rows if r.close_reason != EpisodeCloseReason.QUARANTINED.value]
+        verified = sum(1 for r in rest if r.transfer_status == TransferStatus.VERIFIED.value)
+        durations = sorted(int((r.last_seen_at - r.opened_at).total_seconds()) for r in rows)
+        top = sorted(rows, key=lambda r: r.peak_net_usd, reverse=True)[:_TOP_EPISODES]
+        return EpisodeStats(
+            total=len(rows),
+            verified=verified,
+            unverified=len(rest) - verified,
+            quarantined=len(quarantined),
+            survived_latency=sum(1 for r in rows if r.survived_latency is True),
+            latency_checked=sum(1 for r in rows if r.survived_latency is not None),
+            median_duration_s=int(statistics.median(durations)),
+            max_duration_s=durations[-1],
+            top=tuple(
+                EpisodeSummary(
+                    symbol=r.symbol,
+                    buy_exchange=r.buy_exchange,
+                    sell_exchange=r.sell_exchange,
+                    peak_net_usd=r.peak_net_usd,
+                    peak_net_pct=r.peak_net_pct,
+                    duration_s=int((r.last_seen_at - r.opened_at).total_seconds()),
+                    survived_latency=r.survived_latency,
+                )
+                for r in top
+            ),
+        )
+
+    @staticmethod
+    async def _paper(session: AsyncSession, since: datetime, until: datetime) -> PaperStats | None:
+        latest = await session.scalar(
+            select(func.max(PaperBalanceSnapshotRow.captured_at)).where(
+                PaperBalanceSnapshotRow.captured_at < until
+            )
+        )
+        if latest is None:
+            return None
+        holdings = (
+            await session.scalars(
+                select(PaperBalanceSnapshotRow).where(PaperBalanceSnapshotRow.captured_at == latest)
+            )
+        ).all()
+        prices = {h.asset: h.price_usd for h in holdings if h.price_usd is not None}
+        capital = sum(
+            (h.seed_amount * h.seed_price for h in holdings if h.seed_amount and h.seed_price),
+            Decimal(0),
+        )
+        equity = sum(
+            (
+                h.amount * (h.price_usd if h.price_usd is not None else h.seed_price or 0)
+                for h in holdings
+            ),
+            Decimal(0),
+        )
+        in_flight = (
+            await session.scalars(
+                select(PaperRebalanceRow).where(
+                    PaperRebalanceRow.status == RebalanceStatus.IN_FLIGHT.value
+                )
+            )
+        ).all()
+        equity += sum(
+            ((r.amount - r.fee) * (prices.get(r.asset) or 0) for r in in_flight), Decimal(0)
+        )
+        window_trades = (
+            PaperTradeRow.executed_at >= since,
+            PaperTradeRow.executed_at < until,
+        )
+        trades = await session.scalar(
+            select(func.count()).where(*window_trades, PaperTradeRow.executed.is_(True))
+        )
+        skipped = {
+            str(reason): int(count)
+            for reason, count in (
+                await session.execute(
+                    select(PaperTradeRow.skip_reason, func.count())
+                    .where(*window_trades, PaperTradeRow.executed.is_(False))
+                    .group_by(PaperTradeRow.skip_reason)
+                )
+            ).all()
+        }
+        realized = await session.scalar(
+            select(func.coalesce(func.sum(PaperTradeRow.net_usd), 0)).where(
+                *window_trades, PaperTradeRow.executed.is_(True)
+            )
+        )
+        window_rebalances = (
+            PaperRebalanceRow.started_at >= since,
+            PaperRebalanceRow.started_at < until,
+        )
+        moved = PaperRebalanceRow.status != RebalanceStatus.BLOCKED.value
+        rebalance_usd = await session.scalar(
+            select(func.coalesce(func.sum(PaperRebalanceRow.fee_usd), 0)).where(
+                *window_rebalances, moved
+            )
+        )
+        rebalances = await session.scalar(select(func.count()).where(*window_rebalances, moved))
+        blocked = await session.scalar(
+            select(func.count()).where(
+                *window_rebalances, PaperRebalanceRow.status == RebalanceStatus.BLOCKED.value
+            )
+        )
+        realized_total = await session.scalar(
+            select(func.coalesce(func.sum(PaperTradeRow.net_usd), 0)).where(
+                PaperTradeRow.executed.is_(True)
+            )
+        )
+        rebalance_total = await session.scalar(
+            select(func.coalesce(func.sum(PaperRebalanceRow.fee_usd), 0)).where(moved)
+        )
+        return PaperStats(
+            trades=int(trades or 0),
+            skipped=skipped,
+            realized_usd=Decimal(realized or 0),
+            rebalance_usd=Decimal(rebalance_usd or 0),
+            rebalances=int(rebalances or 0),
+            blocked_rebalances=int(blocked or 0),
+            capital_usd=capital,
+            equity_usd=equity,
+            realized_total_usd=Decimal(realized_total or 0),
+            rebalance_total_usd=Decimal(rebalance_total or 0),
+        )
+
+    @staticmethod
+    async def _quarantines(
+        session: AsyncSession, since: datetime, until: datetime
+    ) -> tuple[tuple[QuarantineSummary, ...], int]:
+        started = (
+            await session.scalars(
+                select(RouteQuarantineRow)
+                .where(
+                    RouteQuarantineRow.started_at >= since, RouteQuarantineRow.started_at < until
+                )
+                .order_by(RouteQuarantineRow.started_at)
+            )
+        ).all()
+        active = await session.scalar(
+            select(func.count()).where(
+                RouteQuarantineRow.started_at < until,
+                RouteQuarantineRow.expires_at > until,
+                RouteQuarantineRow.lifted_at.is_(None),
+            )
+        )
+        listed = tuple(
+            QuarantineSummary(r.symbol, r.buy_exchange, r.sell_exchange, r.reason) for r in started
+        )
+        return listed, int(active or 0)
+
+    @staticmethod
+    async def _uptime(
+        session: AsyncSession, since: datetime, until: datetime
+    ) -> dict[str, int | None]:
+        rows = await session.execute(
+            select(
+                ExchangeHealthRow.exchange,
+                func.count(),
+                func.count().filter(ExchangeHealthRow.ok.is_(True)),
+            )
+            .where(ExchangeHealthRow.checked_at >= since, ExchangeHealthRow.checked_at < until)
+            .group_by(ExchangeHealthRow.exchange)
+        )
+        return {
+            str(exchange): int(ok) * 100 // int(total) if total else None
+            for exchange, total, ok in rows.all()
+        }
+
+    @staticmethod
+    async def _coverage(session: AsyncSession, until: datetime) -> dict[str, int | None]:
+        latest = (
+            select(
+                ExchangeMetadataStatsRow.exchange,
+                func.max(ExchangeMetadataStatsRow.captured_at).label("at"),
+            )
+            .where(ExchangeMetadataStatsRow.captured_at < until)
+            .group_by(ExchangeMetadataStatsRow.exchange)
+            .subquery()
+        )
+        rows = await session.execute(
+            select(
+                ExchangeMetadataStatsRow.exchange, ExchangeMetadataStatsRow.transfer_coverage_pct
+            ).join(
+                latest,
+                (ExchangeMetadataStatsRow.exchange == latest.c.exchange)
+                & (ExchangeMetadataStatsRow.captured_at == latest.c.at),
+            )
+        )
+        return {str(exchange): pct for exchange, pct in rows.all()}
+
+
 class RetentionRepository(_Repository, IRetentionRepository):
     """Deletes old analytics rows; profitable evaluations are kept indefinitely."""
 
     async def purge(
-        self, *, snapshots_before: datetime, evaluations_before: datetime
+        self,
+        *,
+        snapshots_before: datetime,
+        evaluations_before: datetime,
+        episodes_before: datetime,
     ) -> dict[str, int]:
-        """Delete old snapshots/health rows and non-profitable evaluations."""
+        """Delete rows past their retention window (see the interface for what is kept)."""
         async with self._sessions.begin() as session:
+            latest_paper = select(func.max(PaperBalanceSnapshotRow.captured_at)).scalar_subquery()
+            paper_snapshots = await session.execute(
+                delete(PaperBalanceSnapshotRow).where(
+                    PaperBalanceSnapshotRow.captured_at < snapshots_before,
+                    PaperBalanceSnapshotRow.captured_at < latest_paper,
+                )
+            )
+            metadata_stats = await session.execute(
+                delete(ExchangeMetadataStatsRow).where(
+                    ExchangeMetadataStatsRow.captured_at < snapshots_before
+                )
+            )
+            episodes = await session.execute(
+                delete(OpportunityEpisodeRow).where(
+                    OpportunityEpisodeRow.closed_at.is_not(None),
+                    OpportunityEpisodeRow.closed_at < episodes_before,
+                )
+            )
+            quarantines = await session.execute(
+                delete(RouteQuarantineRow).where(RouteQuarantineRow.expires_at < episodes_before)
+            )
             snapshots = await session.execute(
                 delete(SpreadSnapshotRow).where(SpreadSnapshotRow.captured_at < snapshots_before)
             )
@@ -645,6 +938,10 @@ class RetentionRepository(_Repository, IRetentionRepository):
             "spread_snapshots": _rowcount(snapshots),
             "exchange_health": _rowcount(health),
             "spread_evaluations": _rowcount(evaluations),
+            "paper_balance_snapshots": _rowcount(paper_snapshots),
+            "exchange_metadata_stats": _rowcount(metadata_stats),
+            "opportunity_episodes": _rowcount(episodes),
+            "route_quarantine": _rowcount(quarantines),
         }
 
 
