@@ -228,3 +228,67 @@ class RouteQuarantineRow(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     lifted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PaperTradeRow(Base):
+    """A simulated trade (executed or skipped with a reason)."""
+
+    __tablename__ = "paper_trades"
+    __table_args__ = (Index("ix_paper_trades_executed_at", "executed_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    executed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    episode_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("opportunity_episodes.id", ondelete="SET NULL")
+    )
+    symbol: Mapped[str] = mapped_column(String(64))
+    base: Mapped[str] = mapped_column(String(32))
+    buy_exchange: Mapped[str] = mapped_column(String(32))
+    sell_exchange: Mapped[str] = mapped_column(String(32))
+    executed: Mapped[bool] = mapped_column(Boolean)
+    skip_reason: Mapped[str | None] = mapped_column(String(32))
+    cost_quote: Mapped[Decimal | None] = mapped_column(Money)
+    proceeds_quote: Mapped[Decimal | None] = mapped_column(Money)
+    base_bought: Mapped[Decimal | None] = mapped_column(Money)
+    base_sold: Mapped[Decimal | None] = mapped_column(Money)
+    net_usd: Mapped[Decimal | None] = mapped_column(Money)
+    net_pct: Mapped[Decimal | None] = mapped_column(Money)
+
+
+class PaperRebalanceRow(Base):
+    """A virtual inventory transfer (simulation only - nothing is ever transferred)."""
+
+    __tablename__ = "paper_rebalances"
+    __table_args__ = (
+        Index("ix_paper_rebalances_started_at", "started_at"),
+        Index("ix_paper_rebalances_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    asset: Mapped[str] = mapped_column(String(32))
+    from_exchange: Mapped[str] = mapped_column(String(32))
+    to_exchange: Mapped[str] = mapped_column(String(32))
+    amount: Mapped[Decimal] = mapped_column(Money)
+    fee: Mapped[Decimal] = mapped_column(Money)
+    fee_usd: Mapped[Decimal] = mapped_column(Money)
+    network: Mapped[str | None] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16))
+    note: Mapped[str] = mapped_column(Text, default="")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    arrives_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PaperBalanceSnapshotRow(Base):
+    """Paper holdings of one venue at a point in time (the latest set restores the state)."""
+
+    __tablename__ = "paper_balance_snapshots"
+    __table_args__ = (Index("ix_paper_balance_snapshots_captured_at", "captured_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    exchange: Mapped[str] = mapped_column(String(32))
+    asset: Mapped[str] = mapped_column(String(32))
+    amount: Mapped[Decimal] = mapped_column(Money)
+    seed_amount: Mapped[Decimal | None] = mapped_column(Money)
+    seed_price: Mapped[Decimal | None] = mapped_column(Money)
+    price_usd: Mapped[Decimal | None] = mapped_column(Money)

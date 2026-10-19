@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -29,19 +30,26 @@ from nexus.interfaces.repositories import (
     IEvaluationRepository,
     IExchangeHealthRepository,
     IMarketRepository,
+    IPaperRepository,
     IQuarantineRepository,
     IRetentionRepository,
     ISnapshotRepository,
+    PaperHolding,
+    PaperState,
 )
 from nexus.persistence.models import (
     AlertLogRow,
     ExchangeHealthRow,
     MarketPairRow,
     OpportunityEpisodeRow,
+    PaperBalanceSnapshotRow,
+    PaperRebalanceRow,
+    PaperTradeRow,
     RouteQuarantineRow,
     SpreadEvaluationRow,
     SpreadSnapshotRow,
 )
+from nexus.simulation.portfolio import Rebalance, RebalanceStatus, Seed, TradeOutcome
 
 Sessions = async_sessionmaker[AsyncSession]
 
@@ -390,6 +398,147 @@ class QuarantineRepository(_Repository, IQuarantineRepository):
                 )
                 .values(lifted_at=at)
             )
+
+
+def _trade_row(outcome: TradeOutcome, episode_id: int | None) -> PaperTradeRow:
+    bd = outcome.breakdown if outcome.executed else None
+    return PaperTradeRow(
+        executed_at=ms_to_datetime(outcome.at_ms),
+        episode_id=episode_id,
+        symbol=outcome.symbol,
+        base=outcome.base,
+        buy_exchange=outcome.buy_exchange,
+        sell_exchange=outcome.sell_exchange,
+        executed=outcome.executed,
+        skip_reason=outcome.skip_reason.value if outcome.skip_reason else None,
+        cost_quote=bd.cost_quote if bd else None,
+        proceeds_quote=bd.proceeds_quote if bd else None,
+        base_bought=bd.base_bought if bd else None,
+        base_sold=bd.base_sold if bd else None,
+        net_usd=bd.net_profit_usd if bd else None,
+        net_pct=bd.net_profit_pct if bd else None,
+    )
+
+
+def _rebalance_values(rebalance: Rebalance) -> dict[str, Any]:
+    return {
+        "asset": rebalance.asset,
+        "from_exchange": rebalance.from_exchange,
+        "to_exchange": rebalance.to_exchange,
+        "amount": rebalance.amount,
+        "fee": rebalance.fee,
+        "fee_usd": rebalance.fee_usd,
+        "network": rebalance.network,
+        "status": rebalance.status.value,
+        "note": rebalance.note[:2000],
+        "started_at": ms_to_datetime(rebalance.started_at_ms),
+        "arrives_at": ms_to_datetime(rebalance.arrives_at_ms),
+    }
+
+
+def _row_to_rebalance(row: PaperRebalanceRow) -> Rebalance:
+    return Rebalance(
+        asset=row.asset,
+        from_exchange=row.from_exchange,
+        to_exchange=row.to_exchange,
+        amount=row.amount,
+        fee=row.fee,
+        fee_usd=row.fee_usd,
+        network=row.network,
+        started_at_ms=datetime_to_ms(row.started_at),
+        arrives_at_ms=datetime_to_ms(row.arrives_at),
+        status=RebalanceStatus(row.status),
+        note=row.note or "",
+        id=row.id,
+    )
+
+
+class PaperRepository(_Repository, IPaperRepository):
+    """Paper trades, virtual rebalances and balance snapshots."""
+
+    async def commit(
+        self,
+        *,
+        at_ms: int,
+        trades: Sequence[tuple[TradeOutcome, int | None]],
+        rebalances: Sequence[Rebalance],
+        holdings: Sequence[PaperHolding],
+    ) -> list[Rebalance]:
+        """One transaction: a crash can never persist a transfer without its balances."""
+        stored: list[Rebalance] = []
+        async with self._sessions.begin() as session:
+            session.add_all(_trade_row(outcome, episode_id) for outcome, episode_id in trades)
+            for rebalance in rebalances:
+                if rebalance.id is None:
+                    row = PaperRebalanceRow(**_rebalance_values(rebalance))
+                    session.add(row)
+                    await session.flush()
+                    stored.append(replace(rebalance, id=row.id))
+                else:
+                    await session.execute(
+                        update(PaperRebalanceRow)
+                        .where(PaperRebalanceRow.id == rebalance.id)
+                        .values(status=rebalance.status.value)
+                    )
+                    stored.append(rebalance)
+            captured_at = ms_to_datetime(at_ms)
+            session.add_all(
+                PaperBalanceSnapshotRow(
+                    captured_at=captured_at,
+                    exchange=h.exchange,
+                    asset=h.asset,
+                    amount=h.amount,
+                    seed_amount=h.seed.amount if h.seed else None,
+                    seed_price=h.seed.price if h.seed else None,
+                    price_usd=h.price_usd,
+                )
+                for h in holdings
+            )
+        return stored
+
+    async def load_state(self) -> PaperState | None:
+        """Latest snapshot set + open transfers + totals from the trade/rebalance history."""
+        async with self._sessions() as session:
+            latest = await session.scalar(select(func.max(PaperBalanceSnapshotRow.captured_at)))
+            if latest is None:
+                return None
+            rows = await session.scalars(
+                select(PaperBalanceSnapshotRow).where(PaperBalanceSnapshotRow.captured_at == latest)
+            )
+            holdings = [
+                PaperHolding(
+                    exchange=r.exchange,
+                    asset=r.asset,
+                    amount=r.amount,
+                    seed=Seed(r.seed_amount, r.seed_price)
+                    if r.seed_amount is not None and r.seed_price is not None
+                    else None,
+                    price_usd=r.price_usd,
+                )
+                for r in rows
+            ]
+            open_rows = await session.scalars(
+                select(PaperRebalanceRow).where(
+                    PaperRebalanceRow.status == RebalanceStatus.IN_FLIGHT.value
+                )
+            )
+            in_flight = [_row_to_rebalance(r) for r in open_rows]
+            realized = await session.scalar(
+                select(func.coalesce(func.sum(PaperTradeRow.net_usd), 0)).where(
+                    PaperTradeRow.executed.is_(True)
+                )
+            )
+            costs = await session.scalar(
+                select(func.coalesce(func.sum(PaperRebalanceRow.fee_usd), 0)).where(
+                    PaperRebalanceRow.status != RebalanceStatus.BLOCKED.value
+                )
+            )
+        return PaperState(
+            holdings=holdings,
+            in_flight=in_flight,
+            realized=Decimal(realized or 0),
+            rebalance_costs=Decimal(costs or 0),
+        )
 
 
 class AlertLogRepository(_Repository, IAlertLogRepository):

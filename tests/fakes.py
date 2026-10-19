@@ -27,10 +27,14 @@ from nexus.interfaces.repositories import (
     IEvaluationRepository,
     IExchangeHealthRepository,
     IMarketRepository,
+    IPaperRepository,
     IQuarantineRepository,
     IRetentionRepository,
     ISnapshotRepository,
+    PaperHolding,
+    PaperState,
 )
+from nexus.simulation.portfolio import Rebalance, RebalanceStatus, TradeOutcome
 
 
 @dataclass
@@ -293,3 +297,47 @@ class MemoryQuarantine(IQuarantineStore, IQuarantineRepository):
 
     async def record_lift(self, route_key: str, at_ms: int) -> None:
         self.lifted.append((route_key, at_ms))
+
+
+class MemoryPaper(IPaperRepository):
+    """Paper records in memory (``commit`` keeps the same atomic shape as Postgres)."""
+
+    def __init__(self) -> None:
+        self.trades: list[tuple[TradeOutcome, int | None]] = []
+        self.rebalances: dict[int, Rebalance] = {}
+        self.snapshots: list[tuple[int, list[PaperHolding]]] = []
+        self.fail_next = False
+
+    async def commit(
+        self,
+        *,
+        at_ms: int,
+        trades: Sequence[tuple[TradeOutcome, int | None]],
+        rebalances: Sequence[Rebalance],
+        holdings: Sequence[PaperHolding],
+    ) -> list[Rebalance]:
+        if self.fail_next:
+            self.fail_next = False
+            raise ConnectionError("db down")
+        self.trades.extend(trades)
+        stored = []
+        for rebalance in rebalances:
+            if rebalance.id is None:
+                rebalance = replace(rebalance, id=len(self.rebalances) + 1)
+            self.rebalances[rebalance.id] = rebalance  # type: ignore[index]
+            stored.append(rebalance)
+        self.snapshots.append((at_ms, list(holdings)))
+        return stored
+
+    async def load_state(self) -> PaperState | None:
+        if not self.snapshots:
+            return None
+        executed = [t for t, _ in self.trades if t.executed]
+        return PaperState(
+            holdings=self.snapshots[-1][1],
+            in_flight=[
+                r for r in self.rebalances.values() if r.status is RebalanceStatus.IN_FLIGHT
+            ],
+            realized=sum((t.net_usd for t in executed), D(0)),
+            rebalance_costs=sum((r.fee_usd for r in self.rebalances.values()), D(0)),
+        )

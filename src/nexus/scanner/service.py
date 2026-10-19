@@ -57,6 +57,7 @@ from nexus.interfaces.repositories import (
 )
 from nexus.scanner.episodes import EpisodeTracker
 from nexus.scanner.health import ExchangeHealthTracker
+from nexus.scanner.paper import PaperTrader
 from nexus.scanner.quarantine import QuarantineManager
 from nexus.scanner.streams import OrderBookStreams
 from nexus.scanner.universe import MarketUniverse, UniverseFilter
@@ -150,6 +151,7 @@ class Scanner:
         streams: OrderBookStreams | None = None,
         episodes: EpisodeTracker | None = None,
         quarantine: QuarantineManager | None = None,
+        paper: PaperTrader | None = None,
     ) -> None:
         self._adapters = dict(adapters)
         self._authenticated = dict(authenticated)
@@ -167,6 +169,7 @@ class Scanner:
         self._streams = streams
         self._episodes = episodes
         self._quarantine = quarantine
+        self._paper = paper
         self._new_quarantines: list[RouteQuarantine] = []
         self._parked_at: dict[str, int] = {}
         """Last stored ticker-level record per quarantined route (rate limit)."""
@@ -198,6 +201,14 @@ class Scanner:
                 return
             if self._episodes is not None:
                 await self._announce_closed(await self._episodes.start())
+            if self._paper is not None:
+                try:
+                    await self._paper.start()
+                except Exception:
+                    # Never start a fresh portfolio on top of existing history: totals and
+                    # open transfers would be mixed. Paper trading is off for this run.
+                    log.exception("paper_resume_failed_disabled")
+                    self._paper = None
             await self._announce_start()
             last_refresh = time.monotonic()
             while not stop.is_set():
@@ -310,6 +321,8 @@ class Scanner:
     async def sweep(self) -> SweepResult:
         """One scanning iteration."""
         tickers = await self._fetch_all_tickers()
+        if self._paper is not None:
+            self._paper.mark_prices(tickers, self._universe.markets)
         routes = self._finder.rank_routes(tickers, self._universe.markets)
         if self._config.snapshot_top_k and routes:
             await self._repos.snapshots.add_snapshots(
@@ -344,6 +357,11 @@ class Scanner:
             else:
                 sent = await self._alert_episode(evaluation_id, evaluation, episode_id)
             alerts += sent
+        if self._paper is not None:
+            try:
+                await self._paper.on_sweep(self._asset_transfer)
+            except Exception:
+                log.exception("paper_sweep_failed")
         if len(tickers) >= MIN_LIVE_EXCHANGES:
             # A sweep with fewer than two live venues cannot find routes: stay "unhealthy".
             await self._heartbeat.beat(HEARTBEAT_SERVICE, self._config.heartbeat_ttl_s)
@@ -380,9 +398,7 @@ class Scanner:
         await self._announce_closed(await self._episodes.close_expired())
         observed = await self._episodes.observe(evaluations)
         for episode in observed.opened:
-            task = asyncio.create_task(self._check_latency(episode))
-            self._latency_checks.add(task)
-            task.add_done_callback(self._latency_checks.discard)
+            self._spawn(self._check_latency(episode))
         return observed.episode_ids
 
     # ------------------------------------------------------------------ quarantine
@@ -618,6 +634,8 @@ class Scanner:
             await self._episodes.update(episode.mark_alerted(self._clock.now_ms(), net, kind))
         except Exception:  # the Redis dedup key still prevents a duplicate alert
             log.exception("episode_alert_mark_failed", episode_id=episode_id)
+        if self._paper is not None:
+            self._spawn(self._paper_trade(episode_id, evaluation))
         log.info(
             "opportunity_alerted",
             route=evaluation.route_key,
@@ -627,6 +645,48 @@ class Scanner:
             evaluation_id=evaluation_id,
         )
         return True
+
+    def _spawn(self, work: Coroutine[Any, Any, None]) -> None:
+        """Background task bound to the scanner's lifetime (cancelled on shutdown)."""
+        task = asyncio.create_task(work)
+        self._latency_checks.add(task)
+        task.add_done_callback(self._latency_checks.discard)
+
+    async def _paper_trade(self, episode_id: int, evaluation: SpreadEvaluation) -> None:
+        """Execute the alert on paper, on REST books taken after the simulated latency."""
+        if self._paper is None:  # pragma: no cover - only scheduled with a paper trader
+            return
+        try:
+            await asyncio.sleep(self._config.latency_check_ms / 1000)
+            symbol = evaluation.symbol
+            buy, sell = await asyncio.gather(
+                self._fetch_book(evaluation.buy_exchange, symbol, allow_stream=False),
+                self._fetch_book(evaluation.sell_exchange, symbol, allow_stream=False),
+            )
+            await self._paper.execute(
+                episode_id=episode_id,
+                symbol=symbol,
+                base=evaluation.base,
+                buy_book=buy,
+                sell_book=sell,
+                buy_market=self._universe.market(evaluation.buy_exchange, symbol),
+                sell_market=self._universe.market(evaluation.sell_exchange, symbol),
+                transfer=self._route_transfer(
+                    symbol, evaluation.buy_exchange, evaluation.sell_exchange
+                ),
+                network_quote=self._asset_transfer,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("paper_trade_failed", route=evaluation.route_key)
+
+    def _asset_transfer(self, asset: str, from_exchange: str, to_exchange: str) -> TransferQuote:
+        """Cheapest verified path of ``asset`` between two venues (read-only metadata)."""
+        return select_transfer_route(
+            self._universe.transfer_info(from_exchange, asset),
+            self._universe.transfer_info(to_exchange, asset),
+        )
 
     async def _check_latency(self, episode: OpportunityEpisode) -> None:
         """Did the opportunity survive the simulated execution latency (REST books)?"""

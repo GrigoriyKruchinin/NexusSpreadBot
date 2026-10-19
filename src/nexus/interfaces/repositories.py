@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
 
 from nexus.domain.episodes import OpportunityEpisode
@@ -12,6 +14,7 @@ from nexus.domain.models import MarketInfo
 from nexus.domain.quarantine import RouteQuarantine
 from nexus.domain.spread import SpreadEvaluation
 from nexus.engine.candidates import RouteQuote
+from nexus.simulation.portfolio import Rebalance, Seed, TradeOutcome
 
 
 class AlertDeliveryStatus(StrEnum):
@@ -91,6 +94,47 @@ class IQuarantineRepository(ABC):
     @abstractmethod
     async def record_lift(self, route_key: str, at_ms: int) -> None:
         """Mark the route's unlifted, unexpired quarantine as lifted early at ``at_ms``."""
+
+
+@dataclass(frozen=True, slots=True)
+class PaperHolding:
+    """One venue of a paper balance snapshot."""
+
+    exchange: str
+    asset: str
+    amount: Decimal
+    seed: Seed | None
+    price_usd: Decimal | None
+
+
+@dataclass(frozen=True, slots=True)
+class PaperState:
+    """Everything needed to resume the paper portfolio after a restart."""
+
+    holdings: list[PaperHolding]
+    in_flight: list[Rebalance]
+    realized: Decimal
+    rebalance_costs: Decimal
+
+
+class IPaperRepository(ABC):
+    """Paper trading records."""
+
+    @abstractmethod
+    async def commit(
+        self,
+        *,
+        at_ms: int,
+        trades: Sequence[tuple[TradeOutcome, int | None]],
+        rebalances: Sequence[Rebalance],
+        holdings: Sequence[PaperHolding],
+    ) -> list[Rebalance]:
+        """Atomically store trades (with episode ids), rebalance inserts/updates and a full
+        balance snapshot; returns the rebalances with their ids."""
+
+    @abstractmethod
+    async def load_state(self) -> PaperState | None:
+        """Latest snapshot, in-flight rebalances and running totals (``None`` = fresh)."""
 
 
 class IAlertLogRepository(ABC):

@@ -297,6 +297,16 @@ class PaperSettings(NexusBaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="PAPER_")
 
+    enabled: bool = True
+    """Simulate trades and inventory on every alert (no exchange access, nothing moves)."""
+    usdt_per_exchange: Decimal = Field(default=Decimal(1_000), gt=0)
+    coin_per_route_usd: Decimal = Field(default=Decimal(1_000), gt=0)
+    """Virtual coin inventory seeded on the sell venue at the first-seen mid price."""
+    trade_notional_usd: Decimal = Field(default=Decimal(1_000), gt=0)
+    rebalance_threshold_pct: Decimal = Field(default=Decimal(20), gt=0, lt=100)
+    """A balance below this share of its starting amount triggers a virtual rebalance."""
+    rebalance_delay_min: int = Field(default=30, ge=0, le=24 * 60)
+    """Rebalanced funds are locked (in transit) this long."""
     latency_ms: int = Field(default=2_000, ge=0, le=60_000)
     """Simulated detection-to-execution latency: a new episode is re-checked on REST books
     taken this long after detection ("survived latency")."""

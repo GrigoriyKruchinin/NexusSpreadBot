@@ -226,8 +226,8 @@ real rebalancing stays manual.
 - [x] Manual overrides `SCANNER_SYMBOLS_WHITELIST` / `SCANNER_SYMBOLS_BLACKLIST`: verify behaviour, document in the guide.
 - [x] Unit tests: persistent-unverified → quarantined; verified persistent → not quarantined; expiry; early lift.
 
-### 1.5.7 Paper inventory & rebalancing simulation (R)
-- [ ] `PaperSettings` (`PAPER_` prefix):
+### 1.5.7 Paper inventory & rebalancing simulation (R) — audited: SAFE TO PROCEED
+- [x] `PaperSettings` (`PAPER_` prefix):
   - `ENABLED=true`;
   - `USDT_PER_EXCHANGE=1000`;
   - `COIN_PER_ROUTE_USD=1000` (virtual coin inventory seeded at first-seen mid price, counted as capital);
@@ -235,12 +235,13 @@ real rebalancing stays manual.
   - `LATENCY_MS=2000`;
   - `REBALANCE_THRESHOLD_PCT=20` (of the starting balance);
   - `REBALANCE_DELAY_MIN=30`.
-- [ ] `PaperPortfolio` (pure Decimal, new `simulation/` package, no I/O). On an episode open or re-alert it simulates the trade:
+- [x] `PaperPortfolio` (pure Decimal, new `simulation/` package, no I/O). On an episode open or re-alert it simulates the trade:
   - uses the REST re-check book taken after `LATENCY_MS`;
   - buys on A and sells on B with the same depth walker, fees and lot rounding as the estimator;
   - updates USDT and coin balances on both venues;
-  - if a balance is short, skips the trade with reason `insufficient_usdt` / `insufficient_coin` / `rebalance_in_flight`.
-- [ ] Rebalancing:
+  - the trade is sized to the available inventory (min of target notional, USDT on A, coin on B × best ask), skipped only below 10 % of the target;
+  - if a balance is short, skips the trade with reason `insufficient_usdt` / `insufficient_coin` / `rebalance_in_flight` (also `no_rebalance_path`, `spread_gone`, `books_unavailable`).
+- [x] Rebalancing:
   - when a balance drops below the threshold, schedule a **virtual** transfer:
     - coin A→B, or USDT B→A;
     - via the cheapest `VERIFIED` network;
@@ -248,14 +249,16 @@ real rebalancing stays manual.
   - the funds are locked for `REBALANCE_DELAY_MIN`;
   - no network path → the route is blocked and reported.
   - **No real transfer: the simulation has no exchange access.**
-- [ ] P&L split:
+- [x] P&L split:
   - realized arbitrage profit;
   - rebalance costs;
   - inventory mark-to-market (price risk of held coins);
   - capital deployed;
   - return on capital.
-- [ ] Persistence: `paper_trades`, `paper_rebalances`, `paper_balance_snapshots` (Alembic) + repositories.
-- [ ] Unit tests with hand-computed scenarios:
+- [x] Persistence: `paper_trades`, `paper_rebalances`, `paper_balance_snapshots` (Alembic) + repositories.
+  - one atomic commit per change (memory rolls back on a failed commit); resume from the latest snapshot; a failed resume disables paper trading for the run;
+  - a route is paper-traded at most once a minute (`recent_fill`); all USD stables booked as USDT (documented simplification).
+- [x] Unit tests with hand-computed scenarios:
   - trade;
   - insufficient balance;
   - threshold-triggered rebalance with fee;
