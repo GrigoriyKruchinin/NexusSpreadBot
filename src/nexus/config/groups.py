@@ -262,6 +262,16 @@ class SpreadSettings(NexusBaseSettings):
         return self
 
 
+class AlertPolicySettings(NexusBaseSettings):
+    """Opportunity alert policy (``ALERT_*``)."""
+
+    model_config = SettingsConfigDict(env_prefix="ALERT_")
+
+    realert_growth_pct: Decimal = Field(default=Decimal(50), gt=0, le=1_000)
+    """Re-alert an open episode only when its net profit grew by at least this percentage
+    over the last alerted value (one alert per episode otherwise)."""
+
+
 class EpisodeSettings(NexusBaseSettings):
     """Opportunity episode tracking (``EPISODE_*``)."""
 

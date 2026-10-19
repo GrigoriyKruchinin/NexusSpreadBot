@@ -8,7 +8,12 @@ from typing import Any
 import structlog
 
 from nexus.domain.clock import Clock
-from nexus.domain.events import ExchangeRecovered, event_from_payload
+from nexus.domain.events import (
+    AlertContext,
+    EpisodeClosed,
+    ExchangeRecovered,
+    event_from_payload,
+)
 from nexus.interfaces.notifications import INotifier, OutgoingMessage
 from nexus.interfaces.repositories import (
     AlertDeliveryStatus,
@@ -55,7 +60,9 @@ class AlertService:
         self._opportunity = opportunity_formatter or OpportunityFormatter()
         self._events = event_formatter or SystemEventFormatter()
 
-    async def send_opportunity(self, evaluation_id: int) -> AlertOutcome:
+    async def send_opportunity(
+        self, evaluation_id: int, context: AlertContext | None = None
+    ) -> AlertOutcome:
         """Deliver the alert for ``evaluation_id`` at most once, unless stale or invalid.
 
         The alert is claimed in the log *before* the message is sent, so an at-least-once
@@ -73,7 +80,7 @@ class AlertService:
         if not await self._alert_log.claim(evaluation_id, channel=CHANNEL):
             log.info("alert_duplicate", evaluation_id=evaluation_id)
             return AlertOutcome.DUPLICATE
-        text = self._opportunity.render(evaluation)
+        text = self._opportunity.render(evaluation, context)
         try:
             receipt = await self._notifier.send(OutgoingMessage(text=text))
         except Exception as exc:
@@ -104,7 +111,7 @@ class AlertService:
             if age_ms > self._event_max_age_ms:
                 log.warning("event_expired", kind=event.kind, age_ms=age_ms)
                 return AlertOutcome.EXPIRED
-        silent = isinstance(event, ExchangeRecovered)
+        silent = isinstance(event, ExchangeRecovered | EpisodeClosed)
         await self._notifier.send(OutgoingMessage(text=self._events.render(event), silent=silent))
         log.info("event_sent", kind=event.kind)
         return AlertOutcome.SENT

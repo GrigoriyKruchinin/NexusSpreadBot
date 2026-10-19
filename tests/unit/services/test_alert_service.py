@@ -1,7 +1,7 @@
 import pytest
 
 from nexus.domain.errors import NotificationError
-from nexus.domain.events import ExchangeRecovered, event_to_payload
+from nexus.domain.events import AlertContext, EpisodeClosed, ExchangeRecovered, event_to_payload
 from nexus.domain.spread import EvaluationStatus
 from nexus.interfaces.repositories import AlertDeliveryStatus
 from nexus.services.alerts import AlertOutcome, AlertService
@@ -105,3 +105,22 @@ async def test_stale_system_event_dropped() -> None:
     assert notifier.sent == []
     assert await service.send_event(fresh) is AlertOutcome.SENT
     assert len(notifier.sent) == 1
+
+
+async def test_realert_context_reaches_the_message() -> None:
+    repos, notifier = MemoryRepos(), RecordingNotifier()
+    [evaluation_id] = await repos.add_evaluations([make_evaluation()])
+    context = AlertContext(episode_id=9, realert=1, previous_net_usd="5")
+    assert await _service(repos, notifier).send_opportunity(evaluation_id, context) is (
+        AlertOutcome.SENT
+    )
+    assert "Re-alert #1" in notifier.sent[0].text
+
+
+async def test_episode_closed_is_silent() -> None:
+    repos, notifier = MemoryRepos(), RecordingNotifier()
+    event = EpisodeClosed("ABC/USDT", "a", "b", "gap", 90, "7", "0.7", 5, 0, None)
+    payload = event_to_payload(event, emitted_at_ms=EVALUATED_AT_MS + 5_000)
+    assert await _service(repos, notifier).send_event(payload) is AlertOutcome.SENT
+    assert notifier.sent[0].silent
+    assert "Opportunity closed" in notifier.sent[0].text

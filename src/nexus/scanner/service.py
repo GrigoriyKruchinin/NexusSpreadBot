@@ -18,7 +18,7 @@ from typing import Any
 import structlog
 
 from nexus.domain.clock import Clock
-from nexus.domain.episodes import OpportunityEpisode
+from nexus.domain.episodes import AlertKind, OpportunityEpisode
 from nexus.domain.errors import (
     DataValidationError,
     ExchangeError,
@@ -26,6 +26,8 @@ from nexus.domain.errors import (
     ExchangeUnavailableError,
 )
 from nexus.domain.events import (
+    AlertContext,
+    EpisodeClosed,
     ExchangeStatus,
     ScannerStarted,
     ScannerStopped,
@@ -61,6 +63,8 @@ FEE_LOOKUP_TIMEOUT_S = 2.0
 """A slow fee endpoint must not hold up evaluation: the leg keeps its (estimated) default fee."""
 FEE_LOOKUP_MAX_ATTEMPTS = 3
 FEE_CACHE_TTL_MS = 6 * 3600 * 1000
+EPISODE_ALERT_KEY_TTL_S = 24 * 3600
+"""Redis dedup key per (episode, alert number): an episode alert is queued at most once."""
 """Account fee tiers change (30-day volume, promos): looked-up fees are re-fetched after this."""
 
 BookKey = tuple[str, str]
@@ -83,6 +87,8 @@ class ScannerConfig:
     books are not ready in time are skipped (they would be stale anyway)."""
     latency_check_ms: int = 2_000
     """A newly opened episode is re-checked on REST books this long after detection."""
+    realert_growth_pct: Decimal = Decimal(50)
+    """Re-alert an episode when its net profit grew by this % since the last alert."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,7 +177,7 @@ class Scanner:
             if not await self._until_stopped(self.refresh_metadata(), stop):
                 return
             if self._episodes is not None:
-                await self._episodes.start()
+                await self._announce_closed(await self._episodes.start())
             await self._announce_start()
             last_refresh = time.monotonic()
             while not stop.is_set():
@@ -300,9 +306,15 @@ class Scanner:
             episode_ids = None
         ids = await self._repos.evaluations.add_evaluations(evaluations, episode_ids)
         alerts = 0
-        for evaluation_id, evaluation in zip(ids, evaluations, strict=True):
-            if evaluation.is_alertable and await self._alert(evaluation_id, evaluation):
-                alerts += 1
+        links = episode_ids or [None] * len(evaluations)
+        for evaluation_id, evaluation, episode_id in zip(ids, evaluations, links, strict=True):
+            if not evaluation.is_alertable:
+                continue
+            if episode_id is None:
+                sent = await self._alert(evaluation_id, evaluation)  # no episode: route cooldown
+            else:
+                sent = await self._alert_episode(evaluation_id, evaluation, episode_id)
+            alerts += sent
         if len(tickers) >= MIN_LIVE_EXCHANGES:
             # A sweep with fewer than two live venues cannot find routes: stay "unhealthy".
             await self._heartbeat.beat(HEARTBEAT_SERVICE, self._config.heartbeat_ttl_s)
@@ -334,13 +346,87 @@ class Scanner:
         """Close lapsed episodes, open/extend episodes of qualifying evaluations."""
         if self._episodes is None:
             return None
-        await self._episodes.close_expired()
+        await self._announce_closed(await self._episodes.close_expired())
         observed = await self._episodes.observe(evaluations)
         for episode in observed.opened:
             task = asyncio.create_task(self._check_latency(episode))
             self._latency_checks.add(task)
             task.add_done_callback(self._latency_checks.discard)
         return observed.episode_ids
+
+    async def _announce_closed(self, closed: Sequence[OpportunityEpisode]) -> None:
+        """Tell the user how alerted episodes ended (unalerted ones stay silent)."""
+        for episode in closed:
+            if not episode.alerted or episode.close_reason is None:
+                continue
+            await self._emit(
+                EpisodeClosed(
+                    symbol=episode.symbol,
+                    buy_exchange=episode.buy_exchange,
+                    sell_exchange=episode.sell_exchange,
+                    reason=episode.close_reason.value,
+                    duration_s=episode.duration_ms // 1000,
+                    peak_net_usd=decimal_str(episode.peak_net_usd),
+                    peak_net_pct=decimal_str(episode.peak_net_pct),
+                    evaluations=episode.evaluations,
+                    realerts=episode.realerts,
+                    survived_latency=episode.survived_latency,
+                )
+            )
+
+    async def _alert_episode(
+        self, evaluation_id: int, evaluation: SpreadEvaluation, episode_id: int
+    ) -> bool:
+        """One alert per episode, plus re-alerts on growth (see ``OpportunityEpisode``)."""
+        if self._episodes is None or evaluation.breakdown is None:  # pragma: no cover
+            return False
+        episode = self._episodes.get(evaluation.route_key)
+        if episode is None or episode.id != episode_id:
+            return False  # closed or replaced meanwhile
+        net = evaluation.breakdown.net_profit_usd
+        kind = episode.alert_kind(net, self._config.realert_growth_pct)
+        if kind is None:
+            return False
+        floor_key = f"alert:{evaluation.route_key}"
+        # The route cooldown is a floor between FIRST alerts: a flapping route whose episodes
+        # close and reopen does not alert again within it. Re-alerts are bounded by growth.
+        if kind is AlertKind.FIRST and not await self._cooldowns.acquire(
+            floor_key, self._config.alert_cooldown_s
+        ):
+            return False
+        realert = episode.realerts + 1 if kind is AlertKind.REALERT else 0
+        dedup_key = f"alert:episode:{episode_id}:{realert}"
+        if not await self._cooldowns.acquire(dedup_key, EPISODE_ALERT_KEY_TTL_S):
+            return False
+        context = AlertContext(
+            episode_id=episode_id,
+            realert=realert,
+            previous_net_usd=decimal_str(episode.alerted_net_usd)
+            if kind is AlertKind.REALERT and episode.alerted_net_usd is not None
+            else None,
+        )
+        try:
+            await self._dispatcher.dispatch_opportunity(evaluation_id, context)
+        except Exception:
+            log.exception("alert_dispatch_failed", evaluation_id=evaluation_id)
+            with contextlib.suppress(Exception):
+                await self._cooldowns.release(dedup_key)
+                if kind is AlertKind.FIRST:
+                    await self._cooldowns.release(floor_key)
+            return False
+        try:
+            await self._episodes.update(episode.mark_alerted(self._clock.now_ms(), net, kind))
+        except Exception:  # the Redis dedup key still prevents a duplicate alert
+            log.exception("episode_alert_mark_failed", episode_id=episode_id)
+        log.info(
+            "opportunity_alerted",
+            route=evaluation.route_key,
+            episode_id=episode_id,
+            kind=kind.value,
+            net_profit_usd=str(net),
+            evaluation_id=evaluation_id,
+        )
+        return True
 
     async def _check_latency(self, episode: OpportunityEpisode) -> None:
         """Did the opportunity survive the simulated execution latency (REST books)?"""

@@ -12,6 +12,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Final
 
 from nexus.domain.events import (
+    AlertContext,
+    EpisodeClosed,
     ExchangeDown,
     ExchangeRecovered,
     ScannerStarted,
@@ -82,6 +84,18 @@ def fmt_time(epoch_ms: int) -> str:
     return datetime.fromtimestamp(epoch_ms / 1000, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
+def fmt_duration(seconds: int) -> str:
+    """``45s`` / ``3m 20s`` / ``2h 05m``."""
+    seconds = max(seconds, 0)
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, secs = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {secs:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes:02d}m"
+
+
 def _truncate(text: str) -> str:
     if len(text) <= TELEGRAM_MAX_LENGTH:
         return text
@@ -91,7 +105,7 @@ def _truncate(text: str) -> str:
 class OpportunityFormatter:
     """Renders a profitable :class:`SpreadEvaluation` as a Telegram HTML alert."""
 
-    def render(self, evaluation: SpreadEvaluation) -> str:
+    def render(self, evaluation: SpreadEvaluation, context: AlertContext | None = None) -> str:
         """Render the alert; requires a cost breakdown."""
         bd = evaluation.breakdown
         if bd is None:
@@ -111,8 +125,20 @@ class OpportunityFormatter:
         width = max(len(label) for label, _ in rows)
         table = "\n".join(f"{label.ljust(width)}  {value}" for label, value in rows)
 
+        context = context or AlertContext()
+        title = "Arbitrage Opportunity"
+        if context.realert:
+            title = f"Re-alert #{context.realert}: spread is growing"
         lines = [
-            f"💹 <b>Arbitrage Opportunity</b> · <code>{esc(evaluation.symbol)}</code>",
+            f"💹 <b>{esc(title)}</b> · <code>{esc(evaluation.symbol)}</code>",
+            *(
+                [
+                    f"🔁 Net was <b>{fmt_usd(Decimal(context.previous_net_usd), signed=True)}"
+                    "</b> at the previous alert"
+                ]
+                if context.realert and context.previous_net_usd
+                else []
+            ),
             SEPARATOR,
             f"🟢 <b>BUY</b> on <b>{buy}</b> @ <code>{fmt_price(bd.best_ask_buy)}</code>"
             f" · VWAP <code>{fmt_price(bd.vwap_buy)}</code>",
@@ -184,6 +210,28 @@ class SystemEventFormatter:
                     f"✅ <b>{esc(exchange_name(event.exchange))} recovered</b>\n"
                     f"Downtime: <b>{event.downtime_s} s</b>"
                 )
+            case EpisodeClosed():
+                return self._episode_closed(event)
+
+    @staticmethod
+    def _episode_closed(event: EpisodeClosed) -> str:
+        survived = {True: "✅ yes", False: "❌ no", None: "n/a"}[event.survived_latency]
+        peak_usd = fmt_usd(Decimal(event.peak_net_usd), signed=True)
+        peak_pct = fmt_pct(Decimal(event.peak_net_pct))
+        return "\n".join(
+            [
+                f"🏁 <b>Opportunity closed</b> · <code>{esc(event.symbol)}</code>",
+                f"{esc(exchange_name(event.buy_exchange))} → "
+                f"{esc(exchange_name(event.sell_exchange))}",
+                SEPARATOR,
+                f"⏱ Duration: <b>{fmt_duration(event.duration_s)}</b>"
+                f" · {event.evaluations} evaluations",
+                f"💰 Peak net: <b>{peak_usd} ({peak_pct})</b>",
+                f"⚡ Survived execution latency: <b>{survived}</b>",
+                *([f"🔁 Re-alerts: {event.realerts}"] if event.realerts else []),
+                f"<blockquote>Closed: {esc(event.reason)}</blockquote>",
+            ]
+        )
 
     @staticmethod
     def _started(event: ScannerStarted) -> str:

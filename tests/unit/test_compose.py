@@ -14,21 +14,21 @@ APP_SERVICES = {"migrator", "scanner", "worker-alerts", "worker-maintenance", "b
 EXCHANGE_SECRET = re.compile(r"^(BYBIT|BINANCE|OKX|GATEIO|KUCOIN|MEXC|BITGET)_API_")
 FORBIDDEN: dict[str, list[re.Pattern[str]]] = {
     "migrator": [
-        re.compile(r"^(TELEGRAM|REDIS|CELERY|SCANNER|SPREAD|EPISODE|PAPER)_"),
+        re.compile(r"^(TELEGRAM|REDIS|CELERY|SCANNER|SPREAD|EPISODE|PAPER|ALERT)_"),
         EXCHANGE_SECRET,
     ],
     "scanner": [re.compile(r"^TELEGRAM_")],
     "worker-alerts": [
         EXCHANGE_SECRET,
-        re.compile(r"^(REDIS|SCANNER|SPREAD|EXCHANGES|EPISODE|PAPER)_"),
+        re.compile(r"^(REDIS|SCANNER|SPREAD|EXCHANGES|EPISODE|PAPER|ALERT)_"),
     ],
     "worker-maintenance": [
         EXCHANGE_SECRET,
-        re.compile(r"^(TELEGRAM|REDIS|SCANNER|SPREAD|EPISODE|PAPER)_"),
+        re.compile(r"^(TELEGRAM|REDIS|SCANNER|SPREAD|EPISODE|PAPER|ALERT)_"),
     ],
     "beat": [
         EXCHANGE_SECRET,
-        re.compile(r"^(TELEGRAM|POSTGRES|REDIS|SCANNER|SPREAD|EPISODE|PAPER)_"),
+        re.compile(r"^(TELEGRAM|POSTGRES|REDIS|SCANNER|SPREAD|EPISODE|PAPER|ALERT)_"),
     ],
 }
 

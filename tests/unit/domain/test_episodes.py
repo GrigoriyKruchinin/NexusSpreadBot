@@ -3,7 +3,7 @@ from decimal import Decimal as D
 
 import pytest
 
-from nexus.domain.episodes import EpisodeCloseReason, OpportunityEpisode
+from nexus.domain.episodes import AlertKind, EpisodeCloseReason, OpportunityEpisode
 from nexus.domain.spread import EvaluationStatus, TransferQuote, TransferStatus
 from tests.support import EVALUATED_AT_MS as T0
 from tests.support import make_evaluation
@@ -85,3 +85,21 @@ def test_gap_boundary(elapsed: int, expired: bool) -> None:
     episode = OpportunityEpisode.open(make_evaluation())
     assert episode.expired(T0 + elapsed, 60_000) is expired
     assert not replace(episode, closed_at_ms=T0).expired(T0 + elapsed, 60_000)
+
+
+def test_alert_kind_first_then_growth_based_realerts() -> None:
+    episode = OpportunityEpisode.open(make_evaluation(net_usd=D(8)))
+    assert episode.alert_kind(D(8), D(50)) is AlertKind.FIRST
+    alerted = episode.mark_alerted(T0 + 1, D(8), AlertKind.FIRST)
+    assert (alerted.alerted_at_ms, alerted.alerted_net_usd, alerted.realerts) == (
+        T0 + 1,
+        D(8),
+        0,
+    )
+    assert alerted.alert_kind(D("11.99"), D(50)) is None
+    assert alerted.alert_kind(D(12), D(50)) is AlertKind.REALERT  # exactly +50 %
+    realerted = alerted.mark_alerted(T0 + 2, D(12), AlertKind.REALERT)
+    assert (realerted.alerted_net_usd, realerted.realerts) == (D(12), 1)
+    assert realerted.alert_kind(D("17.99"), D(50)) is None  # baseline moved to $12
+    assert realerted.alert_kind(D(18), D(50)) is AlertKind.REALERT
+    assert realerted.close(T0 + 3, EpisodeCloseReason.GAP).alert_kind(D(99), D(50)) is None

@@ -12,6 +12,7 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from nexus.config.groups import (
+    AlertPolicySettings,
     CelerySettings,
     DatabaseSettings,
     EpisodeSettings,
@@ -72,6 +73,7 @@ class ScannerRoleSettings(_RoleSettings):
     spread: SpreadSettings
     episodes: EpisodeSettings
     paper: PaperSettings
+    alerts: AlertPolicySettings
     logging: LoggingSettings
 
     @model_validator(mode="after")
@@ -97,6 +99,7 @@ class ScannerRoleSettings(_RoleSettings):
             spread=SpreadSettings(),
             episodes=EpisodeSettings(),
             paper=PaperSettings(),
+            alerts=AlertPolicySettings(),
             logging=LoggingSettings(),
         )
 

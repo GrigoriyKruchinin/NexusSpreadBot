@@ -8,6 +8,15 @@ from enum import StrEnum
 
 from nexus.domain.spread import SpreadBreakdown, SpreadEvaluation, TransferStatus
 
+HUNDRED = Decimal(100)
+
+
+class AlertKind(StrEnum):
+    """Which alert, if any, an alertable evaluation of an episode warrants."""
+
+    FIRST = "first"
+    REALERT = "realert"
+
 
 class EpisodeCloseReason(StrEnum):
     """Why an episode ended."""
@@ -109,6 +118,30 @@ class OpportunityEpisode:
         if not self.is_open:
             return self
         return replace(self, closed_at_ms=at_ms, close_reason=reason)
+
+    @property
+    def alerted(self) -> bool:
+        """True once the episode produced an alert."""
+        return self.alerted_at_ms is not None
+
+    def alert_kind(self, net_usd: Decimal, realert_growth_pct: Decimal) -> AlertKind | None:
+        """One alert per episode, plus a re-alert when the net profit grew by at least
+        ``realert_growth_pct`` over the last alerted value."""
+        if not self.is_open:
+            return None
+        if self.alerted_net_usd is None:
+            return AlertKind.FIRST
+        threshold = self.alerted_net_usd * (1 + realert_growth_pct / HUNDRED)
+        return AlertKind.REALERT if net_usd >= threshold else None
+
+    def mark_alerted(self, at_ms: int, net_usd: Decimal, kind: AlertKind) -> OpportunityEpisode:
+        """Record a delivered (queued) alert."""
+        return replace(
+            self,
+            alerted_at_ms=at_ms,
+            alerted_net_usd=net_usd,
+            realerts=self.realerts + (1 if kind is AlertKind.REALERT else 0),
+        )
 
     def expired(self, now_ms: int, gap_ms: int) -> bool:
         """True when no qualifying evaluation was seen for at least ``gap_ms``."""

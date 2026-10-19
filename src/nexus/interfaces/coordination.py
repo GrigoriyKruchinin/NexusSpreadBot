@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from nexus.domain.events import SystemEvent
+from nexus.domain.events import AlertContext, SystemEvent
 
 
 class ICooldownStore(ABC):
@@ -35,8 +35,10 @@ class IAlertDispatcher(ABC):
     """Hands alerts to the delivery workers (the scanner never talks to Telegram)."""
 
     @abstractmethod
-    async def dispatch_opportunity(self, evaluation_id: int) -> None:
-        """Queue an opportunity alert for a stored evaluation."""
+    async def dispatch_opportunity(
+        self, evaluation_id: int, context: AlertContext | None = None
+    ) -> None:
+        """Queue an opportunity alert for a stored evaluation (with its episode context)."""
 
     @abstractmethod
     async def dispatch_event(self, event: SystemEvent) -> None:

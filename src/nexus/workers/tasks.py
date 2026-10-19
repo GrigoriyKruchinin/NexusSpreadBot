@@ -20,6 +20,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from nexus.config.groups import LoggingSettings
 from nexus.config.roles import AlertsWorkerSettings, MaintenanceWorkerSettings
 from nexus.domain.errors import NotificationError, NotificationRejectedError
+from nexus.domain.events import AlertContext
 from nexus.log import configure_logging
 from nexus.workers.app import TASK_PURGE, TASK_SEND_EVENT, TASK_SEND_OPPORTUNITY, celery_app
 
@@ -73,13 +74,18 @@ def _retry_countdown(task: Task[Any, Any], exc: NotificationError) -> float:
 
 
 @celery_app.task(name=TASK_SEND_OPPORTUNITY, bind=True, max_retries=MAX_RETRIES, **_INFRA_RETRY)
-def send_opportunity(self: Task[Any, Any], evaluation_id: int) -> str:
-    """Deliver an opportunity alert."""
+def send_opportunity(
+    self: Task[Any, Any], evaluation_id: int, context: dict[str, Any] | None = None
+) -> str:
+    """Deliver an opportunity alert (``context``: :class:`AlertContext` payload, optional)."""
     from nexus.container import alert_service_scope
 
     async def run() -> str:
         async with alert_service_scope(_alerts_settings()) as service:
-            return (await service.send_opportunity(evaluation_id)).value
+            outcome = await service.send_opportunity(
+                evaluation_id, AlertContext.from_payload(context)
+            )
+            return outcome.value
 
     try:
         return asyncio.run(run())

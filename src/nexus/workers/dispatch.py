@@ -7,7 +7,7 @@ import asyncio
 from celery import Celery
 
 from nexus.domain.clock import Clock, SystemClock
-from nexus.domain.events import SystemEvent, event_to_payload
+from nexus.domain.events import AlertContext, SystemEvent, event_to_payload
 from nexus.interfaces.coordination import IAlertDispatcher
 from nexus.workers.app import ALERTS_QUEUE, TASK_SEND_EVENT, TASK_SEND_OPPORTUNITY
 
@@ -27,12 +27,14 @@ class CeleryAlertDispatcher(IAlertDispatcher):
         self._app = app
         self._clock = clock or SystemClock()
 
-    async def dispatch_opportunity(self, evaluation_id: int) -> None:
-        """Queue an opportunity alert for a stored evaluation."""
+    async def dispatch_opportunity(
+        self, evaluation_id: int, context: AlertContext | None = None
+    ) -> None:
+        """Queue an opportunity alert for a stored evaluation (with its episode context)."""
         await asyncio.to_thread(
             self._app.send_task,
             TASK_SEND_OPPORTUNITY,
-            args=[evaluation_id],
+            args=[evaluation_id, (context or AlertContext()).to_payload()],
             queue=ALERTS_QUEUE,
             retry=True,
             retry_policy=_PUBLISH_RETRY_POLICY,

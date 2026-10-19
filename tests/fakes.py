@@ -7,7 +7,7 @@ from decimal import Decimal as D
 
 from nexus.domain.episodes import OpportunityEpisode
 from nexus.domain.errors import ExchangeError
-from nexus.domain.events import SystemEvent
+from nexus.domain.events import AlertContext, SystemEvent
 from nexus.domain.models import AssetTransferInfo, MarketInfo, OrderBook, PriceLevel, Ticker
 from nexus.domain.spread import SpreadEvaluation
 from nexus.engine.candidates import RouteQuote
@@ -201,8 +201,12 @@ class RecordingDispatcher(IAlertDispatcher):
     def __init__(self) -> None:
         self.opportunities: list[int] = []
         self.events: list[SystemEvent] = []
+        self.contexts: list[AlertContext | None] = []
 
-    async def dispatch_opportunity(self, evaluation_id: int) -> None:
+    async def dispatch_opportunity(
+        self, evaluation_id: int, context: AlertContext | None = None
+    ) -> None:
+        self.contexts.append(context)
         self.opportunities.append(evaluation_id)
 
     async def dispatch_event(self, event: SystemEvent) -> None:

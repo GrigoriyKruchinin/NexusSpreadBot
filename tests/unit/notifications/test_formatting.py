@@ -3,6 +3,8 @@ from decimal import Decimal as D
 import pytest
 
 from nexus.domain.events import (
+    AlertContext,
+    EpisodeClosed,
     ExchangeDown,
     ExchangeRecovered,
     ExchangeStatus,
@@ -17,6 +19,7 @@ from nexus.notifications.formatting import (
     OpportunityFormatter,
     SystemEventFormatter,
     fmt_amount,
+    fmt_duration,
     fmt_pct,
     fmt_price,
     fmt_usd,
@@ -125,3 +128,66 @@ def test_system_events_roundtrip_and_render() -> None:
 def test_unknown_event_kind() -> None:
     with pytest.raises(ValueError, match="unknown"):
         event_from_payload({"kind": "nope", "data": {}})
+
+
+def test_realert_is_labelled_with_previous_net() -> None:
+    text = OpportunityFormatter().render(
+        make_evaluation(), AlertContext(episode_id=4, realert=2, previous_net_usd="5.2")
+    )
+    assert text.startswith(
+        "💹 <b>Re-alert #2: spread is growing</b> · <code>ABC/USDT</code>\n"
+        "🔁 Net was <b>+$5.20</b> at the previous alert\n"
+    )
+    first = OpportunityFormatter().render(make_evaluation(), AlertContext(episode_id=4))
+    assert first.startswith("💹 <b>Arbitrage Opportunity</b>")
+    assert "Re-alert" not in first
+
+
+def _closed(**overrides: object) -> EpisodeClosed:
+    fields: dict[str, object] = {
+        "symbol": "ABC/USDT",
+        "buy_exchange": "binance",
+        "sell_exchange": "kucoin",
+        "reason": "gap",
+        "duration_s": 200,
+        "peak_net_usd": "12.345",
+        "peak_net_pct": "1.2345",
+        "evaluations": 14,
+        "realerts": 1,
+        "survived_latency": True,
+    }
+    fields.update(overrides)
+    return EpisodeClosed(**fields)  # type: ignore[arg-type]
+
+
+def test_episode_closed_message_snapshot() -> None:
+    event = _closed()
+    assert event_from_payload(event_to_payload(event)) == event
+    assert SystemEventFormatter().render(event) == (
+        "🏁 <b>Opportunity closed</b> · <code>ABC/USDT</code>\n"
+        "Binance → KuCoin\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "⏱ Duration: <b>3m 20s</b> · 14 evaluations\n"
+        "💰 Peak net: <b>+$12.35 (1.23%)</b>\n"
+        "⚡ Survived execution latency: <b>✅ yes</b>\n"
+        "🔁 Re-alerts: 1\n"
+        "<blockquote>Closed: gap</blockquote>"
+    )
+
+
+@pytest.mark.parametrize(("survived", "label"), [(False, "❌ no"), (None, "n/a")])
+def test_episode_closed_latency_labels_and_escaping(survived: bool | None, label: str) -> None:
+    text = SystemEventFormatter().render(
+        _closed(survived_latency=survived, realerts=0, symbol="<x>", reason="a&b")
+    )
+    assert f"<b>{label}</b>" in text
+    assert "Re-alerts" not in text
+    assert "&lt;x&gt;" in text
+    assert "a&amp;b" in text
+
+
+@pytest.mark.parametrize(
+    ("seconds", "expected"), [(0, "0s"), (45, "45s"), (200, "3m 20s"), (7_500, "2h 05m")]
+)
+def test_fmt_duration(seconds: int, expected: str) -> None:
+    assert fmt_duration(seconds) == expected

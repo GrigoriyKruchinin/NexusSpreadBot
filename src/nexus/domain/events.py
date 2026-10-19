@@ -10,7 +10,9 @@ from dataclasses import asdict, dataclass
 from decimal import Decimal
 from typing import Any, ClassVar, Literal
 
-EventKind = Literal["scanner_started", "scanner_stopped", "exchange_down", "exchange_recovered"]
+EventKind = Literal[
+    "scanner_started", "scanner_stopped", "exchange_down", "exchange_recovered", "episode_closed"
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,11 +65,55 @@ class ExchangeRecovered:
     downtime_s: int
 
 
-SystemEvent = ScannerStarted | ScannerStopped | ExchangeDown | ExchangeRecovered
+@dataclass(frozen=True, slots=True)
+class EpisodeClosed:
+    """An alerted opportunity episode ended."""
+
+    kind: ClassVar[EventKind] = "episode_closed"
+    symbol: str
+    buy_exchange: str
+    sell_exchange: str
+    reason: str
+    duration_s: int
+    peak_net_usd: str
+    peak_net_pct: str
+    evaluations: int
+    realerts: int
+    survived_latency: bool | None
+
+
+SystemEvent = ScannerStarted | ScannerStopped | ExchangeDown | ExchangeRecovered | EpisodeClosed
 
 _EVENT_TYPES: dict[str, type[Any]] = {
-    cls.kind: cls for cls in (ScannerStarted, ScannerStopped, ExchangeDown, ExchangeRecovered)
+    cls.kind: cls
+    for cls in (ScannerStarted, ScannerStopped, ExchangeDown, ExchangeRecovered, EpisodeClosed)
 }
+
+
+@dataclass(frozen=True, slots=True)
+class AlertContext:
+    """Episode context of an opportunity alert (travels with the alert task)."""
+
+    episode_id: int | None = None
+    realert: int = 0
+    """0 for the episode's first alert, n for its n-th re-alert."""
+    previous_net_usd: str | None = None
+    """Net profit of the previous alert of the episode (re-alerts only)."""
+
+    def to_payload(self) -> dict[str, Any]:
+        """JSON-safe dict."""
+        return asdict(self)
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any] | None) -> AlertContext:
+        """Inverse of :meth:`to_payload`; ``None`` (old tasks) means no context."""
+        if not payload:
+            return cls()
+        return cls(
+            episode_id=payload.get("episode_id"),
+            realert=int(payload.get("realert") or 0),
+            previous_net_usd=payload.get("previous_net_usd"),
+        )
 
 
 def event_to_payload(event: SystemEvent, *, emitted_at_ms: int | None = None) -> dict[str, Any]:
@@ -101,6 +147,8 @@ def decimal_str(value: Decimal) -> str:
 
 
 __all__ = [
+    "AlertContext",
+    "EpisodeClosed",
     "ExchangeDown",
     "ExchangeRecovered",
     "ExchangeStatus",

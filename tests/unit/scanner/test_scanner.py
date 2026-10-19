@@ -12,7 +12,14 @@ from nexus.domain.errors import (
     ExchangeRateLimitError,
     ExchangeUnavailableError,
 )
-from nexus.domain.events import ExchangeDown, ExchangeRecovered, ScannerStarted, ScannerStopped
+from nexus.domain.events import (
+    AlertContext,
+    EpisodeClosed,
+    ExchangeDown,
+    ExchangeRecovered,
+    ScannerStarted,
+    ScannerStopped,
+)
 from nexus.domain.models import (
     AssetTransferInfo,
     MarketInfo,
@@ -341,7 +348,7 @@ async def test_slow_exchange_does_not_block_other_routes(h: Harness) -> None:
 async def test_dispatch_failure_releases_cooldown(h: Harness) -> None:
     await h.scanner.refresh_metadata()
 
-    async def broken(evaluation_id: int) -> None:
+    async def broken(evaluation_id: int, context: object = None) -> None:
         raise ConnectionError("broker down")
 
     h.dispatcher.dispatch_opportunity = broken  # type: ignore[method-assign]
@@ -663,3 +670,80 @@ async def test_run_resumes_episodes_on_start() -> None:
     await asyncio.wait_for(h.scanner.run(stop), timeout=5)
     assert h.episode_repo.rows[1].close_reason is not None
     assert h.episode_repo.rows[1].close_reason.value == "restart"
+
+
+async def test_one_alert_per_episode_realert_on_growth_and_close_message() -> None:
+    h = _episode_harness()
+    await h.scanner.refresh_metadata()
+    first = await h.scanner.sweep()
+    assert first.alerts == 1
+    assert h.dispatcher.contexts[-1] == AlertContext(episode_id=1, realert=0)
+
+    h.cooldowns.active.discard("alert:ABC/USDT|a>b")  # even without the floor:
+    h.clock.now += 10_000
+    assert (await h.scanner.sweep()).alerts == 0  # same episode, no growth -> no alert
+
+    h.b.quote("ABC/USDT", "101.6", "101.7")  # net grows well above +50 %
+    h.clock.now += 10_000
+    assert (await h.scanner.sweep()).alerts == 1
+    context = h.dispatcher.contexts[-1]
+    assert context is not None
+    assert (context.episode_id, context.realert) == (1, 1)
+    assert context.previous_net_usd is not None
+    assert D(context.previous_net_usd) == h.episode_repo.rows[1].first_net_usd
+
+    h.clock.now += 10_000
+    assert (await h.scanner.sweep()).alerts == 0  # baseline moved up with the re-alert
+
+    h.b.quote("ABC/USDT", "100", "100.1")  # spread gone
+    h.clock.now += 60_000
+    await h.scanner.sweep()
+    (closed,) = [e for e in h.dispatcher.events if isinstance(e, EpisodeClosed)]
+    assert (closed.symbol, closed.reason, closed.realerts, closed.evaluations) == (
+        "ABC/USDT",
+        "gap",
+        1,
+        4,
+    )
+    assert closed.duration_s == 30
+
+
+async def test_floor_blocks_first_alert_of_a_quickly_reopened_episode() -> None:
+    h = _episode_harness()
+    await h.scanner.refresh_metadata()
+    assert (await h.scanner.sweep()).alerts == 1
+    h.b.quote("ABC/USDT", "100", "100.1")
+    h.clock.now += 60_000
+    await h.scanner.sweep()  # episode 1 closes
+    h.b.quote("ABC/USDT", "101", "101.1")
+    h.clock.now += 10_000
+    assert (await h.scanner.sweep()).alerts == 0  # episode 2 opens inside the route floor
+    assert 2 in h.episode_repo.rows
+    h.cooldowns.active.discard("alert:ABC/USDT|a>b")  # floor expired
+    h.clock.now += 10_000
+    assert (await h.scanner.sweep()).alerts == 1
+    assert h.dispatcher.contexts[-1] == AlertContext(episode_id=2, realert=0)
+
+
+async def test_unalerted_episode_closes_silently() -> None:
+    h = _episode_harness(require_verified=True)  # unverified: never alerted
+    await h.scanner.refresh_metadata()
+    await h.scanner.sweep()
+    h.b.quote("ABC/USDT", "100", "100.1")
+    h.clock.now += 60_000
+    await h.scanner.sweep()
+    assert h.episode_repo.rows[1].close_reason is not None
+    assert not [e for e in h.dispatcher.events if isinstance(e, EpisodeClosed)]
+
+
+async def test_episode_dispatch_failure_releases_dedup_and_floor() -> None:
+    h = _episode_harness()
+    await h.scanner.refresh_metadata()
+
+    async def broken(evaluation_id: int, context: object = None) -> None:
+        raise ConnectionError("broker down")
+
+    h.dispatcher.dispatch_opportunity = broken  # type: ignore[method-assign]
+    assert (await h.scanner.sweep()).alerts == 0
+    assert not h.cooldowns.active
+    assert not h.episode_repo.rows[1].alerted

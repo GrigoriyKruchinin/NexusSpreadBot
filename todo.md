@@ -210,10 +210,10 @@ real rebalancing stays manual.
 - [x] Unit tests (open / extend / close / gap boundary / restart) and repository integration tests.
 
 ### 1.5.5 One alert per episode
-- [ ] The episode id becomes the alert dedup key and replaces the per-route Redis cooldown as the primary guard. `SPREAD_ALERT_COOLDOWN_S` remains as a floor.
-- [ ] Re-alert only when the episode's peak net USD grows by ≥ `ALERT_REALERT_GROWTH_PCT` (default 50) over the last alerted value.
-- [ ] "Episode closed" message for alerted episodes: duration, peak $ / %, evaluations, survived-latency flag. Expires like system events.
-- [ ] Templates in `notifications/`, HTML-escaped, snapshot tests; alert-log claim semantics preserved.
+- [x] The episode id becomes the alert dedup key and replaces the per-route Redis cooldown as the primary guard. `SPREAD_ALERT_COOLDOWN_S` remains as a floor (between first alerts of a route's episodes; Redis dedup key `alert:episode:{id}:{n}`; no episode → legacy route cooldown).
+- [x] Re-alert only when the episode's peak net USD grows by ≥ `ALERT_REALERT_GROWTH_PCT` (default 50) over the last alerted value.
+- [x] "Episode closed" message for alerted episodes: duration, peak $ / %, evaluations, survived-latency flag. Expires like system events.
+- [x] Templates in `notifications/`, HTML-escaped, snapshot tests; alert-log claim semantics preserved.
 
 ### 1.5.6 Automatic quarantine of dead routes (R)
 - [ ] An episode open longer than `QUARANTINE_PERSIST_MIN` (default 15) **without** a `VERIFIED` transfer path quarantines the route for `QUARANTINE_TTL_H` (default 24). This is the ZIL/ONE pattern.

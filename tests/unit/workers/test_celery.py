@@ -1,11 +1,11 @@
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
 from nexus.config.groups import CelerySettings, MaintenanceSettings
 from nexus.domain.errors import NotificationError, NotificationRejectedError
-from nexus.domain.events import ScannerStopped
+from nexus.domain.events import AlertContext, ScannerStopped
 from nexus.workers import tasks
 from nexus.workers.app import (
     ALERTS_QUEUE,
@@ -49,7 +49,14 @@ async def test_dispatcher_publishes_by_name() -> None:
     dispatcher = CeleryAlertDispatcher(app, ManualClock(123))  # type: ignore[arg-type]
     await dispatcher.dispatch_opportunity(42)
     await dispatcher.dispatch_event(ScannerStopped(reason="test"))
-    assert app.sent[0] == (TASK_SEND_OPPORTUNITY, [42], ALERTS_QUEUE)
+    await dispatcher.dispatch_opportunity(43, AlertContext(7, 1, "8.5"))
+    no_context = {"episode_id": None, "realert": 0, "previous_net_usd": None}
+    assert app.sent[0] == (TASK_SEND_OPPORTUNITY, [42, no_context], ALERTS_QUEUE)
+    assert app.sent[2] == (
+        TASK_SEND_OPPORTUNITY,
+        [43, {"episode_id": 7, "realert": 1, "previous_net_usd": "8.5"}],
+        ALERTS_QUEUE,
+    )
     assert app.sent[1] == (
         TASK_SEND_EVENT,
         [{"kind": "scanner_stopped", "data": {"reason": "test"}, "emitted_at_ms": 123}],
@@ -58,10 +65,13 @@ async def test_dispatcher_publishes_by_name() -> None:
 
 
 class _Service:
+    contexts: ClassVar[list[AlertContext]] = []
+
     def __init__(self, error: Exception | None) -> None:
         self.error = error
 
-    async def send_opportunity(self, evaluation_id: int) -> Any:
+    async def send_opportunity(self, evaluation_id: int, context: AlertContext) -> Any:
+        self.contexts.append(context)
         if self.error:
             raise self.error
         from nexus.services.alerts import AlertOutcome
@@ -81,6 +91,15 @@ def _patch_scope(monkeypatch: pytest.MonkeyPatch, error: Exception | None) -> No
 def test_send_opportunity_task_success(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_scope(monkeypatch, None)
     assert tasks.send_opportunity.apply(args=(1,)).get() == "sent"
+
+
+def test_send_opportunity_task_passes_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_scope(monkeypatch, None)
+    _Service.contexts.clear()
+    payload = {"episode_id": 3, "realert": 2, "previous_net_usd": "9"}
+    assert tasks.send_opportunity.apply(args=(1, payload)).get() == "sent"
+    assert tasks.send_opportunity.apply(args=(1,)).get() == "sent"  # tasks queued pre-1.5.5
+    assert _Service.contexts == [AlertContext(3, 2, "9"), AlertContext()]
 
 
 def test_send_opportunity_task_rejected(monkeypatch: pytest.MonkeyPatch) -> None:

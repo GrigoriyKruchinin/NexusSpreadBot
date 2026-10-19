@@ -13,6 +13,7 @@ _PREFIXES = (
     "SPREAD_",
     "MAINTENANCE_",
     "EPISODE_",
+    "ALERT_",
     "PAPER_",
     "MEXC_",
     "BITGET_",
