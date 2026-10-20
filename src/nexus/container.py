@@ -82,6 +82,7 @@ def build_paper_trader(
             rebalance_threshold_pct=paper.rebalance_threshold_pct,
             rebalance_delay_ms=paper.rebalance_delay_min * 60_000,
             trade_notional_usd=paper.trade_notional_usd,
+            transfer_tax_pct=dict(settings.spread.transfer_tax_pct),
         ),
         PaperRepository(sessions),
         NetSpreadEstimator(pricing, clock),
@@ -186,6 +187,8 @@ async def scanner_scope(settings: ScannerRoleSettings) -> AsyncIterator[Scanner]
                 persist_ms=settings.quarantine.persist_min * 60_000,
                 ttl_ms=settings.quarantine.ttl_h * 3_600_000,
                 clock=clock,
+                window_ms=settings.quarantine.window_h * 3_600_000,
+                max_episodes=settings.quarantine.max_episodes,
             ),
         )
 

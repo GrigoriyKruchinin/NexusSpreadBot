@@ -177,8 +177,11 @@ class OpportunityFormatter:
     @staticmethod
     def _transfer_cost(evaluation: SpreadEvaluation) -> str:
         bd = evaluation.breakdown
-        if bd is None or not evaluation.transfer_verified:
+        if bd is None:
             return "n/a"
+        if not evaluation.transfer_verified:
+            # Only a per-asset chain tax can be priced without a verified network.
+            return f"{fmt_usd(bd.transfer_fee_usd)} tax + n/a" if bd.transfer_fee_usd else "n/a"
         return fmt_usd(bd.transfer_fee_usd)
 
     @staticmethod

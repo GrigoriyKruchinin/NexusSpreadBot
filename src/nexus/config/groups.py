@@ -238,9 +238,29 @@ class SpreadSettings(NexusBaseSettings):
     max_unverified_gross_spread_pct: Decimal = Field(default=Decimal(5), gt=0, le=100)
     default_taker_fee_pct: Decimal = Field(default=Decimal("0.2"), ge=Decimal("0.01"), lt=5)
     include_transfer_cost: bool = True
+    transfer_tax_pct: dict[str, Decimal] = Field(
+        default_factory=lambda: {"LUNC": Decimal("1.5"), "USTC": Decimal("1.5")}
+    )
+    """On-chain transfer taxes (percent of the amount moved) the exchanges' withdrawal fee
+    does not include, e.g. the Terra Classic burn tax (1.5 % since 2026-08). Keyed by asset,
+    not network: conservative if a venue already folds the tax into its fee or moves a
+    wrapped token (alerts may be missed, never overstated)."""
     require_verified_transfer: bool = True
     """Alert only routes with a ``VERIFIED`` transfer path (unverified ones are still stored)."""
     alert_cooldown_s: int = Field(default=600, ge=30)
+
+    @field_validator("transfer_tax_pct")
+    @classmethod
+    def _valid_taxes(cls, value: dict[str, Decimal]) -> dict[str, Decimal]:
+        normalized = {asset.strip().upper(): pct for asset, pct in value.items()}
+        if len(normalized) != len(value):
+            msg = "SPREAD_TRANSFER_TAX_PCT has duplicate assets (names are case-insensitive)"
+            raise ValueError(msg)
+        for asset, pct in normalized.items():
+            if not Decimal(0) <= pct < Decimal(50):
+                msg = f"SPREAD_TRANSFER_TAX_PCT[{asset}] must be a percent in [0, 50)"
+                raise ValueError(msg)
+        return normalized
 
     @model_validator(mode="after")
     def _consistent(self) -> Self:
@@ -278,7 +298,7 @@ class EpisodeSettings(NexusBaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="EPISODE_")
 
-    close_gap_s: int = Field(default=60, ge=10, le=3_600)
+    close_gap_s: int = Field(default=300, ge=10, le=3_600)
     """An episode closes after this long without a qualifying evaluation of its route."""
 
 
@@ -291,6 +311,17 @@ class QuarantineSettings(NexusBaseSettings):
     """An episode open this long without a verified transfer path quarantines its route."""
     ttl_h: int = Field(default=24, ge=1, le=24 * 30)
     """Quarantine duration (lifted early when the transfer path becomes verified)."""
+    window_h: int = Field(default=6, ge=1, le=7 * 24)
+    """Look-back window for recurring unverified episodes of a route."""
+    max_episodes: int = Field(default=5, ge=2, le=1_000)
+    """This many unverified episodes of a route within the window quarantine it."""
+
+    @model_validator(mode="after")
+    def _window_covers_persistence(self) -> Self:
+        if self.persist_min > self.window_h * 60:
+            msg = "QUARANTINE_PERSIST_MIN must not exceed QUARANTINE_WINDOW_H x 60"
+            raise ValueError(msg)
+        return self
 
 
 class PaperSettings(NexusBaseSettings):

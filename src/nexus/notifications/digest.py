@@ -84,7 +84,7 @@ class DigestFormatter:
         if paper is None:
             return ["📝 <b>Paper trading</b>: no activity yet"]
         skipped = ", ".join(f"{esc(k)} {v}" for k, v in sorted(paper.skipped.items()))
-        roc = paper.roc_pct
+        roc, hedged_roc = paper.roc_pct, paper.hedged_roc_pct
         return [
             "📝 <b>Paper trading</b>",
             f"Trades: <b>{paper.trades}</b>" + (f" · skipped: {skipped}" if skipped else ""),
@@ -97,6 +97,9 @@ class DigestFormatter:
             f" + MTM {fmt_usd(paper.mark_to_market_usd, signed=True)}",
             f"Capital {fmt_usd(paper.capital_usd)} · ROC "
             + (f"<b>{_signed_pct(roc)}</b>" if roc is not None else "n/a"),
+            f"🛡 Hedged (no inventory price risk): <b>"
+            f"{fmt_usd(paper.hedged_pnl_usd, signed=True)}</b>"
+            + (f" · ROC <b>{_signed_pct(hedged_roc)}</b>" if hedged_roc is not None else ""),
         ]
 
     @staticmethod

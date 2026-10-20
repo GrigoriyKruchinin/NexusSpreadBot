@@ -233,3 +233,16 @@ def test_trade_size_is_capped_by_inventory() -> None:
         D(0),
         SkipReason.NO_PRICE,  # no price yet: the coin cannot be seeded
     )
+
+
+def test_rebalance_charges_the_chain_tax() -> None:
+    p = PaperPortfolio(replace(CONFIG, transfer_tax_pct={"ABC": D("1.5")}))
+    p.mark_price("ABC", D(100))
+    _trade(p)
+    _trade(p)
+    abc_need = p.rebalance_needs(T0)[1]
+    rebalance = p.start_rebalance(abc_need, ABC_NET, T0)
+    # 0.01 ABC network fee + (9.98 - 0.01) x 1.5 % = 0.01 + 0.14955 = 0.15955 ABC = $15.955
+    assert rebalance.fee == D("0.15955")
+    assert rebalance.fee_usd == D("15.955")
+    assert rebalance.received == D("9.82045")

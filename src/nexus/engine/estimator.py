@@ -17,7 +17,8 @@ Both thresholds (percent AND USD) must be met for the result to be ``PROFITABLE`
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from decimal import Decimal
 
 from nexus.config.groups import SpreadSettings
@@ -52,6 +53,8 @@ class EstimatorConfig:
     max_unverified_gross_spread_pct: Decimal | None = None
     """Sanity cap applied unless the transfer path AND the token identity (matching contract
     addresses) are verified (``None`` = only ``max_gross_spread_pct`` applies)."""
+    transfer_tax_pct: Mapping[str, Decimal] = field(default_factory=dict)
+    """On-chain transfer tax per base asset (percent of the amount moved)."""
 
     @classmethod
     def from_settings(cls, settings: SpreadSettings) -> EstimatorConfig:
@@ -66,6 +69,7 @@ class EstimatorConfig:
             include_transfer_cost=settings.include_transfer_cost,
             require_verified_transfer=settings.require_verified_transfer,
             max_unverified_gross_spread_pct=settings.max_unverified_gross_spread_pct,
+            transfer_tax_pct=dict(settings.transfer_tax_pct),
         )
 
 
@@ -196,6 +200,10 @@ class NetSpreadEstimator:
             if cfg.include_transfer_cost and transfer.status is TransferStatus.VERIFIED
             else ZERO
         )
+        if cfg.include_transfer_cost:
+            # A chain-level tax applies whatever the network quote says (it is per asset).
+            tax_pct = cfg.transfer_tax_pct.get(buy_market.base, ZERO)
+            transfer_fee_base += (base_received - transfer_fee_base) * tax_pct / HUNDRED
         base_available = base_received - transfer_fee_base
         if base_available <= ZERO:
             return result(

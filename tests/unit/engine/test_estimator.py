@@ -449,3 +449,54 @@ def test_large_unverified_spread_is_suspicious(config: EstimatorConfig) -> None:
     # Same network code but unknown contracts: token identity not proven (ticker collision).
     assert run(VERIFIED_FREE) is EvaluationStatus.SUSPICIOUS_SPREAD
     assert run(replace(VERIFIED_FREE, contract_verified=True)) is EvaluationStatus.PROFITABLE
+
+
+def test_onchain_transfer_tax_is_charged(config: EstimatorConfig) -> None:
+    # 10 ABC bought for $1,000 (0.1 % fee in base -> 9.99); a 1.5 % chain tax burns 0.14985,
+    # 9.84015 arrive and are sold at 101 (993.85515) less 0.1 %: 992.86129485 -> -$7.13870515.
+    buy, sell = _simple_books()
+    taxed = replace(config, transfer_tax_pct={"ABC": D("1.5")})
+    ev = _estimator(taxed).evaluate(
+        buy_book=buy,
+        sell_book=sell,
+        buy_market=market("a"),
+        sell_market=market("b"),
+        transfer=VERIFIED_FREE,
+    )
+    assert ev.breakdown is not None
+    assert ev.breakdown.base_sold == D("9.84015")
+    assert ev.breakdown.proceeds_quote == D("992.86129485")
+    assert ev.breakdown.net_profit_usd == D("-7.13870515")
+    assert ev.breakdown.transfer_fee_usd == D("0.14985") * D(101)
+    assert ev.status is EvaluationStatus.BELOW_THRESHOLD  # the "persistent LUNC spread"
+
+
+def test_tax_applies_on_top_of_the_withdrawal_fee_and_without_network_data(
+    config: EstimatorConfig,
+) -> None:
+    buy, sell = _simple_books()
+    taxed = replace(config, transfer_tax_pct={"ABC": D("1.5")})
+    fee = TransferQuote(TransferStatus.VERIFIED, network="LUNC", fee_base=D(1))
+    with_fee = _estimator(taxed).evaluate(
+        buy_book=buy, sell_book=sell, buy_market=market("a"), sell_market=market("b"), transfer=fee
+    )
+    assert with_fee.breakdown is not None
+    assert with_fee.breakdown.base_sold == D("8.85515")  # 9.99 - 1 - 8.99 x 1.5 %
+    unknown = _estimator(taxed).evaluate(
+        buy_book=buy,
+        sell_book=sell,
+        buy_market=market("a"),
+        sell_market=market("b"),
+        transfer=TransferQuote(TransferStatus.UNKNOWN),
+    )
+    assert unknown.breakdown is not None
+    assert unknown.breakdown.base_sold == D("9.84015")  # per-asset tax, network unknown
+    untaxed = _estimator(replace(config, transfer_tax_pct={"XYZ": D(5)})).evaluate(
+        buy_book=buy,
+        sell_book=sell,
+        buy_market=market("a"),
+        sell_market=market("b"),
+        transfer=VERIFIED_FREE,
+    )
+    assert untaxed.breakdown is not None
+    assert untaxed.breakdown.base_sold == D("9.99")

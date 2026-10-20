@@ -70,6 +70,7 @@ def test_digest_snapshot() -> None:
         "Since start: P&amp;L <b>+$15.00</b> = realized +$30.00 − transfers $5.00"
         " + MTM -$10.00\n"
         "Capital $7,000.00 · ROC <b>+0.21%</b>\n"
+        "🛡 Hedged (no inventory price risk): <b>+$25.00</b> · ROC <b>+0.36%</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "🚫 <b>Quarantine</b>: 1 new · 3 active\n"
         "• <code>ZIL/USDT</code> Binance → OKX: spread persists without a verified transfer"

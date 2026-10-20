@@ -63,6 +63,8 @@ class PaperConfig:
     """Target trade size; trades shrink to the available inventory."""
     min_trade_fraction: Decimal = Decimal("0.1")
     """Trades smaller than this fraction of the target size are skipped (no inventory)."""
+    transfer_tax_pct: Mapping[str, Decimal] = field(default_factory=dict)
+    """On-chain transfer tax per asset (percent of the amount moved after the fee)."""
 
     def __post_init__(self) -> None:
         if self.usdt_per_exchange <= ZERO or self.coin_per_route_usd <= ZERO:
@@ -330,7 +332,9 @@ class PaperPortfolio:
         ``VERIFIED`` path with a fee below the amount is usable.
         """
         price = Decimal(1) if need.asset == USD_QUOTE else self.prices.get(need.asset, ZERO)
-        usable = quote.status is TransferStatus.VERIFIED and quote.fee_base < need.amount
+        tax_pct = self.config.transfer_tax_pct.get(need.asset, ZERO)
+        fee = quote.fee_base + (need.amount - quote.fee_base) * tax_pct / HUNDRED
+        usable = quote.status is TransferStatus.VERIFIED and fee < need.amount
         if not usable:
             note = quote.note or f"transfer {quote.status.value}"
             if quote.status is TransferStatus.VERIFIED:
@@ -350,13 +354,13 @@ class PaperPortfolio:
                 note,
             )
         self.blocked.pop((need.to_exchange, need.asset), None)
-        fee_usd = quote.fee_base * price
+        fee_usd = fee * price
         rebalance = Rebalance(
             need.asset,
             need.from_exchange,
             need.to_exchange,
             need.amount,
-            quote.fee_base,
+            fee,
             fee_usd,
             quote.network,
             now_ms,

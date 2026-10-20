@@ -219,3 +219,12 @@ def test_routes_quarantined_message_snapshot_and_cap() -> None:
     assert text.count("•") == 10
     assert "… and 3 more" in text
     assert "&lt;x&gt;" in text
+
+
+def test_chain_tax_is_shown_without_a_verified_network() -> None:
+    from dataclasses import replace
+
+    base = make_evaluation(transfer=TransferQuote(TransferStatus.UNKNOWN))
+    assert base.breakdown is not None
+    taxed = replace(base, breakdown=replace(base.breakdown, transfer_fee_usd=D("15.13")))
+    assert "Transfer  $15.13 tax + n/a" in OpportunityFormatter().render(taxed)

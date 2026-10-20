@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 
 import structlog
 
@@ -15,11 +16,34 @@ from nexus.interfaces.repositories import IQuarantineRepository
 log = structlog.get_logger(__name__)
 
 
+@dataclass(frozen=True, slots=True)
+class UnverifiedSpan:
+    """Interval during which an episode qualified without a verified transfer path."""
+
+    symbol: str
+    buy_exchange: str
+    sell_exchange: str
+    start_ms: int
+    end_ms: int
+    transfer_status: str
+
+
+@dataclass(frozen=True, slots=True)
+class RecurringRoute:
+    """A route due for quarantine and the evidence."""
+
+    span: UnverifiedSpan
+    """Its latest unverified interval (route identity and transfer status)."""
+    unverified_ms: int
+    episodes: int
+
+
 class QuarantineManager:
     """Keeps a per-sweep snapshot of active quarantines and applies the quarantine rules.
 
-    * An episode open for ``persist_ms`` without a ``VERIFIED`` transfer path quarantines
-      its route: a spread that persists while nobody can move the coin is a dead route.
+    * A route whose spread keeps coming back without a ``VERIFIED`` transfer path is dead:
+      within ``window_ms`` its unverified episodes add up to ``persist_ms`` or number at
+      least ``max_episodes`` (one long episode, or a flapping one).
     * A ``TRANSFER_UNAVAILABLE`` evaluation quarantines its route immediately.
     * A quarantine lifts early when the route's transfer path turns ``VERIFIED``.
 
@@ -34,17 +58,26 @@ class QuarantineManager:
         persist_ms: int,
         ttl_ms: int,
         clock: Clock,
+        window_ms: int = 6 * 3_600_000,
+        max_episodes: int = 5,
     ) -> None:
-        """Create the manager (``persist_ms``/``ttl_ms`` must be positive)."""
-        if persist_ms <= 0 or ttl_ms <= 0:
-            msg = "persist_ms and ttl_ms must be positive"
+        """Create the manager (durations and ``max_episodes`` must be positive)."""
+        if min(persist_ms, ttl_ms, window_ms, max_episodes) <= 0:
+            msg = "persist_ms, ttl_ms, window_ms and max_episodes must be positive"
+            raise ValueError(msg)
+        if window_ms < persist_ms:
+            msg = "the recurrence window must not be shorter than persist_ms"
             raise ValueError(msg)
         self._store = store
         self._repo = repository
         self._persist_ms = persist_ms
         self._ttl_ms = ttl_ms
         self._clock = clock
+        self._window_ms = window_ms
+        self._max_episodes = max_episodes
         self._active: dict[str, RouteQuarantine] = {}
+        self._spans: dict[str, dict[int, UnverifiedSpan]] = {}
+        """route key -> episode id -> its unverified interval (recurrence history)."""
 
     @property
     def active(self) -> dict[str, RouteQuarantine]:
@@ -62,23 +95,46 @@ class QuarantineManager:
         self._active = await self._store.active()
         return dict(self._active)
 
-    def persistent_unverified(
-        self, episodes: Iterable[OpportunityEpisode]
-    ) -> list[OpportunityEpisode]:
-        """Open episodes whose transfer path has been unverified for ``persist_ms``.
+    def recurring_unverified(
+        self, open_episodes: Iterable[OpportunityEpisode]
+    ) -> list[RecurringRoute]:
+        """Routes whose unverified episodes recur or persist within the window.
 
-        Measured from when the path *became* unverified, so a long verified episode is not
-        quarantined the moment one metadata refresh fails.
+        Call once per sweep with the open episodes: their unverified intervals are recorded
+        (closed episodes keep their last recorded interval). A verified episode clears its
+        route's history - the route is alive. Time is measured from when the transfer path
+        *became* unverified, so a metadata glitch does not count a verified past against it.
         """
         now = self._clock.now_ms()
-        return [
-            e
-            for e in episodes
-            if e.is_open
-            and e.unverified_since_ms is not None
-            and now - e.unverified_since_ms >= self._persist_ms
-            and e.route_key not in self._active
-        ]
+        for episode in open_episodes:
+            if episode.id is None:
+                continue
+            if episode.unverified_since_ms is None:
+                self._spans.pop(episode.route_key, None)
+                continue
+            self._spans.setdefault(episode.route_key, {})[episode.id] = UnverifiedSpan(
+                episode.symbol,
+                episode.buy_exchange,
+                episode.sell_exchange,
+                episode.unverified_since_ms,
+                episode.last_seen_at_ms,
+                episode.transfer_status.value,
+            )
+        due: list[RecurringRoute] = []
+        horizon = now - self._window_ms
+        for key in list(self._spans):
+            spans = {i: s for i, s in self._spans[key].items() if s.end_ms >= horizon}
+            if not spans:
+                del self._spans[key]
+                continue
+            self._spans[key] = spans
+            if key in self._active:
+                continue
+            total = sum(s.end_ms - max(s.start_ms, horizon) for s in spans.values())
+            if total >= self._persist_ms or len(spans) >= self._max_episodes:
+                last = max(spans.values(), key=lambda s: s.end_ms)
+                due.append(RecurringRoute(last, total, len(spans)))
+        return due
 
     async def quarantine(
         self,
@@ -124,6 +180,7 @@ class QuarantineManager:
         for key, quarantine in list(self._active.items()):
             if not should_lift(quarantine):
                 continue
+            self._spans.pop(key, None)  # the path is verified now: old evidence is void
             if await self._store.lift(key):
                 lifted.append(quarantine)
                 try:

@@ -518,19 +518,20 @@ class Scanner:
                 )
 
     async def _quarantine_persistent_unverified(self) -> None:
-        """The ZIL/ONE pattern: a spread that persists while the transfer is unverified."""
+        """The ZIL/ONE pattern: a spread that persists or keeps coming back while the transfer
+        path is unverified."""
         if self._quarantine is None or self._episodes is None:
             return
         open_episodes = self._episodes.open_episodes.values()
-        for episode in self._quarantine.persistent_unverified(open_episodes):
-            since = episode.unverified_since_ms or episode.opened_at_ms
-            minutes = (self._clock.now_ms() - since) // 60_000
+        for due in self._quarantine.recurring_unverified(open_episodes):
+            span = due.span
             await self._start_quarantine(
-                episode.symbol,
-                episode.buy_exchange,
-                episode.sell_exchange,
+                span.symbol,
+                span.buy_exchange,
+                span.sell_exchange,
                 QuarantineReason.UNVERIFIED_PERSISTENT,
-                f"spread persisted {minutes} min with transfer {episode.transfer_status.value}",
+                f"spread seen {due.unverified_ms // 60_000} min in {due.episodes} episode(s)"
+                f" with transfer {span.transfer_status}",
             )
 
     async def _lift_verified_quarantines(self) -> None:

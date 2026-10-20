@@ -263,13 +263,13 @@ def test_empty_required_value_is_still_missing(monkeypatch: pytest.MonkeyPatch) 
 
 def test_episode_gap_must_span_two_sweeps(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("POSTGRES_PASSWORD", "a-strong-password")
-    assert ScannerRoleSettings.load().episodes.close_gap_s == 60
+    assert ScannerRoleSettings.load().episodes.close_gap_s == 300
     assert ScannerRoleSettings.load().paper.latency_ms == 2_000
-    monkeypatch.setenv("SCANNER_TICKER_INTERVAL_S", "31")
+    monkeypatch.setenv("SCANNER_TICKER_INTERVAL_S", "151")
     with pytest.raises(ValueError, match="EPISODE_CLOSE_GAP_S"):
         ScannerRoleSettings.load()
-    monkeypatch.setenv("EPISODE_CLOSE_GAP_S", "62")
-    assert ScannerRoleSettings.load().episodes.close_gap_s == 62
+    monkeypatch.setenv("EPISODE_CLOSE_GAP_S", "302")
+    assert ScannerRoleSettings.load().episodes.close_gap_s == 302
 
 
 @pytest.mark.parametrize(
@@ -294,3 +294,26 @@ def test_digest_settings_defaults() -> None:
         0,
         "Europe/Moscow",
     )
+
+
+def test_transfer_taxes_default_and_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert SpreadSettings().transfer_tax_pct == {"LUNC": Decimal("1.5"), "USTC": Decimal("1.5")}
+    monkeypatch.setenv("SPREAD_TRANSFER_TAX_PCT", '{"lunc": 2, "XYZ": "0.5"}')
+    assert SpreadSettings().transfer_tax_pct == {"LUNC": Decimal(2), "XYZ": Decimal("0.5")}
+    monkeypatch.setenv("SPREAD_TRANSFER_TAX_PCT", '{"LUNC": 60}')
+    with pytest.raises(ValueError, match="SPREAD_TRANSFER_TAX_PCT"):
+        SpreadSettings()
+
+
+def test_tax_assets_must_be_unique_and_window_must_cover_persistence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from nexus.config.groups import QuarantineSettings
+
+    monkeypatch.setenv("SPREAD_TRANSFER_TAX_PCT", '{"lunc": 1, "LUNC": 2}')
+    with pytest.raises(ValueError, match="duplicate"):
+        SpreadSettings()
+    monkeypatch.setenv("QUARANTINE_PERSIST_MIN", "120")
+    monkeypatch.setenv("QUARANTINE_WINDOW_H", "1")
+    with pytest.raises(ValueError, match="QUARANTINE_PERSIST_MIN"):
+        QuarantineSettings()

@@ -931,7 +931,7 @@ async def test_verified_episode_is_not_quarantined_on_a_metadata_glitch() -> Non
     assert h.quarantine_store.history == []  # unverified for 10 min only
     await _persist(h, 6)
     (quarantine,) = h.quarantine_store.history
-    assert "spread persisted 15 min" in quarantine.note or "16 min" in quarantine.note
+    assert quarantine.note == "spread seen 15 min in 1 episode(s) with transfer unknown"
 
 
 async def test_requarantine_of_a_dead_route_is_announced_weekly_at_most() -> None:
@@ -1142,3 +1142,59 @@ async def test_sweep_reports_coverage_metrics(h: Harness) -> None:
     assert result.routes == sum(result.routes_by_pair.values())
     assert result.routes_by_pair["a>b"] == 1
     assert all(">" in pair for pair in result.routes_by_pair)
+
+
+async def _flap(h: Harness, times: int, *, on_s: int = 30, off_s: int = 400) -> None:
+    """A spread that appears for ``on_s`` and vanishes for ``off_s`` (closing the episode)."""
+    for _ in range(times):
+        h.b.quote("ABC/USDT", "101", "101.1")
+        await h.scanner.sweep()
+        h.clock.now += on_s * 1000
+        await h.scanner.sweep()
+        h.b.quote("ABC/USDT", "100", "100.1")
+        h.clock.now += off_s * 1000
+        await h.scanner.sweep()
+
+
+async def test_flapping_unverified_route_is_quarantined_by_recurrence() -> None:
+    h = _episode_harness(require_verified=True, quarantine=True)
+    await h.scanner.refresh_metadata()
+    await _flap(h, 4)
+    assert h.quarantine_store.history == []  # 4 short episodes: not yet
+    await _flap(h, 1)
+    (quarantine,) = h.quarantine_store.history
+    assert quarantine.note == "spread seen 2 min in 5 episode(s) with transfer unknown"
+    assert len(h.episode_repo.rows) == 5
+
+
+async def test_old_unverified_episodes_leave_the_window() -> None:
+    h = _episode_harness(require_verified=True, quarantine=True)
+    await h.scanner.refresh_metadata()
+    await _flap(h, 4)
+    h.clock.now += 6 * 3_600_000  # the window forgets them
+    await _flap(h, 1)
+    assert h.quarantine_store.history == []
+
+
+async def test_verified_flapping_route_is_never_quarantined() -> None:
+    h = _episode_harness(quarantine=True)
+    _verified_transfers(h)
+    await h.scanner.refresh_metadata()
+    await _flap(h, 8)
+    assert h.quarantine_store.history == []
+
+
+async def test_lifted_route_is_not_requarantined_from_old_history() -> None:
+    h = _episode_harness(require_verified=True, quarantine=True)
+    await h.scanner.refresh_metadata()
+    await _flap(h, 5)
+    assert len(h.quarantine_store.history) == 1
+    _verified_transfers(h)
+    await h.scanner.refresh_metadata()  # lifted: the transfer path is verified now
+    assert h.quarantine is not None
+    assert h.quarantine.active == {}
+    h.b.quote("ABC/USDT", "100", "100.1")  # no spread: no fresh evidence either way
+    await h.scanner.sweep()
+    await h.scanner.sweep()
+    assert len(h.quarantine_store.history) == 1
+    assert h.quarantine.active == {}

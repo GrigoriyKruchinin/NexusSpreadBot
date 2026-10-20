@@ -290,6 +290,20 @@ real rebalancing stays manual.
 - [x] Keep `SCANNER_MIN_QUOTE_VOLUME_USD=50000`
 - [ ] Revisit the value with soak data (after 1.5.10 soak)
 
+### 1.5.11 Fixes from the first soak (2026-10-19, ~10 h keyless) (R)
+Findings: one route (LUNC KuCoin→Binance) produced 24 of 30 verified episodes and 19 alerts;
+flapping dead routes (ZIL MEXC/Gate→OKX, 30+ short episodes each) evaded quarantine; paper
+P&L was +$82 realized but −$102 mark-to-market.
+- [x] Episodes: default `EPISODE_CLOSE_GAP_S` 60 → 300 (a continuous spread is one episode even
+  when the route misses a few sweeps).
+- [x] Quarantine by recurrence: cumulative unverified time ≥ `QUARANTINE_PERSIST_MIN` or
+  ≥ `QUARANTINE_MAX_EPISODES` unverified episodes within `QUARANTINE_WINDOW_H`.
+- [x] On-chain transfer taxes: `SPREAD_TRANSFER_TAX_PCT` per asset (default LUNC/USTC 1.5 %,
+  Terra Classic burn tax since 2026-08) in the estimator's transfer cost and paper rebalances.
+- [x] Digest: hedged paper P&L (realized − transfers, ROC) shown separately from mark-to-market.
+- [x] Fixed: celery beat crashed on the unpicklable digest crontab (no digest/retention ran).
+- Accepted: recurrence history is in memory (a restart forgets closed spans within the window).
+
 ### 1.5.10 Stage 1.5 Exit
 - [x] `make check` green; `/audit-risks` SAFE TO PROCEED for 1.5.1–1.5.7 (each audited; findings fixed or tracked)
 - [x] Keyless end-to-end smoke on live data (7 exchanges, 4 min): episodes, survived latency, quarantine of ZIL/ONE-type routes, one alert + paper trade + virtual rebalances, digest rendered from the DB

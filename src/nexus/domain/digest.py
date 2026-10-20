@@ -66,6 +66,18 @@ class PaperStats:
         return self.total_pnl_usd - self.realized_total_usd + self.rebalance_total_usd
 
     @property
+    def hedged_pnl_usd(self) -> Decimal:
+        """Since start, as if inventory price risk were hedged: arbitrage minus transfers."""
+        return self.realized_total_usd - self.rebalance_total_usd
+
+    @property
+    def hedged_roc_pct(self) -> Decimal | None:
+        """Hedged P&L over capital, percent."""
+        if self.capital_usd <= ZERO:
+            return None
+        return self.hedged_pnl_usd / self.capital_usd * HUNDRED
+
+    @property
     def roc_pct(self) -> Decimal | None:
         """Since start: return on capital, percent."""
         if self.capital_usd <= ZERO:
