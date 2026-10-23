@@ -155,6 +155,9 @@ services:
   scanner:
     <<: *image
     command: ["nexus", "scanner"]
+    # on-failure:5 (not unless-stopped): a refused key policy exits with code 3 and must not
+    # loop forever re-calling the signed key-introspection endpoints (A6 review).
+    restart: on-failure:5
     stop_grace_period: 30s
     environment:
       <<: [*db-env, *celery-env, *log-env, *scanner-env]

@@ -26,7 +26,9 @@ from nexus.adapters.key_policy import (
 from nexus.adapters.registry import AdapterOptions, exchange_registry
 from nexus.config.groups import CORE_EXCHANGES, ExchangeCredentials, KeyPolicySettings
 from nexus.domain.errors import (
+    ConfigurationError,
     ExchangeAuthError,
+    ExchangeError,
     KeyPolicyViolationError,
     ReadOnlyViolationError,
 )
@@ -119,6 +121,18 @@ def test_binance_forbidden_permission(flag: str) -> None:
     assert rules("binance", {**BINANCE_OK, flag: True}) == (f"permission:{flag}",)
 
 
+@pytest.mark.parametrize("flag", ["enableNewTrading", "permitsNewTransfer"])
+def test_binance_unknown_new_flag_refused(flag: str) -> None:
+    assert rules("binance", {**BINANCE_OK, flag: True}) == (f"permission:{flag}",)
+    assert rules("binance", {**BINANCE_OK, flag: "yes"}) == (f"permission:{flag}",)
+    assert rules("binance", {**BINANCE_OK, flag: False}) == ()
+
+
+def test_binance_unknown_flag_name_is_not_echoed() -> None:
+    result = rules("binance", {**BINANCE_OK, "enable<script>evil secret": True})
+    assert result == ("permission:unexpected_scope",)
+
+
 def test_binance_reading_disabled_and_ip_unbound() -> None:
     result = rules("binance", {**BINANCE_OK, "enableReading": False, "ipRestrict": False})
     assert result == ("permission:reading_disabled", IP_UNBOUND)
@@ -142,7 +156,14 @@ def test_bybit_not_read_only() -> None:
     assert rules("bybit", payload) == ("permission:not_read_only",)
 
 
-@pytest.mark.parametrize("item", ["Withdraw", "AccountTransfer", "SubMemberTransferList"])
+def test_bybit_submember_transfer_uses_fixed_rule_name() -> None:
+    payload = mutated(
+        BYBIT_OK, lambda p: p["result"]["permissions"].update(Wallet=["SubMemberTransferX!"])
+    )
+    assert rules("bybit", payload) == ("permission:Wallet.SubMemberTransfer",)
+
+
+@pytest.mark.parametrize("item", ["Withdraw", "AccountTransfer"])
 def test_bybit_wallet_scopes(item: str) -> None:
     payload = mutated(BYBIT_OK, lambda p: p["result"]["permissions"].update(Wallet=[item]))
     assert rules("bybit", payload) == (f"permission:Wallet.{item}",)
@@ -187,6 +208,32 @@ def test_bybit_error_envelope_refused() -> None:
 def test_okx_permissions(perm: str, expected: tuple[str, ...]) -> None:
     payload = mutated(OKX_OK, lambda p: p["data"][0].update(perm=perm))
     assert rules("okx", payload) == expected
+
+
+def test_okx_unknown_scope_refused() -> None:
+    payload = mutated(OKX_OK, lambda p: p["data"][0].update(perm="read_only,margin_loan"))
+    assert rules("okx", payload) == ("permission:margin_loan",)
+
+
+def test_okx_weird_scope_text_not_echoed() -> None:
+    payload = mutated(OKX_OK, lambda p: p["data"][0].update(perm=f"read_only,{FAKE_KEY}!"))
+    assert rules("okx", payload) == ("permission:unexpected_scope",)
+
+
+def test_kucoin_weird_scope_text_not_echoed() -> None:
+    payload = mutated(KUCOIN_OK, lambda p: p["data"].update(permission=f"General,{'x' * 80}"))
+    assert rules("kucoin", payload) == ("permission:unexpected_scope",)
+
+
+@pytest.mark.parametrize(
+    "ips", [["10.0.0.0/8"], ["0.0.0.0/4"], ["::/3"], ["203.0.113.7", "0.0.0.0/0"]]
+)
+def test_wide_cidr_counts_as_unbound(ips: list[str]) -> None:
+    assert rules("gateio", {**GATEIO_OK, "ip_whitelist": ips}) == (IP_UNBOUND,)
+
+
+def test_narrow_cidr_is_a_binding() -> None:
+    assert rules("gateio", {**GATEIO_OK, "ip_whitelist": ["203.0.113.0/24", "bogus"]}) == ()
 
 
 def test_okx_ip_empty_refused() -> None:
@@ -312,6 +359,24 @@ async def test_runner_request_failure_is_refused_without_leaking_message() -> No
     assert FAKE_KEY not in str(info.value)
 
 
+@pytest.mark.parametrize(
+    "error", [ReadOnlyViolationError("x"), ConfigurationError("x"), ValueError(FAKE_KEY)]
+)
+async def test_runner_any_exception_is_request_failed_and_others_continue(
+    error: BaseException,
+) -> None:
+    adapters = {"okx": FakeAdapter(error=error), "bybit": FakeAdapter(BYBIT_OK)}
+    with capture_logs() as logs, pytest.raises(KeyPolicyViolationError) as info:
+        await verify_key_policies(adapters, {n: creds() for n in adapters}, KeyPolicySettings())
+    assert info.value.violations == {"okx": (REQUEST_FAILED,)}
+    assert adapters["bybit"].calls == 1
+    assert FAKE_KEY not in json.dumps(logs, default=str)
+    assert any(
+        e["event"] == "key_policy_request_failed" and e["error"] == type(error).__name__
+        for e in logs
+    )
+
+
 async def test_runner_refuses_key_on_venue_without_policy() -> None:
     with pytest.raises(KeyPolicyViolationError) as info:
         await verify_key_policies({"mexc": FakeAdapter({})}, {"mexc": creds()}, ATTESTED)
@@ -342,7 +407,10 @@ async def test_parser_bug_refuses_instead_of_crashing_open() -> None:
         raise RuntimeError(FAKE_KEY)
 
     check = type(KEY_POLICIES["okx"])("okx", boom)
-    assert check.evaluate({}, ATTESTED) == (UNPARSEABLE,)
+    with capture_logs() as logs:
+        assert check.evaluate({}, ATTESTED) == (UNPARSEABLE,)
+    assert any(e["event"] == "key_policy_parser_error" for e in logs)
+    assert FAKE_KEY not in json.dumps(logs, default=str)
 
 
 # ---------------------------------------------------------------- adapter + guard
@@ -389,6 +457,24 @@ async def test_fetch_key_info_issues_only_a_get(
     assert len(seen) == 1  # one call per venue
     assert seen[0][0] == "GET"
     assert not any(w in seen[0][1].lower() for w in ("withdraw", "transfer", "order"))
+
+
+async def test_fetch_key_info_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+
+    async def failing_transport(self: Any, *_: Any, **__: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        raise ccxt_async.NetworkError("boom")
+
+    monkeypatch.setattr(ccxt_async.Exchange, "fetch", failing_transport)
+    adapter = exchange_registry.create("okx", CREDS_ALL, AdapterOptions())
+    try:
+        with pytest.raises(ExchangeError):
+            await adapter.fetch_key_info()  # type: ignore[attr-defined]
+    finally:
+        await adapter.close()
+    assert calls == 1
 
 
 # ---------------------------------------------------------------- startup wiring

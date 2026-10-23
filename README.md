@@ -123,10 +123,10 @@ make logs s=scanner
 
 ### Extension runs (MEXC, Bitget)
 
-Core-only deployments do not pass keys for extension venues (ADR 0002). For an extension run, add
-`"mexc","bitget"` to `EXCHANGES_ENABLED`, put `MEXC_API_KEY`, `MEXC_API_SECRET`, `BITGET_API_KEY`,
-`BITGET_API_SECRET`, `BITGET_API_PASSPHRASE` into `.env`, and add the same names to the scanner
-`environment` block in `docker-compose.local.yml` (`NAME: ${NAME:-}`).
+Extension venues run in **public-data mode only (no API keys)**. The key policy check (A6) has no
+policy for MEXC and Bitget, so a configured MEXC/Bitget key is refused at startup (exit code 3)
+until policies exist. For an extension run, add `"mexc","bitget"` to `EXCHANGES_ENABLED` and leave
+all `MEXC_*` / `BITGET_*` variables unset (ADR 0002).
 
 ## Development
 

@@ -142,8 +142,9 @@ read-only ключи по разделу 3, впишите их в `.env` и с�
 > сканер видит статус сетей и такие связки не алертит, а в Stage 1.5 ещё и автоматически
 > отправляет их в карантин.
 
-Ключи нужны для **всех 7 бирж**: Bybit, Binance, OKX, Gate.io, KuCoin, MEXC, Bitget
-(MEXC и Bitget подключаются в Stage 1.5). HTX не поддерживается — биржа под санкциями.
+Ключи нужны для **5 основных бирж**: Bybit, Binance, OKX, Gate.io, KuCoin. MEXC и Bitget
+(Stage 1.5) работают только в публичном режиме, **без ключей**: проверка политики ключей пока не
+знает эти биржи и откажется запускать сканер, если для них задан ключ. HTX не поддерживается — биржа под санкциями.
 
 ### Общие правила безопасности (для всех бирж)
 
@@ -230,6 +231,8 @@ read-only ключи по разделу 3, впишите их в `.env` и с�
 
 ### 3.6 MEXC (Stage 1.5)
 
+> Пока **не выполняйте** этот раздел: ключ MEXC/Bitget будет отклонён проверкой политики ключей (только публичный режим).
+
 1. mexc.com → профиль → **API Management** → **Create API Key**.
 2. Название (Notes): `nexus-scanner-readonly`.
 3. Permissions: отметьте **только просмотр** — в разделах Account и Spot пункты вида
@@ -242,6 +245,8 @@ read-only ключи по разделу 3, впишите их в `.env` и с�
    - Secret Key → `MEXC_API_SECRET`
 
 ### 3.7 Bitget (Stage 1.5)
+
+> Пока **не выполняйте** этот раздел: ключ MEXC/Bitget будет отклонён проверкой политики ключей (только публичный режим).
 
 1. bitget.com → профиль → **API Management** → **Create API** →
    **System-generated API key**.
@@ -304,14 +309,9 @@ read-only ключи по разделу 3, впишите их в `.env` и с�
    KUCOIN_API_SECRET=...
    KUCOIN_API_PASSPHRASE=...
 
-   # Stage 1.5 / расширение (только для extension-запусков, см. README "Extension runs":
-   # добавьте "mexc","bitget" в EXCHANGES_ENABLED и эти переменные в environment сканера
-   # в docker-compose.local.yml; по умолчанию они не передаются в контейнер)
-   MEXC_API_KEY=...
-   MEXC_API_SECRET=...
-   BITGET_API_KEY=...
-   BITGET_API_SECRET=...
-   BITGET_API_PASSPHRASE=...
+   # MEXC и Bitget (Stage 1.5): ключи НЕ задавайте. Проверка политики ключей отклоняет
+   # запуск (код выхода 3), если для биржи без политики задан ключ. Добавьте "mexc","bitget"
+   # в EXCHANGES_ENABLED и оставьте MEXC_* / BITGET_* пустыми.
    ```
 
    Случайный пароль можно сгенерировать так: `openssl rand -base64 32`.
@@ -463,7 +463,8 @@ make logs s=scanner    # логи сканера
 - [ ] Бот создан, токен в `.env`, боту нажат **Start**
 - [ ] `TELEGRAM_CHAT_ID` в `.env`
 - [ ] Ключи бирж созданы **только с правом чтения**, вывод выключен
-      (Bybit, Binance, OKX, Gate.io, KuCoin, MEXC, Bitget)
+      (Bybit, Binance, OKX, Gate.io, KuCoin). Ключи MEXC и Bitget **не создавайте**: пока для них
+      нет проверки политики, сканер откажется стартовать с такими ключами (только публичный режим)
 - [ ] **KuCoin:** в настройках ключа включена привязка к IP (только IP вашего хоста), затем в `.env`
       `KEY_POLICY_KUCOIN_IP_ATTESTED=true` (сканер не видит IP-список KuCoin и просит подтверждение)
 - [ ] **Gate.io:** у каждой группы прав ключа стоит «Только чтение» или «Отключено», никогда

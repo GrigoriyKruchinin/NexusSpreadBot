@@ -13,7 +13,6 @@ class BybitAdapter(CcxtExchangeAdapter):
     """Bybit (unified account, spot category)."""
 
     name: ClassVar[str] = "bybit"
-    key_info_method: ClassVar[str | None] = "privateGetV5UserQueryApi"
     ccxt_id: ClassVar[str] = "bybit"
     static_market_fees: ClassVar[bool] = True
     max_order_book_limit: ClassVar[int] = 200

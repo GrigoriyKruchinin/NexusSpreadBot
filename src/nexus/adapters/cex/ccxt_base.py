@@ -208,7 +208,8 @@ class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook, ITradingFeeS
 
         The caller must reduce it to booleans / rule names and never log or store it.
         """
-        return await self._call("fetch_key_info", self._key_info_request)
+        # Single attempt: the key policy check is exactly one signed GET per venue.
+        return await self._call("fetch_key_info", self._key_info_request, max_attempts=1)
 
     async def _key_info_request(self) -> Any:
         """One signed GET to the venue's key-introspection endpoint (key policy, A6).
@@ -229,9 +230,16 @@ class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook, ITradingFeeS
 
     # ------------------------------------------------------------------ calls
 
-    async def _call(self, operation: str, func: Callable[[], Awaitable[T]]) -> T:
+    async def _call(
+        self,
+        operation: str,
+        func: Callable[[], Awaitable[T]],
+        *,
+        max_attempts: int | None = None,
+    ) -> T:
         """Run a ccxt call with error translation, an overall timeout and bounded retries."""
         timeout_s = self._options.timeout_ms / 1000 * 2
+        limit = self.max_attempts if max_attempts is None else max_attempts
         attempt = 1
         while True:
             cause: BaseException
@@ -248,7 +256,7 @@ class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook, ITradingFeeS
             except (IndexError, KeyError, TypeError) as exc:
                 cause = exc
                 error = ExchangeDataError(self.name, f"{operation}: malformed data ({exc!r:.120})")
-            if not isinstance(error, _RETRYABLE) or attempt >= self.max_attempts:
+            if not isinstance(error, _RETRYABLE) or attempt >= limit:
                 # Drop the ccxt cause: its message may contain signed URLs and raw bodies.
                 error.add_note(f"cause: {type(cause).__name__}")
                 raise error from None

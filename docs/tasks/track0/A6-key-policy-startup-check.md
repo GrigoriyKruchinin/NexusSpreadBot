@@ -6,7 +6,7 @@
 - reviewers: security, tech-lead
 - complexity: high (fail-closed security gate on every authenticated client; five venues with different response shapes)
 - depends_on: B1 (done). Blocks U3: no real keys before this is merged.
-- status: implemented (uncommitted); awaiting security + tech-lead review. Code: `src/nexus/adapters/key_policy.py`, tests: `tests/unit/adapters/test_key_policy.py`; compose/.env.example need `KEY_POLICY_*` passthrough (devops)
+- status: review (round 1 fixes applied: tech-lead 1-4, 6, 8, 9, 10, 12; security F2-F6); awaiting re-review. Code: `src/nexus/adapters/key_policy.py`, tests: `tests/unit/adapters/test_key_policy.py`
 
 ## Goal
 At scanner startup a per-venue `KeyPolicyCheck` refuses to start if the configured key can trade, withdraw or transfer, or is not IP-bound.

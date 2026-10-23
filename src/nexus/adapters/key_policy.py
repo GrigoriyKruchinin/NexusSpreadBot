@@ -14,6 +14,8 @@ after the U3 run on real read-only keys.
 
 from __future__ import annotations
 
+import ipaddress
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -21,7 +23,7 @@ from typing import Any
 import structlog
 
 from nexus.config.groups import ExchangeCredentials, KeyPolicySettings
-from nexus.domain.errors import ExchangeError, KeyPolicyViolationError
+from nexus.domain.errors import KeyPolicyViolationError
 
 log = structlog.get_logger(__name__)
 
@@ -35,8 +37,26 @@ ATTEST_KUCOIN_IP = "attestation_required:ip_binding"
 ATTEST_GATEIO_PERMS = "attestation_required:permissions_read_only"
 
 _WILDCARD_IPS = frozenset({"*", "0.0.0.0", "0.0.0.0/0", "::/0"})  # noqa: S104 - data, not a bind
+#: A CIDR this wide (/0../8) is not an IP binding in practice (treated as unbound).
+_MAX_WILDCARD_PREFIX = 8
+_SAFE_NAME = re.compile(r"[A-Za-z0-9_]{1,40}")
 
-#: binance: flags that must all be ``false`` (any of them grants more than reading).
+
+def _scope_rule(name: str) -> str:
+    """Rule name for a scope taken from a response: only a short safe charset is echoed."""
+    return f"permission:{name}" if _SAFE_NAME.fullmatch(name) else "permission:unexpected_scope"
+
+
+def _is_wildcard_ip(ip: str) -> bool:
+    if ip in _WILDCARD_IPS:
+        return True
+    try:
+        return ipaddress.ip_network(ip, strict=False).prefixlen <= _MAX_WILDCARD_PREFIX
+    except ValueError:
+        return False
+
+
+#: binance: flags that must be present and ``false`` (any of them grants more than reading).
 BINANCE_FORBIDDEN = (
     "enableWithdrawals",
     "enableInternalTransfer",
@@ -50,7 +70,10 @@ BINANCE_FORBIDDEN = (
 )
 BYBIT_FORBIDDEN_WALLET = ("Withdraw", "AccountTransfer")
 BYBIT_FORBIDDEN_WALLET_PREFIX = "SubMemberTransfer"
-OKX_FORBIDDEN_PERMS = ("trade", "withdraw")
+#: binance: the only ``enable*`` / ``permits*`` flags that may be true (allow-list).
+BINANCE_ALLOWED_TRUE = frozenset({"enableReading", "enableFixReadOnly"})
+_BINANCE_FLAG_PREFIXES = ("enable", "permits")
+OKX_ALLOWED_PERMS = frozenset({"read_only"})
 KUCOIN_ALLOWED_PERMS = frozenset({"General"})
 
 
@@ -80,7 +103,7 @@ def _ip_rules(value: Any, field: str) -> tuple[str, ...]:
     ips = _ips(value)
     if ips is None:
         return (_missing(field),)
-    if not ips or any(ip in _WILDCARD_IPS for ip in ips):
+    if not ips or any(_is_wildcard_ip(ip) for ip in ips):
         return (IP_UNBOUND,)
     return ()
 
@@ -97,6 +120,14 @@ def parse_binance(payload: Any) -> tuple[str, ...]:
             rules.append(_missing(field))
         elif flag:
             rules.append(f"permission:{field}")
+    # Allow-list: a flag the venue adds later is refused unless it is explicitly read-only.
+    known = set(BINANCE_FORBIDDEN) | BINANCE_ALLOWED_TRUE
+    extra = sorted(
+        key
+        for key, value in body.items()
+        if key.startswith(_BINANCE_FLAG_PREFIXES) and key not in known and value is not False
+    )
+    rules.extend(_scope_rule(key) for key in extra)
     reading = _flag(body, "enableReading")
     if reading is None:
         rules.append(_missing("enableReading"))
@@ -132,11 +163,11 @@ def parse_bybit(payload: Any) -> tuple[str, ...]:
         if not isinstance(wallet, list) or not all(isinstance(item, str) for item in wallet):
             rules.append(_missing("permissions.Wallet"))
         else:
-            rules.extend(
-                f"permission:Wallet.{item}"
-                for item in wallet
-                if item in BYBIT_FORBIDDEN_WALLET or item.startswith(BYBIT_FORBIDDEN_WALLET_PREFIX)
-            )
+            for item in wallet:
+                if item in BYBIT_FORBIDDEN_WALLET:
+                    rules.append(f"permission:Wallet.{item}")
+                elif item.startswith(BYBIT_FORBIDDEN_WALLET_PREFIX):
+                    rules.append(f"permission:Wallet.{BYBIT_FORBIDDEN_WALLET_PREFIX}")
     rules.extend(_ip_rules(body.get("ips"), "ips"))
     return tuple(rules)
 
@@ -156,7 +187,7 @@ def parse_okx(payload: Any) -> tuple[str, ...]:
         rules.append(_missing("perm"))
     else:
         scopes = {item.strip() for item in perm.split(",") if item.strip()}
-        rules.extend(f"permission:{name}" for name in OKX_FORBIDDEN_PERMS if name in scopes)
+        rules.extend(_scope_rule(name) for name in sorted(scopes - OKX_ALLOWED_PERMS))
         if "read_only" not in scopes:
             rules.append("permission:read_only_absent")
     ip = body.get("ip")
@@ -181,7 +212,7 @@ def parse_kucoin(payload: Any) -> tuple[str, ...]:
     scopes = {item.strip() for item in permission.split(",") if item.strip()}
     if not scopes:
         return (_missing("permission"),)
-    return tuple(f"permission:{name}" for name in sorted(scopes - KUCOIN_ALLOWED_PERMS))
+    return tuple(_scope_rule(name) for name in sorted(scopes - KUCOIN_ALLOWED_PERMS))
 
 
 def parse_gateio(payload: Any) -> tuple[str, ...]:
@@ -204,7 +235,14 @@ class KeyPolicyCheck:
         """Rule names violated by ``payload`` (empty = key passes). Never raises."""
         try:
             rules = list(self.parse(payload))
-        except Exception:
+        except Exception as exc:
+            # Fail closed, but not silently; class name only (the payload is sensitive).
+            log.warning(
+                "key_policy_parser_error",
+                exchange=self.venue,
+                rule=UNPARSEABLE,
+                error=type(exc).__name__,
+            )
             rules = [UNPARSEABLE]
         if self.attestation is not None:
             attested, rule = self.attestation(settings)
@@ -250,8 +288,10 @@ async def verify_key_policies(
             continue
         try:
             payload = await read_key_info()
-        except ExchangeError as exc:
-            # Only the class name: messages of auth errors may embed request details.
+        except Exception as exc:
+            # Any failure (exchange, read-only guard, configuration, ...) refuses this venue
+            # and the other venues are still checked. Only the class name is logged: messages
+            # of auth errors may embed request details.
             log.warning("key_policy_request_failed", exchange=venue, error=type(exc).__name__)
             violations[venue] = (REQUEST_FAILED,)
             continue
