@@ -6,7 +6,7 @@
 - reviewers: security (workflow permissions, secrets, pinned actions), tech-lead (gates vs baseline)
 - complexity: medium (several jobs, service containers, test-DB safety)
 - depends_on: A1 (done, 3d5441f), B1 (so CI runs the final default config)
-- status: todo
+- status: implemented locally, awaiting first CI run (not committed/pushed)
 
 ## Goal
 Every push/PR to `main` and working branches runs lint, mypy, unit tests with a coverage floor,
@@ -62,3 +62,18 @@ or live DB.
 - Secret scan over history may flag false positives (docs examples); use a minimal allowlist file,
   reviewed by security.
 - Coverage floor of 89 % leaves no margin; flaky coverage on async paths could block merges.
+
+## Implementation notes (devops, 2026-10-23)
+- Workflow `.github/workflows/ci.yml`: lint, typecheck, unit, integration, secret-scan, dependency-audit,
+  docker-build (7 jobs; pip-audit added per S-06). Actions pinned by SHA (checkout v7.0.1, setup-uv v10.3.2);
+  uv 0.9.8; `permissions: contents: read`; no `secrets.*`; no `pull_request_target`.
+- gitleaks runs as a pinned binary (v8.30.1, sha256 verified) instead of gitleaks-action (license for orgs).
+  Config `.gitleaks.toml`: default rules + allowlist AND(rule generic-api-key, path tests/unit/test_log.py,
+  two exact fake values). Local full-history scan: 2 findings (those fakes, commit 865113a) -> allowlisted, 0 left;
+  planted unlisted token in the same file still fails.
+- pip-audit found certifi 2026.10.18 (PYSEC-2026-4320) and protobuf 5.29.5 (PYSEC-2026-1805); fixed by patch bumps
+  certifi 2026.10.23 and protobuf==5.29.6 (pyproject + uv.lock); re-audit clean.
+- Integration job: only Postgres service (postgres:17-alpine, DB nexus_test); integration tests do not use Redis, so no Redis service.
+- `fail_under = 89` added to `[tool.coverage.report]`; local coverage 89.22 %, 492 unit tests, `make check` green.
+- Remaining: first CI run link, negative checks on a throwaway branch, security sign-off, user enables branch protection
+  (`docs/guides/ci-branch-protection.md`). Pre-commit gitleaks hook (S-06) not added yet.

@@ -1,0 +1,17 @@
+# gitleaks config (S-06). Default ruleset + a narrow allowlist for synthetic test tokens.
+# Each entry is scoped by rule AND path AND exact value; there is no global regex allowance.
+title = "nexus gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic redaction fixtures in tests/unit/test_log.py (fake values, not credentials)"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^tests/unit/test_log\.py$''']
+regexTarget = "match"
+regexes = [
+  '''AbCdEf0123456789''',
+  '''0123456789abcdef''',
+]
