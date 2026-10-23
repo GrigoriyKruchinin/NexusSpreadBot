@@ -1,25 +1,62 @@
-# STATE (updated 2026-10-23)
+# STATE (updated 2026-10-23, end of session)
 
-- Trajectory: M (MVP/analysis, GO/NO-GO protocol on). Branch: `chore/agent-pipeline-adoption` (pushed to origin 2026-10-23).
-- Done: Phases 0-4; Phase 5 core: vision (docs/product/vision.md), target architecture + migration plan (docs/architecture/), ADR 0002-0006 accepted. U2 answered: DEX seam only (A), risk-manager and creative-ceo agents added, bitget/mexc = extension only.
-- Track 0: R-01 done (3d5441f). B1 done (2862593). R-05 CI done (f6b5abb), first run green (user, 2026-10-23); branch protection pending user. Open: R-06 deps, R-07 log scrub, R-09 backups, LICENSE (user).
-- User confirmed vision proposals 2026-10-23: portfolio = default pivot after NO-GO; manual rebalancing (ADR 0001 unchanged); Rework = up to 5 iterations of searching for any profitable spread approach (ADR 0007). Goal: find a way to earn, not to prove one hypothesis.
-- Risks noted: security may want per-service DB roles back (architect cut to 3); stale thresholds 500/2000 ms need quant tuning; B7 migration needs backups + user OK.
-- Known: live DB paper data wiped 2026-10-23 (R-01); soak must restart. No backups yet. Integration tests need DB `nexus_test` and POSTGRES_DB=nexus_test (ask first).
-- User keys (2026-10-23): Bybit account blocked by exchange -> no Bybit keys until unblocked (public data still works; Bybit transfer status = UNKNOWN). MEXC/Bitget: no accounts (RF citizenship not accepted), waiting for Argentine DNI. Ties to legal gates G1/G4 (docs/legal/review-vision-architecture.md). User answered 2026-10-23: RF citizenship (passport) + KYC on all accounts. Bybit: KYC done in Montenegro/Georgia/Armenia (unsure); not full ban — ~1.6 ETH transfer frozen by compliance ticket ~1.5 months. Binance: old account opened as RF resident. gateio/kucoin/okx: opened in Argentina with RF passport. Advised user NOT to open a second Binance account (multi-account ToS); lawyer assessing residence-update path.
-- User decided 2026-10-23: 2 %/month GO bar is AFTER income tax. Push of working branch allowed.
-- Security review: accept with changes (docs/audit/security-review-architecture.md), applied to target.md section 10; A5 split into A5a-A5d. Legal: no Stage-1 blocker, GO needs G1-G4. Key-permission research: docs/reports/exchange-key-permissions.md.
-- Next after this: project-manager re-cuts A5a-A5d cards + todo; tech-lead/security quick re-check of target.md section 10; lawyer creates G1-G4 checklist.
-- User idea 2026-10-23 (G2): optional per-exchange proxy in adapters (ccxt supports it) instead of dropping a venue. Not now (no server yet). Before design: lawyer checks each core exchange ToS on proxy/VPN (geo-circumvention is usually prohibited -> freeze risk); legit use = static egress IP for key whitelist. Proxy URL = secret, off by default. Add to todo backlog after PM finishes todo edit.
-- Security re-check: ACCEPT (design). Follow-ups: A6 key-policy startup check before U3 (no real keys before it); B1 follow-up: drop MEXC_*/BITGET_* from compose scanner env + .env.example; gitleaks pre-commit hook; A4 three scrub tests. Legal checklist: docs/legal/go-gates-checklist.md (G1/G3/G4 at risk, G2 open). User decided 2026-10-23: GO numbers reported with AND without Bybit; if block not lifted by UF -> judge without Bybit (quant-analyst; checklist item G1.7).
-- User decided 2026-10-23: third outcome GO-HOLD = analytical GO but gates (keys/access/residence) not met -> keep developing without money (data on all core venues incl. Bybit/Binance public, DEX allowed), prod/money only after DNI + all keys. Recorded in vision + ADR 0008 (amends 0006). User: legal gate with real penalties (fines/criminal) -> NO-GO/stop; launch keys = only venues in final GO set.
-- A6 done (6766bfd), security ACCEPT (docs/audit/security-review-A6.md), follow-ups F2-F6 pending; tech-lead round 1: RETURN (docs/audit/tech-lead-review-track0.md; B1/A4/B1a/A2a/CI accepted); backend-lead fixing.
-- Legal addendum: Gate User Agreement 2.5 lists Argentina AND Russia as restricted (needs human re-read) -> G1.2 blocked; Binance RF-resident account: change residence, do not open second account. User decided 2026-10-23: gateio same rule as Bybit — GO numbers with and without gateio; without written Gate confirmation of serving Argentine residents by UF -> judge without it.
-- User says keys for binance/gateio/kucoin/okx are already in .env (not read; .env is gitignored, untracked). Until A6 lands, user must confirm manually: read-only, withdrawals off, IP whitelist.
-- A6 round-1 fixes committed (ee38592); tech-lead round 2: ACCEPT; Track 0 code accepted. Next stage-end: tester + security + delta audit.
-- User request 2026-10-23: (a) logs/Telegram show the list of conditional venues (not tradable now: Bybit, gateio, ...) and aggregate totals WITH and WITHOUT them (combined, not per venue); (b) expand analysed venues (up to ~20, more is better): research candidates first, user will register and get keys. crypto-specialist researching; card for (a) pending.
-- B14 done (5ba4f07) + integration tests (9c5a4d9, CI only per user); tech-lead round 1: RETURN (docs/audit/tech-lead-review-B14.md). Quant: excl-conditional paper P&L is a digest estimate only, not a GO number (docs/quant/b14-conditional-totals-review.md).
-- User decided 2026-10-23: integration tests run only in CI. GO numbers via shadow paper portfolios with venue sets defined in config (default 2: all / excluding conditional; add e.g. 'without gateio' by one config line; data accrues from the moment a set is added). Needs DB migration -> card + backups + user OK.
-- User decided 2026-10-23: B15 fixed paper capital per shadow portfolio = $10,000 (config). A5a approved (U4): devops may do one real read-only pg_dump of nexus and restore drill ONLY into nexus_test; no down -v, no writes to nexus. B15/B16 cards: 31bcd3f.
-- B14 security ACCEPT. A5a code committed (5ccf1b6); user approved 2026-10-23 running scripts/sql/bootstrap_backup_roles.sql (roles nexus_ro, nexus_test_owner, DB nexus_test) then first dump + restore drill.
-- Agents added this session need a fresh session to register: creative-ceo, risk-manager.
+## Where we are
+- Trajectory M (MVP/analysis, GO/NO-GO protocol). Branch `chore/agent-pipeline-adoption`, pushed; not
+  merged to `main` (merge/PR only with user consent). CI green on HEAD incl. integration (gh CLI works
+  now: `gh run list`, `gh run view <id>`).
+- Unit tests 666, branch coverage ~90.5 %, ruff 0, mypy --strict 0 (ratchet floor: 89 %).
+
+## Done this session (all committed + pushed)
+- Phase 5 tail: legal + security reviews of vision/architecture; target.md §10 security model; A5 split
+  A5a-A5d; legal GO gates checklist `docs/legal/go-gates-checklist.md`.
+- Track 0 code, reviewed + accepted: B1 CORE_EXCHANGES, A2 CI (R-05), A2a gitleaks pre-commit, A4 log
+  scrub (R-07), B1a drop MEXC/BITGET key vars, A6 key-policy startup check (tech-lead r2 + security
+  accepted; follow-ups F-1..F-5 in todo).
+- B14 conditional venues reporting (tech-lead r2 + security accepted; R2-1 carried into B15 card).
+- A5a backups: scripts + roles `nexus_ro`, `nexus_test_owner`, DB `nexus_test` bootstrapped on the
+  local cluster; first dump + restore drill PASSED (`docs/reports/restore-drill.md`).
+- Research: exchange key permissions, expansion candidates (20 ranked, batches),
+  legal review of expansion venues `docs/legal/expansion-venues-review.md`.
+- Vision: GO bar after tax; GO-HOLD outcome (ADR 0008); Bybit + gateio = conditional venues.
+
+## In flight / next (in order)
+1. **A5a reviews** (security + tech-lead) were cut off by a rate limit: re-run both
+   (write `docs/audit/security-review-A5a.md`, `docs/audit/tech-lead-review-A5a.md`).
+2. A5a leftovers (ask user): free external heartbeat service; enable daily backup schedule.
+3. Stage-end for Track 0 + B14: tester regression + analyzer delta audit, then summary to user.
+4. **B15** shadow paper portfolios (needs migration; A5a gate passed; user U4 OK required before
+   applying to live `nexus`; capital $10,000 per set; includes R2-1 fix).
+5. **B16** public-only probe of batch 1 per legal verdicts: BingX, XT, Toobit OK; Bitfinex, Phemex
+   public only. Batch 2: WEEX after DNI; DigiFinex, Deepcoin public only; Poloniex, LBank do not register.
+6. Remaining Track 0: R-06 deps, A5b Redis auth, A5c DB roles, A5d (deferred to VPS), A6 follow-ups.
+7. Then soak (needs B15 + backups running), quant, GO/NO-GO.
+
+## User decisions (2026-10-23)
+- GO bar 2 %/month **after** income tax. GO-HOLD = analytical GO but gates unmet -> keep developing
+  without money (DEX allowed), launch after DNI + keys for the final GO venue set. Real legal
+  penalties (fines/criminal, per a human lawyer) -> NO-GO/stop.
+- Bybit and gateio: GO numbers with and without; judged without them if not resolved by UF.
+- Digest/Telegram: list of conditional venues + combined totals all vs excluding (done in B14).
+- GO numbers via shadow portfolios, venue sets from config (default 2), $10,000 each.
+- Integration tests run only in CI. Push of the working branch is allowed.
+- Proxy per exchange: backlog idea, lawyer ToS check first, design with user when a server is chosen.
+- Expand venues (up to ~20): public-data probe first, user registers only where worth it.
+
+## User facts / open items for the user
+- RF citizen (passport), resident in Argentina, DNI pending. Keys for binance/gateio/kucoin/okx are in
+  `.env` (never read it). Bybit: 1.6 ETH transfer frozen, compliance ticket ~1.5 months. Binance
+  account opened as RF resident -> change residence on the existing account, do NOT open a second one.
+  Gate ToS 2.5 lists Argentina and Russia as restricted (user to ask Gate support in writing).
+- User actions list: `docs/legal/go-gates-checklist.md` (check residence/domain on each venue, Gate
+  ticket, Binance residence change, Bybit ticket only, questions for a human lawyer/accountant).
+- Branch protection on `main`: user was configuring (checks: lint, typecheck, unit, integration,
+  secret-scan, dependency-audit, docker-build; 0 required approvals).
+- `uv run pre-commit install` once (gitleaks hook). KEY_POLICY_* attestation flags default false.
+- LICENSE decision.
+
+## Lessons
+- devops attempted a write probe on live `nexus` despite an explicit ban (blocked by the harness, no
+  effect). For live-DB tasks: give exact commands to run and review them; never ask for "verification"
+  without listing allowed read-only queries.
+- Concurrent agents + pre-commit: commit may fail with "files were modified"; just retry.
+- Session can die mid-run: after restart check `git status` for partial agent output before relaunching.
