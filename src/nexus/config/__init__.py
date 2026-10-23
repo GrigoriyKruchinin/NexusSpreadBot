@@ -1,6 +1,7 @@
 """Modular, per-container settings."""
 
 from nexus.config.groups import (
+    CORE_EXCHANGES,
     CelerySettings,
     DatabaseSettings,
     ExchangeCredentials,
@@ -21,6 +22,7 @@ from nexus.config.roles import (
 )
 
 __all__ = [
+    "CORE_EXCHANGES",
     "AlertsWorkerSettings",
     "CelerySettings",
     "DatabaseSettings",

@@ -116,12 +116,17 @@ class LoggingSettings(NexusBaseSettings):
     json_format: bool = True
 
 
+#: Core venues whose data counts towards the GO decision (ADR 0002, ADR 0004). bitget/mexc are
+#: extension-only: their adapters stay registered, but they are enabled only via explicit config.
+CORE_EXCHANGES: tuple[str, ...] = ("binance", "bybit", "gateio", "kucoin", "okx")
+
+
 class ExchangesSettings(NexusBaseSettings):
     """Which exchanges are enabled and how to talk to them (``EXCHANGES_*``)."""
 
     model_config = SettingsConfigDict(env_prefix="EXCHANGES_")
 
-    enabled: StrTuple = ("bybit", "binance", "okx", "gateio", "kucoin", "mexc", "bitget")
+    enabled: StrTuple = CORE_EXCHANGES
     request_timeout_ms: int = Field(default=10_000, ge=1_000, le=60_000)
 
     @field_validator("enabled")

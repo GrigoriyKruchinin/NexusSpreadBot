@@ -1,9 +1,12 @@
+import json
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from nexus.config import (
+    CORE_EXCHANGES,
     AlertsWorkerSettings,
     ExchangeCredentials,
     ExchangesSettings,
@@ -15,6 +18,7 @@ from nexus.config import (
     TelegramSettings,
 )
 
+ENV_EXAMPLE = Path(__file__).resolve().parents[3] / ".env.example"
 VALID_TOKEN = "123456789:AAHabcdefghijklmnopqrstuvwxyz012345"
 DB_PASSWORD = "correct-horse-battery-staple"
 
@@ -36,6 +40,30 @@ def test_exchanges_enabled_accepts_csv_and_json(monkeypatch: pytest.MonkeyPatch)
     assert ExchangesSettings().enabled == ("bybit", "okx")
     monkeypatch.setenv("EXCHANGES_ENABLED", '["binance","kucoin"]')
     assert ExchangesSettings().enabled == ("binance", "kucoin")
+
+
+def test_exchanges_default_is_core_exchanges(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("EXCHANGES_ENABLED", raising=False)
+    assert ExchangesSettings().enabled == CORE_EXCHANGES
+    assert set(CORE_EXCHANGES) == {"binance", "bybit", "gateio", "kucoin", "okx"}
+
+
+def test_exchanges_empty_env_falls_back_to_core(monkeypatch: pytest.MonkeyPatch) -> None:
+    # docker-compose.local.yml passes an unset EXCHANGES_ENABLED as "".
+    monkeypatch.setenv("EXCHANGES_ENABLED", "")
+    assert ExchangesSettings().enabled == CORE_EXCHANGES
+
+
+def test_exchanges_extension_venues_loadable_when_explicit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EXCHANGES_ENABLED", "binance,bybit,mexc,bitget")
+    assert ExchangesSettings().enabled == ("binance", "bybit", "mexc", "bitget")
+
+
+def test_env_example_exchanges_in_sync_with_core() -> None:
+    line = next(
+        ln for ln in ENV_EXAMPLE.read_text().splitlines() if ln.startswith("EXCHANGES_ENABLED=")
+    )
+    assert tuple(json.loads(line.split("=", 1)[1])) == CORE_EXCHANGES
 
 
 @pytest.mark.parametrize("value", ["bybit", "bybit,bybit", "by-bit,okx"])
