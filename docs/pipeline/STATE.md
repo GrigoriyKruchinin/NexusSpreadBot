@@ -21,4 +21,5 @@
 - B14 done (5ba4f07) + integration tests (9c5a4d9, CI only per user); tech-lead round 1: RETURN (docs/audit/tech-lead-review-B14.md). Quant: excl-conditional paper P&L is a digest estimate only, not a GO number (docs/quant/b14-conditional-totals-review.md).
 - User decided 2026-10-23: integration tests run only in CI. GO numbers via shadow paper portfolios with venue sets defined in config (default 2: all / excluding conditional; add e.g. 'without gateio' by one config line; data accrues from the moment a set is added). Needs DB migration -> card + backups + user OK.
 - User decided 2026-10-23: B15 fixed paper capital per shadow portfolio = $10,000 (config). A5a approved (U4): devops may do one real read-only pg_dump of nexus and restore drill ONLY into nexus_test; no down -v, no writes to nexus. B15/B16 cards: 31bcd3f.
+- B14 security ACCEPT. A5a code committed (5ccf1b6); user approved 2026-10-23 running scripts/sql/bootstrap_backup_roles.sql (roles nexus_ro, nexus_test_owner, DB nexus_test) then first dump + restore drill.
 - Agents added this session need a fresh session to register: creative-ceo, risk-manager.
