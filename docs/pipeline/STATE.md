@@ -18,4 +18,6 @@
 - User says keys for binance/gateio/kucoin/okx are already in .env (not read; .env is gitignored, untracked). Until A6 lands, user must confirm manually: read-only, withdrawals off, IP whitelist.
 - A6 round-1 fixes committed (ee38592); tech-lead round 2: ACCEPT; Track 0 code accepted. Next stage-end: tester + security + delta audit.
 - User request 2026-10-23: (a) logs/Telegram show the list of conditional venues (not tradable now: Bybit, gateio, ...) and aggregate totals WITH and WITHOUT them (combined, not per venue); (b) expand analysed venues (up to ~20, more is better): research candidates first, user will register and get keys. crypto-specialist researching; card for (a) pending.
+- B14 done (5ba4f07) + integration tests (9c5a4d9, CI only per user); tech-lead round 1: RETURN (docs/audit/tech-lead-review-B14.md). Quant: excl-conditional paper P&L is a digest estimate only, not a GO number (docs/quant/b14-conditional-totals-review.md).
+- User decided 2026-10-23: integration tests run only in CI. GO numbers via shadow paper portfolios with venue sets defined in config (default 2: all / excluding conditional; add e.g. 'without gateio' by one config line; data accrues from the moment a set is added). Needs DB migration -> card + backups + user OK.
 - Agents added this session need a fresh session to register: creative-ceo, risk-manager.

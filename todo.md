@@ -48,7 +48,7 @@ Ticks only after verification and commit.
 - [ ] B4 / R-08a fix `_until_stopped` cancellation swallowing (backend-lead, L)
 - [ ] B12 reaper for stale `SENDING` alert rows + payload version `v` (backend-lead, L)
 - [ ] B13 WS fixes: `_give_up` unwatches, stream errors feed health tracker (backend-lead, L)
-- [x] B14 `CONDITIONAL_VENUES` (default bybit,gateio): every aggregate shows the list and combined totals ALL vs EXCLUDING conditional venues; marker on alerts (backend-lead + observability-engineer; medium) — card `docs/tasks/m2/B14-conditional-venues-reporting.md`
+- [ ] B14 (5ba4f07; tech-lead round 1: returned) `CONDITIONAL_VENUES` (default bybit,gateio): every aggregate shows the list and combined totals ALL vs EXCLUDING conditional venues; marker on alerts (backend-lead + observability-engineer; medium) — card `docs/tasks/m2/B14-conditional-venues-reporting.md`
 - [ ] C0 characterization pack for `Scanner.sweep`/`run` before the split (tester, L-M; after R-02/B3/B4)
 - [ ] Backlog, no card (user idea G2): optional per-exchange proxy setting in adapters (ccxt proxy), off by default, proxy URL is a secret; gated by lawyer ToS check per core exchange on proxy/VPN use; design with the user when a server is discussed
 
