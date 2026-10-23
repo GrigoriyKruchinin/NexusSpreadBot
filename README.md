@@ -121,6 +121,13 @@ make ps-local                            # all services should be healthy
 make logs s=scanner
 ```
 
+### Extension runs (MEXC, Bitget)
+
+Core-only deployments do not pass keys for extension venues (ADR 0002). For an extension run, add
+`"mexc","bitget"` to `EXCHANGES_ENABLED`, put `MEXC_API_KEY`, `MEXC_API_SECRET`, `BITGET_API_KEY`,
+`BITGET_API_SECRET`, `BITGET_API_PASSPHRASE` into `.env`, and add the same names to the scanner
+`environment` block in `docker-compose.local.yml` (`NAME: ${NAME:-}`).
+
 ## Development
 
 ```bash
@@ -128,6 +135,7 @@ uv sync
 make check              # ruff + mypy --strict + unit tests
 make test-integration   # repositories against PostgreSQL (POSTGRES_* env)
 make revision m="..."   # new Alembic migration
+uv run pre-commit install   # once per clone: ruff, mypy, gitleaks (v8.30.1, .gitleaks.toml) on commit
 ```
 
 Project layout:

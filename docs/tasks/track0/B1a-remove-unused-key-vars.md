@@ -5,7 +5,7 @@
 - owner: backend-lead / devops
 - complexity: low (config edit, no logic)
 - depends_on: B1 (done)
-- status: todo
+- status: done
 - Priority: low; must be done before any soak that loads keys.
 
 ## Goal

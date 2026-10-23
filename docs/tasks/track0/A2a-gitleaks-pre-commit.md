@@ -5,7 +5,7 @@
 - owner: devops
 - complexity: low
 - depends_on: A2 (CI gitleaks version pin and `.gitleaks.toml`)
-- status: todo
+- status: done
 
 ## Goal
 Secrets are caught locally before commit, with the same rules as CI.
