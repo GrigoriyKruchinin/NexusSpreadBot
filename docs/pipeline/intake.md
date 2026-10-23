@@ -8,7 +8,9 @@ Date: 2026-10-23. Source: `nexus-adoption-instructions.md` (Appendix P) + user a
 | B. GO / NO-GO fork protocol | Yes -> trajectory M |
 | GO threshold | Net return >= 2 % / month on allocated capital (orientation $10-20k USDT), out-of-sample, after all costs |
 | DEX leg | In scope from the start (add `dex-engineer`; to be confirmed in roadmap U2) |
-| Existing AI rules (CLAUDE.md, agents, skills) | Replace with the new pipeline; originals kept in `docs/legacy/`. User's hard safety rules are migrated verbatim ("user rule (migrated)"). |
+| Existing AI rules (CLAUDE.md, agents, skills) | Fully replaced by the new pipeline across the whole project. No legacy copy kept (originals remain in git history at tag `pre-agents-baseline`). |
+| API keys | Withdrawal permission is always disabled on exchange keys (funds cannot leave via API). Trading via API is allowed, but only after GO and explicit user confirmation. |
+| Current phase | Testing / analysis, no real money. Funding, order-size limits and trading rules are given to the user as guides only after the opportunity analysis. |
 | GUI | None; analytical dashboards only (no `frontend-lead` / `designer`) |
 | Docker | Remains the base of running (local and server) in any outcome |
 | Budget | No paid services without approval; dashboards open-source only |
