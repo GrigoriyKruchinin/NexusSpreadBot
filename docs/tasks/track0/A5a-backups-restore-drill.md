@@ -6,7 +6,7 @@
 - reviewers: security, tech-lead
 - complexity: medium (credentials handling, retention, restore verification)
 - depends_on: A1 (done); A5c for the `nexus_ro` and `nexus_test_owner` roles (may bootstrap minimal versions of both if A5c is not yet done, same grants as target.md §10.1)
-- status: DONE (2026-10-23): roles bootstrapped, backup + restore drill PASSED, see docs/reports/restore-drill.md. Review round 1 fixes applied (R1-1..R1-8, S-A5a-1..5), see docs/audit/*-A5a.md; pending round-2 re-review
+- status: DONE (2026-10-23): roles bootstrapped, backup + restore drill PASSED, see docs/reports/restore-drill.md. Review round 1 fixes applied (R1-1..R1-8, S-A5a-1..5), see docs/audit/*-A5a.md; round 2: tech-lead ACCEPT, security ACCEPT with follow-ups; R2-1/R2-2/N1/N2 fixed in 1674089; N3 -> A5c card, N4 -> todo R-04. Open: re-run drill on first `.counts` dump (needs user U4 OK)
 - **U4 gate: touches the live DB and Docker. User OK is required before execution (backups read the `nexus` DB, restore drill creates/overwrites `nexus_test`). Never restore into `nexus`.**
 
 ## Goal

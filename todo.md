@@ -10,7 +10,7 @@ Ticks only after verification and commit.
 - [x] Claude files, conventions, STATE, context plan, guide
 - [x] Phase 5: vision (`docs/product/vision.md`), target architecture + migration plan, ADR 0003-0005 accepted
 - [x] User confirmed vision proposals (portfolio default pivot, manual rebalancing; Rework extended to up to 5 iterations, ADR 0007)
-- [ ] Phase 5 tail: lawyer/security review of vision+architecture
+- [x] Phase 5 tail: lawyer/security review of vision+architecture
 - [x] U2 decisions: DEX seam only (ADR 0006), risk-manager added; roadmap = `docs/architecture/migration-plan.md` (project-manager cuts cards)
 
 ## Track 0 — Base (M1/M2 start)
@@ -18,7 +18,7 @@ Ticks only after verification and commit.
 - [x] B1 `CORE_EXCHANGES` default, bitget/mexc extension-only — card `docs/tasks/m2/B1-core-exchanges-default.md` (first)
 - [x] R-05 (first CI run green 2026-10-23, user-confirmed) GitHub Actions CI (lint, mypy, unit, integration w/ services, secret scan, image build) + coverage floor 89 % (A2) — card `docs/tasks/track0/A2-github-actions-ci.md`
 - [x] A2a gitleaks pre-commit hook (S-06 G1; low) — card `docs/tasks/track0/A2a-gitleaks-pre-commit.md`
-- [ ] R-06 Bump certifi, protobuf (unpin or justify), pip-audit incl. dev group
+- [x] R-06 Bump certifi, protobuf (unpin or justify), pip-audit incl. dev group (done in f6b5abb: protobuf 5.29.6, certifi 2026.10.23, CI pip-audit --all-groups; confirmed by delta audit)
 - [x] R-07 Tests prove httpx/stdlib loggers do not leak tokens; scrubber covers `redis://user:pass@` URLs (A4) — card `docs/tasks/track0/A4-log-scrub-tests.md`
 - [ ] R-09 split into A5a-A5d (security review S-01..S-04, S-09, S-10, S-12):
   - [x] A5a backups + restore drill into `nexus_test` + external heartbeat (drill PASSED 2026-10-23; daily cron 03:15 installed in user crontab 2026-10-23; heartbeat deferred to VPS by user decision) — card `docs/tasks/track0/A5a-backups-restore-drill.md`
@@ -38,7 +38,7 @@ Ticks only after verification and commit.
 ## M2 — Code quality (under characterization tests)
 - [ ] R-02 Isolate exchange failures in sweep (`gather(return_exceptions=True)`), per-route error counters
 - [ ] R-03 Fee currency per exchange; no profit when transfer UNKNOWN; stablecoin peg guard (`docs/reports/math-review.md`)
-- [ ] R-04 DB timeouts, purge indexes, batched purges, measure real row growth
+- [ ] R-04 DB timeouts, purge indexes, batched purges, measure real row growth (+ A5a N4: drill [min,max] count check gives false MISMATCH once purges run alongside inserts; adjust drill when B7/purges land)
 - [ ] R-08 Clock-drift guard; fix `_until_stopped` cancellation
 - [ ] Split `scanner/service.py` (1048 lines); review 25 `except Exception`
 - [ ] Coverage gaps: repositories (integration), container, tasks, cli
@@ -56,7 +56,7 @@ Ticks only after verification and commit.
 
 ## M3 — Data, quant, legal
 - [ ] Agree GO/NO-GO numbers (threshold 2 %/month; see `docs/pipeline/nexus-appendix.md` P6)
-- [ ] Multi-day keyed soak (>= 7-14 days) with backups running (depends on B15: shadow portfolios must be running before the soak starts, else no valid "without" GO numbers; also A5a)
+- [ ] Multi-day keyed soak (>= 7-14 days) with backups running (depends on B15: shadow portfolios must be running before the soak starts, else no valid "without" GO numbers; also A5a). Pre-soak gates from delta audit: D-01 scanner restart policy `on-failure:5` + no alert (fix or daily alive check), D-02 verified cron backup + off-machine copy decision, D-03 drill re-run on a `.counts` dump, R-02
 - [ ] Quant: formula review, cost model, latency vs spread lifetime, two execution modes, honest backtest, verdict
 - [ ] Lawyer: `docs/legal/nexus-risk-assessment.md` verified with sources
 - [ ] Dashboards as code (observability-engineer; ADR on stack)

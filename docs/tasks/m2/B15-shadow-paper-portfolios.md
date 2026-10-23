@@ -65,7 +65,7 @@ tax, GO-HOLD), `docs/pipeline/STATE.md` (decisions 2026-10-23), `docs/architectu
 6. Report: sample quant report output has all fields of Scope 5 for each set, with after-tax and `since`.
 7. Performance: sweep latency with 2 sets and with 4 sets measured on the sample stream; regression
    reported (paper is in-memory; target: no measurable change to sweep p95 beyond noise, else NEEDS_USER).
-8. `make check` not worse than baseline (>= 646 tests as of B14, branch coverage >= 89 %, ruff 0,
+8. `make check` not worse than baseline (>= 721 tests as of stage-end Track 0 + B14, branch coverage >= 89 %, ruff 0,
    mypy --strict 0). No secrets in diff. Card and `todo.md` updated.
 
 ## Out of scope
@@ -79,7 +79,7 @@ changing GO thresholds; DEX; proxying; capital sizing decisions (value comes fro
 `docker-compose.local.yml`, `tests/unit/...`, `tests/integration/...`, `todo.md`.
 
 ## Open points for NEEDS_USER at implementation time
-- Fixed capital value and tax rate for the GO report (propose $15k, rate from the user).
+- Fixed capital value and tax rate for the GO report ($10,000 per set, user decision 2026-10-23; tax rate from the user).
 
 ## Carried over
 - R2-1 from `docs/audit/tech-lead-review-B14.md` (Round 2): `_episodes` returns bare `EpisodeStats()`

@@ -57,3 +57,4 @@ Ownership transfer of existing tables is a destructive-adjacent op on live data:
 - S-A5a-7: `nexus_test` holds a full copy of live data after each drill; revisit if tables ever hold account or
   key-derived data.
 - S-A5a-8: if the dump ever switches to `--inserts`, filter pg_restore "Command was:" lines.
+- A5a N3 (tech-lead r2): `_backup_common.sh` "not $HOME or a parent of it" check misses `/` (owner check stops it today); add `/` explicitly when touching the script.
