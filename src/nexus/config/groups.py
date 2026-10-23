@@ -189,6 +189,21 @@ class ExchangeCredentials(NexusBaseSettings):
         return self.api_key is not None
 
 
+class KeyPolicySettings(NexusBaseSettings):
+    """User attestations for key properties the venue API does not expose (``KEY_POLICY_*``).
+
+    Non-secret booleans. A venue whose key cannot be fully introspected needs its flag set
+    after the user verified the property by hand (U3 guide); otherwise startup is refused.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="KEY_POLICY_")
+
+    kucoin_ip_attested: bool = False
+    """KuCoin's key info does not show the IP whitelist: the key is IP-restricted."""
+    gateio_permissions_attested: bool = False
+    """Gate.io has no per-key scope introspection: every permission group is read-only or off."""
+
+
 class ScannerSettings(NexusBaseSettings):
     """Market scanning loop settings (``SCANNER_*``)."""
 

@@ -12,9 +12,13 @@ import structlog
 from nexus.config.groups import LoggingSettings, RedisSettings, ScannerSettings
 from nexus.config.roles import ScannerRoleSettings
 from nexus.domain.clock import SystemClock
+from nexus.domain.errors import KeyPolicyViolationError
 from nexus.log import configure_logging
 
 log = structlog.get_logger(__name__)
+
+EXIT_KEY_POLICY = 3
+"""Exit code when an exchange key violates the key policy (no restart can fix it)."""
 
 
 async def _run_scanner() -> None:
@@ -63,7 +67,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "scanner":
-        asyncio.run(_run_scanner())
+        try:
+            asyncio.run(_run_scanner())
+        except KeyPolicyViolationError as exc:
+            # Rule names only (no response bodies, keys or uids).
+            log.critical("key_policy_violation", violations=exc.violations)
+            return EXIT_KEY_POLICY
         return 0
     if args.command == "healthcheck":
         configure_logging(LoggingSettings(), service="healthcheck")

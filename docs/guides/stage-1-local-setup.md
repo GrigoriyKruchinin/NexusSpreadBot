@@ -464,5 +464,10 @@ make logs s=scanner    # логи сканера
 - [ ] `TELEGRAM_CHAT_ID` в `.env`
 - [ ] Ключи бирж созданы **только с правом чтения**, вывод выключен
       (Bybit, Binance, OKX, Gate.io, KuCoin, MEXC, Bitget)
+- [ ] **KuCoin:** в настройках ключа включена привязка к IP (только IP вашего хоста), затем в `.env`
+      `KEY_POLICY_KUCOIN_IP_ATTESTED=true` (сканер не видит IP-список KuCoin и просит подтверждение)
+- [ ] **Gate.io:** у каждой группы прав ключа стоит «Только чтение» или «Отключено», никогда
+      «Чтение и запись»; затем в `.env` `KEY_POLICY_GATEIO_PERMISSIONS_ATTESTED=true`
+      (Gate.io не показывает права ключа через API; IP-привязку сканер проверяет сам)
 - [ ] `.env` заполнен, права `600`, в git не попал (`git status` его не показывает)
 - [ ] `make up-local` → все сервисы healthy → пришло сообщение о старте

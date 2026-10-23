@@ -203,6 +203,21 @@ class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook, ITradingFeeS
         """Public transfer-status source used when currency data needs a missing key."""
         return None
 
+    async def fetch_key_info(self) -> Any:
+        """Signed GET of the venue's own key-introspection endpoint (raw payload, sensitive).
+
+        The caller must reduce it to booleans / rule names and never log or store it.
+        """
+        return await self._call("fetch_key_info", self._key_info_request)
+
+    async def _key_info_request(self) -> Any:
+        """One signed GET to the venue's key-introspection endpoint (key policy, A6).
+
+        Core venues override this with an explicit call; others have no key policy.
+        """
+        msg = f"{self.name}: no key introspection endpoint configured"
+        raise ConfigurationError(msg)
+
     async def close(self) -> None:
         """Close REST and WebSocket clients."""
         self._closed = True

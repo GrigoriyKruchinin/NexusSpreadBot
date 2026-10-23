@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nexus.config.groups import (
     AlertPolicySettings,
@@ -19,6 +19,7 @@ from nexus.config.groups import (
     EpisodeSettings,
     ExchangeCredentials,
     ExchangesSettings,
+    KeyPolicySettings,
     LoggingSettings,
     MaintenanceSettings,
     PaperSettings,
@@ -73,6 +74,7 @@ class ScannerRoleSettings(_RoleSettings):
     celery: CelerySettings
     exchanges: ExchangesSettings
     credentials: dict[str, ExchangeCredentials]
+    key_policy: KeyPolicySettings = Field(default_factory=KeyPolicySettings)
     scanner: ScannerSettings
     spread: SpreadSettings
     episodes: EpisodeSettings
@@ -100,6 +102,7 @@ class ScannerRoleSettings(_RoleSettings):
             celery=CelerySettings(),
             exchanges=exchanges,
             credentials={n: ExchangeCredentials.for_exchange(n) for n in exchanges.enabled},
+            key_policy=KeyPolicySettings(),
             scanner=ScannerSettings(),
             spread=SpreadSettings(),
             episodes=EpisodeSettings(),

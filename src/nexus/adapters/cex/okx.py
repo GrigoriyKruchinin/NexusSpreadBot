@@ -45,3 +45,7 @@ class OkxAdapter(CcxtExchangeAdapter):
             return fee
         info = network.get("info")
         return to_decimal(info.get("maxFee")) if isinstance(info, Mapping) else None
+
+    async def _key_info_request(self) -> Any:
+        """Key policy (A6): signed GET of this key's own permissions (read-only)."""
+        return await self._rest.privateGetAccountConfig({})

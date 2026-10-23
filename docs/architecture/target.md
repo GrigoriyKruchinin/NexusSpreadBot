@@ -264,9 +264,17 @@ on. Payloads never carry secrets. HTML-escaping in Telegram templates stays mand
   Passphrases (okx, kucoin) are secrets.
 - Keys are entered only by the user via `.env` / Docker secrets following a `docs/guides/`
   file (U3); never through agents or chat.
-- Startup check where the venue exposes it (e.g. binance `apiRestrictions`): refuse to start if
-  trading or withdrawal permission is detected. The GET-only guard is installed on every
-  authenticated client (unit-tested).
+- Startup `KeyPolicyCheck` per core venue (A6; endpoints and refuse rules in
+  `docs/reports/exchange-key-permissions.md`): one signed GET, **fail closed**: refuse to start
+  (non-zero exit, venue + rule name only) on any trade/withdraw/transfer permission, on an
+  unparseable response or missing required field, and on a **missing IP binding** where the venue
+  exposes it (binance `ipRestrict`, bybit `ips`, okx `ip`, gateio `ip_whitelist`). Logs carry
+  booleans and rule names only, never the response body (it contains apiKey/uid/label). A venue
+  without a configured key (public mode) is skipped. Where the API cannot show a property it is
+  **attested** by the user in the U3 guide via a non-secret setting (kucoin IP binding:
+  `KEY_POLICY_KUCOIN_IP_ATTESTED`; gateio read-only scopes: `KEY_POLICY_GATEIO_PERMISSIONS_ATTESTED`)
+  and startup is refused without it. The GET-only guard is installed on every authenticated
+  client, including the one used by the check (unit-tested).
 - Extension venues (bitget/mexc) get no key variables in the scanner env while disabled.
 - Logs never contain the raw `repr` of ccxt auth errors without `scrub` (S-07).
 
@@ -275,4 +283,3 @@ Plain env vars are acceptable for local Stage 1 only. **Docker/Compose secrets f
 are required before any VPS** or shared-host soak. Before VPS also: no published Postgres port,
 digest-pinned images + image scan in CI, `cap_drop: [ALL]` / `no-new-privileges` / memory and
 pid limits. External-heartbeat ping URL is a secret (`SecretStr`, scrubbed).
-

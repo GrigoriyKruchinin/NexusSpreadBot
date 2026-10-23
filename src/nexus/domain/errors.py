@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+
 
 class NexusError(Exception):
     """Base class for all application errors."""
@@ -45,6 +47,17 @@ class ExchangeDataError(ExchangeError):
 
 class ReadOnlyViolationError(NexusError):
     """A non-read-only exchange request was attempted and blocked (safety guard)."""
+
+
+class KeyPolicyViolationError(ConfigurationError):
+    """An exchange API key violates the key policy (startup is refused). Names rules only."""
+
+    def __init__(self, violations: Mapping[str, Sequence[str]]) -> None:
+        self.violations = {venue: tuple(rules) for venue, rules in violations.items()}
+        detail = "; ".join(
+            f"{venue}: {', '.join(rules)}" for venue, rules in self.violations.items()
+        )
+        super().__init__(f"key policy violated ({detail})")
 
 
 class UnknownExchangeError(ConfigurationError):

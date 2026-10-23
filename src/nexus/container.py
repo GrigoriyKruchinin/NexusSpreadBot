@@ -10,6 +10,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import nexus.adapters.cex  # noqa: F401 - registers built-in exchange adapters
+from nexus.adapters.key_policy import verify_key_policies
 from nexus.adapters.registry import AdapterOptions, exchange_registry
 from nexus.config.roles import (
     AlertsWorkerSettings,
@@ -105,6 +106,8 @@ async def scanner_scope(settings: ScannerRoleSettings) -> AsyncIterator[Scanner]
         adapters = build_adapters(settings)
         for adapter in adapters.values():
             stack.push_async_callback(adapter.close)
+        # Fail closed before any market data / DB work: a trade-capable key never runs.
+        await verify_key_policies(adapters, settings.credentials, settings.key_policy)
 
         engine = create_engine(settings.database)
         stack.push_async_callback(engine.dispose)

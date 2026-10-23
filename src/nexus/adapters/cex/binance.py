@@ -35,3 +35,7 @@ class BinanceAdapter(CcxtExchangeAdapter):
             currency_code=self._rest.safe_currency_code,
             network_code=self._rest.network_id_to_code,
         )
+
+    async def _key_info_request(self) -> Any:
+        """Key policy (A6): signed GET of this key's own permissions (read-only)."""
+        return await self._rest.sapiGetAccountApiRestrictions({})
