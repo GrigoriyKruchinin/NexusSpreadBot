@@ -118,3 +118,68 @@ filter the "Command was:" lines.
 ## Required to accept
 S-A5a-1 and S-A5a-2 fixed with tests. S-A5a-3 and S-A5a-4 are recommended in the same round (cheap).
 S-A5a-5 to S-A5a-8 can be carried to A5c/A5d.
+
+---
+
+## Round 2 (fix commit adfeee0)
+
+- Date: 2026-10-23. Reviewer: security (read-only on code and DBs).
+- Checks run: I read all four scripts and the full test module. I ran bypass probes in the session
+  scratchpad on fake files, with a fake `docker`/`curl` first on PATH and `env -i`. `make check` passed once:
+  ruff 0, mypy --strict 0 (137 files), 713 passed, 16 deselected. No dump files with real data appeared under pytest tmp.
+  The crontab was viewed with URLs redacted. For `~/nexus-backups` only metadata was checked (stat). No backup, prune,
+  drill, psql or docker was run against real data. `.env` not read.
+
+### Verdict: ACCEPT WITH FOLLOW-UPS
+
+| ID | Status | Evidence |
+|---|---|---|
+| S-A5a-1 | fixed | Each script runs through `Sandbox.run`. It has a minimal explicit env (no `os.environ`), uses tmp `HOME`/`BACKUP_DIR`, and points `COMPOSE_FILE` at a non-existent file. Fake `docker`/`curl` come first on PATH and exit 99 without `FAKE_LOG`. `stdin=DEVNULL`, `timeout=60`. `test_sandbox_resolves_fakes_first` asserts the resolution and that `HEARTBEAT_URL*`/`DOCKER_HOST`/`TARGET_*` are absent. The only real tool called by name is `docker` via `pg_run`; no absolute paths are used. Hermetic. |
+| S-A5a-2 | fixed, with residual R2-1 | `^[1-9][0-9]*$` rejects `abc`, `0`, `-1`, `3x`, `1.5`, blank with exit 2 before any delete. Retention is now per day and per ISO week. |
+| S-A5a-3 | fixed | `readonly TARGET_USER=nexus_test_owner`, so an env override is ignored (tested). A `rolsuper` = `f` check runs before `pg_restore`, and any other output aborts (tested with `t`). Guard order is unchanged: `TARGET_DB` exact match comes before any Docker call. |
+| S-A5a-4 | fixed | `REPO_ROOT` uses `pwd -P`. `resolve_path` resolves the existing prefix physically and rejects `..`. Location checks run before `mkdir`. An existing dir is never chmodded: owner and 0700 are required. Probes, all refused: `/` (owner), `/tmp` (parent of HOME), `$HOME`, symlink to `$HOME` (with and without trailing `/`), symlink into the repo, existing 0755 dir. A dangling symlink fails closed (mkdir error, no message). `$HOME` mode stayed 0755. `./`, `//`, relative paths and `/proc/self/cwd` resolve to legitimate locations. |
+| S-A5a-5 | fixed (a, b); c carried to A5d | File: regular, readable, owner = uid, mode exactly 600, else skipped with a warning. A symlinked file is also refused because `stat` without `-L` sees 777, which is safe. URL regex has no `"`, `\`, whitespace or control chars, so the curl config string cannot be broken out of. `printf` puts it on stdin. curl stderr goes to `/dev/null`, and log lines never contain the value (tested). |
+| S-A5a-6/7/8 | carried | A5c card §"Follow-ups from A5a review": 6 (grants, default privileges, TCP-login check), 7, 8. A5d card: 5(c), 6 (VPS: no published port), heartbeat + cron move to VPS. |
+
+### New findings
+
+**R2-1 (Low, fix in next commit): oversized retention integers still delete every dump.**
+`backup_prune.sh:15,28,30`. The regex accepts any length. A value above int64 makes `[ -lt ]` error
+with status 2 ("integer expression expected"). Inside `elif` that counts as false, so the file falls through to `remove`.
+Probe on 20 fake dumps, exit code 0 in every case: `KEEP_DAILY=KEEP_WEEKLY=99999999999999999999` -> **0 left**;
+`KEEP_DAILY=99999999999999999999 KEEP_WEEKLY=4` -> 4 left, the newest days are gone. The header and the guide
+("the newest dump is never deleted") are therefore not guaranteed. This needs a deliberately absurd env value, so the
+likelihood is negligible, but the fix is two lines:
+cap the length (`^[1-9][0-9]{0,3}$`) and add an explicit guard `[ "$base" = "${files[0]}" ] && continue` at the top of
+the loop. Add a test with a 20-digit value.
+
+**R2-2 (Info): curl reads `~/.curlrc`.** No `~/.curlrc` exists today. Pass `-q` (`--disable`) as the first curl
+argument so that a user config file cannot redirect the ping or enable `--verbose`/`--trace`, which would write the
+URL to the log.
+
+**R2-3 (Info): restore report pipeline.** `| (umask 077; tee "$report") >&2 || true`, then the verdict is recomputed
+from the file. This fails closed: an empty or missing report gives FAILED, and a non-integer count makes `[ -ge ]`
+false, so MISMATCH. OK.
+
+### `.counts` sidecar: acceptable
+Content is `table|rows_before|rows_after` for public tables only. Values come from `count(*)` via
+`query_to_xml`, with no row data. It is written under `umask 077` as `.partial` -> chmod 600 -> mv into the 0700 dir,
+and pruned together with its dump (orphans removed). Table names and volumes are not secrets. They reveal no more than
+the dump itself, which sits next to it under the same protection. The off-host copy guidance (encrypt with `age`/`gpg`)
+should cover `.counts` as well as `.dump`. Today it is harmless either way.
+
+### Cron entry and `backup.log`: acceptable
+`15 3 * * * cd <repo> && make backup >> ~/nexus-backups/backup.log 2>&1`. No URL or secret is inline: the crontab was
+checked with redaction and contains no `HEARTBEAT_URL`. `~/nexus-backups` is 0700 and owned by the user. The log does
+not exist yet. When cron creates it, the mode will follow cron's umask (typically 0644). That is fine inside a 0700 dir,
+and prune and `latest_dump` ignore it (exact name regexes). Content is timestamps, file names, sizes and pg error text.
+There are no passwords (no password exists), and the heartbeat URL is never logged. Notes:
+- Info: if `~/nexus-backups` is ever removed, the redirect fails before `backup.sh` runs and the job silently does
+  nothing (cron mail is usually unset on WSL). Missed runs are detected only by the deferred heartbeat, so check the
+  log date manually until then (the guide already says to check the log).
+- Info: cron runs whatever branch is checked out in `<repo>` at 03:15. Do not leave experimental branches with
+  modified `scripts/backup*.sh` checked out overnight. Move the job to a fixed checkout on the VPS (already in A5d).
+- No rotation (tech-lead R1-5). Growth is a few lines per day, acceptable.
+
+### Required
+None blocking. R2-1 should land in the next A5a/A5c commit with a test. R2-2 is optional.

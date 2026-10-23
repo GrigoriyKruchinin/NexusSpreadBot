@@ -102,3 +102,52 @@ add one with the fake docker so a regression that refuses everything is caught.
 
 ## Required for round 2
 R1-1 (blocking). Recommended in the same round: R1-2, R1-5 (first bullet), R1-6, R1-7.
+
+---
+
+# Round 2 (2026-10-23)
+
+- Scope: fix commit adfeee0 (scripts, tests, guide, A5a/A5c/A5d cards, todo).
+- Checks run: test sandbox read first and judged hermetic, then `make check` -> ruff clean, mypy --strict
+  0 issues (137 files), **713 passed**, 16 deselected (baseline 481: not worse). `tests/unit/scripts` 57 passed.
+  Cron environment inspected read-only (no backup/prune/drill/docker/psql run, `.env` not read).
+
+## Verdict: ACCEPT
+
+## R1 points
+| Point | Status | Evidence |
+|---|---|---|
+| R1-1 hermetic tests | fixed | every script runs via `Sandbox.run`: explicit minimal env (no `os.environ`), fake `docker`/`curl` first on PATH, `HOME`/`BACKUP_DIR` in tmp, bogus `COMPOSE_FILE` (real docker would fail even if reached), stubs exit 99 outside the sandbox, `test_sandbox_resolves_fakes_first` asserts resolution and absence of `HEARTBEAT_*`/`DOCKER_HOST`/`TARGET_*`. No test can reach real docker, curl or network. |
+| R1-2 per-day dailies | fixed | `backup_prune.sh:34-37` keys by UTC `YYYYMMDD`, newest per day; tests for 3 dumps/day and gaps. |
+| R1-3 weekly overlap | fixed | daily days mark their ISO week seen (`:37`); test pins oldest kept = 2026-09-20 (7 days + 4 distinct older weeks, checked by hand). |
+| R1-4 count check | fixed | `.counts` sidecar (before/after, joined by table), restored must be in `[min,max]`; MISSING and MISMATCH are explicit FAILED verdicts; no sidecar -> refuse before any restore. Tests for in/out of range, static table exact, missing table. |
+| R1-5 guide | fixed | report location, cron status, WSL caveat, log growth, retention wording all match code. |
+| R1-6 dir validation | fixed | `resolve_path` + checks before `mkdir -m 700`; `pwd -P` on both sides; refuses `$HOME`/parents, foreign owner, existing non-0700 (never chmods); `..` refused. Tests incl. symlink into repo; nothing created in repo. `BACKUP_DIR=/` passes the HOME-parent `case` but is stopped by the owner check (fine, see N3). |
+| R1-7 AC6 | properly deferred | card AC6 amended by user decision (heartbeat -> VPS, A5d carries it); cron installed; todo text honest. |
+| R1-8 robustness | fixed / carried | unreadable or loose-mode heartbeat file warns; URL regex; strict `DUMP_RE` in `latest_dump`; malformed date kept + warned; positive-path guard test added; default-privileges item carried into A5c. |
+
+Security S-A5a-2 (invalid KEEP_* deletes all) also fixed: `^[1-9][0-9]*$`, exit 2 before any delete, 12 param tests.
+
+## Cron check (read-only)
+`15 3 * * * cd <repo> && make backup >> /home/grisha/nexus-backups/backup.log 2>&1` is installed; `cron -f -P`
+is running. Under cron's `PATH=/usr/bin:/bin`: make, docker, curl, join, stat all in `/usr/bin`; compose plugin
+in `/usr/libexec/docker/cli-plugins`; user is in group `docker`; no `DOCKER_HOST` in shell rc. `HOME` is set by
+cron, so the default `~/nexus-backups` resolves; the dir is 0700 and owned by the user, so `ensure_backup_dir`
+passes. `backup.log` (and `restore-drill-last.txt`) do not match `DUMP_RE` / the `.counts` regex, so prune never
+touches them. `backup.log` is created with cron's umask (likely 0644) inside a 0700 dir: acceptable, no secrets logged.
+
+## Non-blocking nits (next touch of these files, no new round needed)
+- N1. `restore_drill.sh:48-63`: an **empty** `.counts` file yields a header-only report and `drill PASSED`.
+  backup.sh cannot produce one (empty `before` dies), so only a hand-made file triggers it; still, require at
+  least one data row.
+- N2. `restore_drill.sh:60-62`: verdict is read back from `restore-drill-last.txt` and the pipeline ends in
+  `|| true`; if `tee` ever failed, a stale PASSED report from a previous run would be read. `rm -f "$report"`
+  before the pipeline closes it.
+- N3. `ensure_backup_dir`: the HOME-parent check misses `/` (pattern `//*`); harmless because of the owner
+  check, but a `[ "$real" = / ]` refusal would make it self-evident.
+- N4. `[min,max]` assumes each table is monotonic during the dump. Once B7 batched `DELETE` purges run
+  concurrently with inserts, a drill can report a false MISMATCH (fail-loud, safe). Note it in B7.
+- N5. Operational: the only dump now in `~/nexus-backups` predates the sidecar, so `make restore-drill` will
+  refuse until the first cron run (tomorrow 03:15) writes `dump + .counts`. A drill on that dump should be
+  re-run and recorded in `docs/reports/restore-drill.md` (needs user OK, U4) before B7/B8 rely on it. No
+  missed-backup alert exists until the VPS heartbeat (user decision): check `backup.log` after the first run.
