@@ -80,3 +80,8 @@ changing GO thresholds; DEX; proxying; capital sizing decisions (value comes fro
 
 ## Open points for NEEDS_USER at implementation time
 - Fixed capital value and tax rate for the GO report (propose $15k, rate from the user).
+
+## Carried over
+- R2-1 from `docs/audit/tech-lead-review-B14.md` (Round 2): `_episodes` returns bare `EpisodeStats()`
+  on an empty window, so the digest shows "без условных н/д" on quiet days. Fix:
+  `EpisodeStats(total_excl_conditional=0)` plus one test.

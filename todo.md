@@ -48,7 +48,7 @@ Ticks only after verification and commit.
 - [ ] B4 / R-08a fix `_until_stopped` cancellation swallowing (backend-lead, L)
 - [ ] B12 reaper for stale `SENDING` alert rows + payload version `v` (backend-lead, L)
 - [ ] B13 WS fixes: `_give_up` unwatches, stream errors feed health tracker (backend-lead, L)
-- [ ] B14 (5ba4f07; tech-lead round 1: returned) `CONDITIONAL_VENUES` (default bybit,gateio): every aggregate shows the list and combined totals ALL vs EXCLUDING conditional venues; marker on alerts (backend-lead + observability-engineer; medium) — card `docs/tasks/m2/B14-conditional-venues-reporting.md`
+- [x] B14 (5ba4f07 + e23024d; tech-lead round 2: accepted) `CONDITIONAL_VENUES` (default bybit,gateio): every aggregate shows the list and combined totals ALL vs EXCLUDING conditional venues; marker on alerts (backend-lead + observability-engineer; medium) — card `docs/tasks/m2/B14-conditional-venues-reporting.md`
 - [ ] B15 shadow paper portfolios per venue set (config `PAPER_VENUE_SETS`, default `all` + `excl_conditional`, own inventory/rebalancing/top-N cap, same fixed capital; migration `portfolio_id` needs A5a restore drill + user OK U4; data accrues from the moment a set is added; quant GO report reads per-set results; backend-lead + quant-analyst; high) — card `docs/tasks/m2/B15-shadow-paper-portfolios.md`
 - [ ] B16 public-only probe of expansion batch 1 (BingX, XT, Toobit, Bitfinex, Phemex; no keys, conditional by default, per-venue lawyer ToS gate, report in `docs/reports/`; backend-lead + crypto-specialist; medium) — card `docs/tasks/m2/B16-public-probe-expansion-batch1.md`
 - [ ] C0 characterization pack for `Scanner.sweep`/`run` before the split (tester, L-M; after R-02/B3/B4)

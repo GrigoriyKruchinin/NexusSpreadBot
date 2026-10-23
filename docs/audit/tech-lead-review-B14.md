@@ -53,3 +53,36 @@ meaningful (helper table, config cases, golden strings, log fields, marker). Wea
    registry in a later card (not now).
 
 Next: backend-lead fixes 1-3 (round 2), then tester/security for the stage.
+
+## Round 2 (2026-10-23)
+- Inputs: fix commit e23024d, integration tests 9c5a4d9 (CI only per user decision, not run locally).
+- **Verdict: ACCEPT** (one non-blocking follow-up R2-1 below).
+
+### Checks (run by reviewer)
+`make check`: ruff 0, mypy --strict 0 (135 files), **656 passed**, 16 deselected.
+Branch coverage **91 %** (baseline 89 %). Ratchet OK (646 -> 656 tests).
+
+### Points
+1. **Resolved.** `trade_free_clause` / `rebalance_free_clause` extracted and compiled with the
+   postgresql dialect in unit tests (lists and `()`; no bare `IN ()`). Integration file
+   `tests/integration/test_digest_conditional.py` covers 0/1/2 venues, buy-only/sell-only legs,
+   a BLOCKED rebalance and the empty list (CI).
+2. **Resolved.** `model_fields_set` check in `ScannerRoleSettings.load`: default intersected with
+   `EXCHANGES_ENABLED` + `conditional_venues_defaulted` warning; explicit list fails fast. Tests cover
+   narrowed default, no-warning, `""` as unset, typo + non-enabled explicit, explicit `[]`.
+   `.env.example` and card Operational note updated.
+3. **Resolved.** Excl fields are `None` until computed, rendered `н/д`; excl P&L labelled
+   `≈ ... (оценка)`; test renamed; escape test now asserts the exact line.
+4. **Resolved (documented)** in the card Implementation notes + quant review.
+5. **Resolved.** `scanner_starting.conditional_venues` and `alerts_worker_starting.conditional_venues`.
+6. **Deferred** explicitly to a later card (noted in the card).
+
+### Regression check
+- R2-1 [non-blocking]: `DigestRepository._episodes` returns bare `EpisodeStats()` for an empty
+  window (`repositories.py:724`), so on a quiet day the digest shows `без условных н/д` and the log
+  `total_excl_conditional.episodes` is `None` instead of `0`. Fix: `EpisodeStats(total_excl_conditional=0)`
+  + one unit test. Safe direction (no inflated number); may be folded into B15.
+- No other constructors of `EpisodeStats`/`PaperStats` in `src/`; no scanner/threshold/migration
+  changes; no secrets; money remains `Decimal`.
+
+Next: tester + security for the stage; backend-lead picks up R2-1 in the next card.
