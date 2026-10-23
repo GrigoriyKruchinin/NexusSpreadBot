@@ -86,3 +86,17 @@ def test_containers_are_hardened(compose: str) -> None:
         for port in services[name].get("ports", []):
             assert str(port).startswith("127.0.0.1:"), f"{name} port exposed publicly: {port}"
     assert "ports" not in services["redis"]
+
+
+@pytest.mark.parametrize("compose", COMPOSE_FILES)
+def test_extension_venue_keys_not_wired_by_default(compose: str) -> None:
+    """B1a: MEXC_*/BITGET_* are absent from compose env and .env.example (ADR 0002)."""
+    pattern = re.compile(r"^(MEXC|BITGET)_")
+    for name, service in _load(compose)["services"].items():
+        env = service.get("environment", {}) or {}
+        keys = env.keys() if isinstance(env, dict) else [e.split("=", 1)[0] for e in env]
+        assert not [k for k in keys if pattern.match(k)], f"{name} wires extension venue keys"
+    example = (ROOT / ".env.example").read_text().splitlines()
+    assert not [
+        ln for ln in example if pattern.match(ln.lstrip("# ").strip()) and not ln.startswith("#")
+    ], "extension keys present in .env.example"
