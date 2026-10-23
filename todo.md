@@ -21,7 +21,7 @@ Ticks only after verification and commit.
 - [ ] R-06 Bump certifi, protobuf (unpin or justify), pip-audit incl. dev group
 - [x] R-07 Tests prove httpx/stdlib loggers do not leak tokens; scrubber covers `redis://user:pass@` URLs (A4) — card `docs/tasks/track0/A4-log-scrub-tests.md`
 - [ ] R-09 split into A5a-A5d (security review S-01..S-04, S-09, S-10, S-12):
-  - [ ] A5a backups + restore drill into `nexus_test` + external heartbeat (needs user OK, U4) — card `docs/tasks/track0/A5a-backups-restore-drill.md`
+  - [x] A5a backups + restore drill into `nexus_test` + external heartbeat (drill PASSED 2026-10-23; heartbeat URL not yet configured, optional) — card `docs/tasks/track0/A5a-backups-restore-drill.md`
   - [ ] A5b Redis auth, healthcheck, maxmemory noeviction — card `docs/tasks/track0/A5b-redis-auth.md`
   - [ ] A5c DB roles + `nexus_test_owner` test role (needs user OK, U4) — card `docs/tasks/track0/A5c-db-roles-test-role.md`
   - [ ] A5d Docker hardening + secrets files (before any VPS) — card `docs/tasks/track0/A5d-docker-hardening-secrets.md`
