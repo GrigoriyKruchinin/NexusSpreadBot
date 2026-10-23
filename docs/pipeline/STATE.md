@@ -2,7 +2,7 @@
 
 - Trajectory: M (MVP/analysis, GO/NO-GO protocol on). Branch: `chore/agent-pipeline-adoption` (pushed to origin 2026-10-23).
 - Done: Phases 0-4; Phase 5 core: vision (docs/product/vision.md), target architecture + migration plan (docs/architecture/), ADR 0002-0006 accepted. U2 answered: DEX seam only (A), risk-manager and creative-ceo agents added, bitget/mexc = extension only.
-- Track 0: R-01 done (3d5441f). B1 done (2862593). R-05 CI committed (f6b5abb), first run pending. Open: R-06 deps, R-07 log scrub, R-09 backups, LICENSE (user).
+- Track 0: R-01 done (3d5441f). B1 done (2862593). R-05 CI done (f6b5abb), first run green (user, 2026-10-23); branch protection pending user. Open: R-06 deps, R-07 log scrub, R-09 backups, LICENSE (user).
 - User confirmed vision proposals 2026-10-23: portfolio = default pivot after NO-GO; manual rebalancing (ADR 0001 unchanged); Rework = up to 5 iterations of searching for any profitable spread approach (ADR 0007). Goal: find a way to earn, not to prove one hypothesis.
 - Risks noted: security may want per-service DB roles back (architect cut to 3); stale thresholds 500/2000 ms need quant tuning; B7 migration needs backups + user OK.
 - Known: live DB paper data wiped 2026-10-23 (R-01); soak must restart. No backups yet. Integration tests need DB `nexus_test` and POSTGRES_DB=nexus_test (ask first).
@@ -16,4 +16,6 @@
 - A6 done (6766bfd), security ACCEPT (docs/audit/security-review-A6.md), follow-ups F2-F6 pending; tech-lead round 1: RETURN (docs/audit/tech-lead-review-track0.md; B1/A4/B1a/A2a/CI accepted); backend-lead fixing.
 - Legal addendum: Gate User Agreement 2.5 lists Argentina AND Russia as restricted (needs human re-read) -> G1.2 blocked; Binance RF-resident account: change residence, do not open second account. User decided 2026-10-23: gateio same rule as Bybit — GO numbers with and without gateio; without written Gate confirmation of serving Argentine residents by UF -> judge without it.
 - User says keys for binance/gateio/kucoin/okx are already in .env (not read; .env is gitignored, untracked). Until A6 lands, user must confirm manually: read-only, withdrawals off, IP whitelist.
+- A6 round-1 fixes committed (ee38592); tech-lead round 2 running.
+- User request 2026-10-23: (a) logs/Telegram show the list of conditional venues (not tradable now: Bybit, gateio, ...) and aggregate totals WITH and WITHOUT them (combined, not per venue); (b) expand analysed venues (up to ~20, more is better): research candidates first, user will register and get keys. crypto-specialist researching; card for (a) pending.
 - Agents added this session need a fresh session to register: creative-ceo, risk-manager.

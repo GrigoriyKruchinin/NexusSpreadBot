@@ -16,7 +16,7 @@ Ticks only after verification and commit.
 ## Track 0 — Base (M1/M2 start)
 - [x] R-01 Integration tests only on `nexus_test` DB, refuse otherwise
 - [x] B1 `CORE_EXCHANGES` default, bitget/mexc extension-only — card `docs/tasks/m2/B1-core-exchanges-default.md` (first)
-- [x] R-05 (awaiting first CI run) GitHub Actions CI (lint, mypy, unit, integration w/ services, secret scan, image build) + coverage floor 89 % (A2) — card `docs/tasks/track0/A2-github-actions-ci.md`
+- [x] R-05 (first CI run green 2026-10-23, user-confirmed) GitHub Actions CI (lint, mypy, unit, integration w/ services, secret scan, image build) + coverage floor 89 % (A2) — card `docs/tasks/track0/A2-github-actions-ci.md`
 - [x] A2a gitleaks pre-commit hook (S-06 G1; low) — card `docs/tasks/track0/A2a-gitleaks-pre-commit.md`
 - [ ] R-06 Bump certifi, protobuf (unpin or justify), pip-audit incl. dev group
 - [x] R-07 Tests prove httpx/stdlib loggers do not leak tokens; scrubber covers `redis://user:pass@` URLs (A4) — card `docs/tasks/track0/A4-log-scrub-tests.md`
