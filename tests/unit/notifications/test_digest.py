@@ -53,35 +53,37 @@ def _data() -> DigestData:
 
 def test_digest_snapshot() -> None:
     assert DigestFormatter().render(_data(), "Europe/Moscow") == (
-        "📊 <b>Daily digest</b>\n"
+        "📊 <b>Ежедневный дайджест</b>\n"
         "<i>18 Oct 09:00 → 19 Oct 09:00 (Europe/Moscow)</i>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "🔀 <b>Opportunity episodes: 9</b>\n"
-        "✅ verified 5 · ⚠️ unverified 3 · 🚫 quarantined 1\n"
-        "⚡ Survived latency: <b>4</b> of 6 checked\n"
-        "⏱ Duration: median 1m 20s · max 14m 03s\n"
-        "<b>Top routes by peak net</b>\n"
-        "1. <code>ERA/USDT</code> Bybit → OKX — <b>+$12.35</b> (1.23%) · 3m 20s ⚡\n"
-        "2. <code>&lt;b&gt;X&lt;/b&gt;/USDT</code> MEXC → Gate.io — <b>+$6.00</b> (0.60%) · 30s\n"
+        "🔀 <b>Эпизодов возможностей: 9</b>\n"
+        "✅ подтверждённых 5 · ⚠️ неподтверждённых 3 · 🚫 в карантине 1\n"
+        "⚡ Пережили задержку: <b>4</b> из 6 проверенных\n"
+        "⏱ Длительность: медиана 1 мин 20 с · максимум 14 мин 03 с\n"
+        "<b>Топ связок по пиковой чистой прибыли</b>\n"
+        "1. <code>ERA/USDT</code> Bybit → OKX — <b>+$12.35</b> (1.23%) · 3 мин 20 с ⚡\n"
+        "2. <code>&lt;b&gt;X&lt;/b&gt;/USDT</code> MEXC → Gate.io — <b>+$6.00</b> (0.60%) · 30 с\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "📝 <b>Paper trading</b>\n"
-        "Trades: <b>4</b> · skipped: insufficient_coin 2, spread_gone 1\n"
-        "24h: realized <b>+$20.10</b> · transfers -$3.00 (2) · blocked 1\n"
-        "Since start: P&amp;L <b>+$15.00</b> = realized +$30.00 − transfers $5.00"
-        " + MTM -$10.00\n"
-        "Capital $7,000.00 · ROC <b>+0.21%</b>\n"
-        "🛡 Hedged (no inventory price risk): <b>+$25.00</b> · ROC <b>+0.36%</b>\n"
+        "📝 <b>Бумажная торговля</b>\n"
+        "Сделок: <b>4</b> · пропущено: не хватает монеты 2,"
+        " спред исчез за время задержки 1\n"
+        "За 24 ч: заработано <b>+$20.10</b> · переводы -$3.00 (2) · заблокировано 1\n"
+        "С начала: P&amp;L <b>+$15.00</b> = арбитраж +$30.00 − переводы $5.00"
+        " + переоценка -$10.00\n"
+        "Капитал $7,000.00 · доходность <b>+0.21%</b>\n"
+        "🛡 С хеджем (без ценового риска инвентаря): <b>+$25.00</b>"
+        " · доходность <b>+0.36%</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "🚫 <b>Quarantine</b>: 1 new · 3 active\n"
-        "• <code>ZIL/USDT</code> Binance → OKX: spread persists without a verified transfer"
-        " path\n"
+        "🚫 <b>Карантин</b>: новых 1 · активных 3\n"
+        "• <code>ZIL/USDT</code> Binance → OKX: спред держится,"
+        " а маршрут перевода не подтверждён\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "🌐 <b>Exchanges</b>\n"
-        "<pre>Exchange  Uptime  Transfers\n"
-        "Binance      99%        87%\n"
-        "Bitget       n/a        n/a\n"
-        "OKX         100%        n/a</pre>\n"
-        "<blockquote>Unverified opportunities (stored, not alerted): 37</blockquote>"
+        "🌐 <b>Биржи</b>\n"
+        "<pre>Биржа    Аптайм  Переводы\n"
+        "Binance     99%       87%\n"
+        "Bitget      н/д       н/д\n"
+        "OKX        100%       н/д</pre>\n"
+        "<blockquote>Неподтверждённые возможности (записаны, без алертов): 37</blockquote>"
     )
 
 
@@ -97,10 +99,10 @@ def test_empty_digest() -> None:
         coverage_pct={},
     )
     text = DigestFormatter().render(data, "UTC")
-    assert "🔀 <b>Opportunity episodes: 0</b>" in text
-    assert "Survived latency" not in text
-    assert "📝 <b>Paper trading</b>: no activity yet" in text
-    assert "🌐 <b>Exchanges</b>: no data" in text
+    assert "🔀 <b>Эпизодов возможностей: 0</b>" in text
+    assert "Пережили задержку" not in text
+    assert "📝 <b>Бумажная торговля</b>: пока нет активности" in text
+    assert "🌐 <b>Биржи</b>: нет данных" in text
     assert "(UTC)" in text
 
 
@@ -119,5 +121,5 @@ async def test_digest_service_sends_last_24h() -> None:
     service = DigestService(_Repo(), notifier, ManualClock(T0 + DAY))  # type: ignore[arg-type]
     await service.send("Europe/Moscow")
     assert windows == [(T0, T0 + DAY)]
-    assert notifier.sent[0].text.startswith("📊 <b>Daily digest</b>")
+    assert notifier.sent[0].text.startswith("📊 <b>Ежедневный дайджест</b>")
     assert not notifier.sent[0].silent

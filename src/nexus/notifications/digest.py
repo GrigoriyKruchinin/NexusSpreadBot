@@ -1,4 +1,4 @@
-"""Daily digest template (Telegram HTML; every dynamic value is escaped)."""
+"""Daily digest template (Telegram HTML, Russian; every dynamic value is escaped)."""
 
 from __future__ import annotations
 
@@ -20,6 +20,17 @@ from nexus.notifications.formatting import (
 )
 
 QUARANTINES_SHOWN: Final = 5
+SKIP_REASONS: Final[dict[str, str]] = {
+    "insufficient_usdt": "не хватает USDT",
+    "insufficient_coin": "не хватает монеты",
+    "rebalance_in_flight": "идёт виртуальный перевод",
+    "no_rebalance_path": "нет пути пополнения",
+    "spread_gone": "спред исчез за время задержки",
+    "books_unavailable": "стаканы недоступны",
+    "unfillable": "стакан не подходит (тонкий/устарел/ниже минимума)",
+    "no_price": "нет цены монеты",
+    "recent_fill": "связка только что торговалась",
+}
 LATENCY_MARK: Final[dict[bool | None, str]] = {True: " ⚡", False: " 🐢", None: ""}
 
 
@@ -34,7 +45,7 @@ class DigestFormatter:
             return datetime.fromtimestamp(epoch_ms / 1000, tz=zone).strftime("%d %b %H:%M")
 
         lines = [
-            "📊 <b>Daily digest</b>",
+            "📊 <b>Ежедневный дайджест</b>",
             f"<i>{local(data.window_start_ms)} → {local(data.window_end_ms)} ({esc(tz)})</i>",
             SEPARATOR,
             *self._episodes(data.episodes),
@@ -44,7 +55,7 @@ class DigestFormatter:
             *self._quarantine(data),
             SEPARATOR,
             *self._exchanges(data),
-            f"<blockquote>Unverified opportunities (stored, not alerted): "
+            f"<blockquote>Неподтверждённые возможности (записаны, без алертов): "
             f"{data.unverified_evaluations}</blockquote>",
         ]
         return truncate("\n".join(lines))
@@ -52,23 +63,23 @@ class DigestFormatter:
     @staticmethod
     def _episodes(stats: EpisodeStats) -> list[str]:
         lines = [
-            f"🔀 <b>Opportunity episodes: {stats.total}</b>",
-            f"✅ verified {stats.verified} · ⚠️ unverified {stats.unverified}"
-            f" · 🚫 quarantined {stats.quarantined}",
+            f"🔀 <b>Эпизодов возможностей: {stats.total}</b>",
+            f"✅ подтверждённых {stats.verified} · ⚠️ неподтверждённых {stats.unverified}"
+            f" · 🚫 в карантине {stats.quarantined}",
         ]
         if not stats.total:
             return lines
         lines.append(
-            f"⚡ Survived latency: <b>{stats.survived_latency}</b> of {stats.latency_checked}"
-            " checked"
+            f"⚡ Пережили задержку: <b>{stats.survived_latency}</b> из {stats.latency_checked}"
+            " проверенных"
         )
         if stats.median_duration_s is not None and stats.max_duration_s is not None:
             lines.append(
-                f"⏱ Duration: median {fmt_duration(stats.median_duration_s)}"
-                f" · max {fmt_duration(stats.max_duration_s)}"
+                f"⏱ Длительность: медиана {fmt_duration(stats.median_duration_s)}"
+                f" · максимум {fmt_duration(stats.max_duration_s)}"
             )
         if stats.top:
-            lines.append("<b>Top routes by peak net</b>")
+            lines.append("<b>Топ связок по пиковой чистой прибыли</b>")
             for rank, e in enumerate(stats.top, start=1):
                 lines.append(
                     f"{rank}. <code>{esc(e.symbol)}</code> {esc(exchange_name(e.buy_exchange))}"
@@ -82,30 +93,33 @@ class DigestFormatter:
     @staticmethod
     def _paper(paper: PaperStats | None) -> list[str]:
         if paper is None:
-            return ["📝 <b>Paper trading</b>: no activity yet"]
-        skipped = ", ".join(f"{esc(k)} {v}" for k, v in sorted(paper.skipped.items()))
+            return ["📝 <b>Бумажная торговля</b>: пока нет активности"]
+        skipped = ", ".join(
+            f"{esc(SKIP_REASONS.get(k, k))} {v}" for k, v in sorted(paper.skipped.items())
+        )
         roc, hedged_roc = paper.roc_pct, paper.hedged_roc_pct
         return [
-            "📝 <b>Paper trading</b>",
-            f"Trades: <b>{paper.trades}</b>" + (f" · skipped: {skipped}" if skipped else ""),
-            f"24h: realized <b>{fmt_usd(paper.realized_usd, signed=True)}</b>"
-            f" · transfers {fmt_usd(-paper.rebalance_usd, signed=True)} ({paper.rebalances})"
-            + (f" · blocked {paper.blocked_rebalances}" if paper.blocked_rebalances else ""),
-            f"Since start: P&amp;L <b>{fmt_usd(paper.total_pnl_usd, signed=True)}</b>"
-            f" = realized {fmt_usd(paper.realized_total_usd, signed=True)}"
-            f" − transfers {fmt_usd(paper.rebalance_total_usd)}"
-            f" + MTM {fmt_usd(paper.mark_to_market_usd, signed=True)}",
-            f"Capital {fmt_usd(paper.capital_usd)} · ROC "
-            + (f"<b>{_signed_pct(roc)}</b>" if roc is not None else "n/a"),
-            f"🛡 Hedged (no inventory price risk): <b>"
+            "📝 <b>Бумажная торговля</b>",
+            f"Сделок: <b>{paper.trades}</b>" + (f" · пропущено: {skipped}" if skipped else ""),
+            f"За 24 ч: заработано <b>{fmt_usd(paper.realized_usd, signed=True)}</b>"
+            f" · переводы {fmt_usd(-paper.rebalance_usd, signed=True)} ({paper.rebalances})"
+            + (f" · заблокировано {paper.blocked_rebalances}" if paper.blocked_rebalances else ""),
+            f"С начала: P&amp;L <b>{fmt_usd(paper.total_pnl_usd, signed=True)}</b>"
+            f" = арбитраж {fmt_usd(paper.realized_total_usd, signed=True)}"
+            f" − переводы {fmt_usd(paper.rebalance_total_usd)}"
+            f" + переоценка {fmt_usd(paper.mark_to_market_usd, signed=True)}",
+            f"Капитал {fmt_usd(paper.capital_usd)} · доходность "
+            + (f"<b>{_signed_pct(roc)}</b>" if roc is not None else "н/д"),
+            f"🛡 С хеджем (без ценового риска инвентаря): <b>"
             f"{fmt_usd(paper.hedged_pnl_usd, signed=True)}</b>"
-            + (f" · ROC <b>{_signed_pct(hedged_roc)}</b>" if hedged_roc is not None else ""),
+            + (f" · доходность <b>{_signed_pct(hedged_roc)}</b>" if hedged_roc is not None else ""),
         ]
 
     @staticmethod
     def _quarantine(data: DigestData) -> list[str]:
         lines = [
-            f"🚫 <b>Quarantine</b>: {len(data.quarantines)} new · {data.active_quarantines} active"
+            f"🚫 <b>Карантин</b>: новых {len(data.quarantines)}"
+            f" · активных {data.active_quarantines}"
         ]
         for q in data.quarantines[:QUARANTINES_SHOWN]:
             why = QUARANTINE_REASONS.get(q.reason, q.reason)
@@ -115,25 +129,25 @@ class DigestFormatter:
             )
         hidden = len(data.quarantines) - QUARANTINES_SHOWN
         if hidden > 0:
-            lines.append(f"… and {hidden} more")
+            lines.append(f"… и ещё {hidden}")
         return lines
 
     @staticmethod
     def _exchanges(data: DigestData) -> list[str]:
         names = sorted(set(data.uptime_pct) | set(data.coverage_pct))
         if not names:
-            return ["🌐 <b>Exchanges</b>: no data"]
-        width = max(len("Exchange"), *(len(exchange_name(n)) for n in names))
-        rows = [f"{'Exchange'.ljust(width)}  Uptime  Transfers"]
+            return ["🌐 <b>Биржи</b>: нет данных"]
+        width = max(len("Биржа"), *(len(exchange_name(n)) for n in names))
+        rows = [f"{'Биржа'.ljust(width)}  Аптайм  Переводы"]
         for name in names:
             uptime = _pct_cell(data.uptime_pct.get(name))
             coverage = _pct_cell(data.coverage_pct.get(name))
-            rows.append(f"{exchange_name(name).ljust(width)}  {uptime:>6}  {coverage:>9}")
-        return ["🌐 <b>Exchanges</b>", f"<pre>{esc(chr(10).join(rows))}</pre>"]
+            rows.append(f"{exchange_name(name).ljust(width)}  {uptime:>6}  {coverage:>8}")
+        return ["🌐 <b>Биржи</b>", f"<pre>{esc(chr(10).join(rows))}</pre>"]
 
 
 def _pct_cell(value: int | None) -> str:
-    return "n/a" if value is None else f"{value}%"
+    return "н/д" if value is None else f"{value}%"
 
 
 def _signed_pct(value: Decimal) -> str:

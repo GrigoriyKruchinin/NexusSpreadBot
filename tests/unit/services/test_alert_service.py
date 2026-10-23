@@ -23,7 +23,7 @@ async def test_sends_once_and_records() -> None:
     service = _service(repos, notifier)
     assert await service.send_opportunity(evaluation_id) is AlertOutcome.SENT
     assert repos.alerts[evaluation_id][0] is AlertDeliveryStatus.SENT
-    assert "Arbitrage Opportunity" in notifier.sent[0].text
+    assert "Арбитражная возможность" in notifier.sent[0].text
     assert await service.send_opportunity(evaluation_id) is AlertOutcome.DUPLICATE
     assert len(notifier.sent) == 1
 
@@ -84,7 +84,7 @@ async def test_system_event_recovered_is_silent() -> None:
     payload = event_to_payload(ExchangeRecovered(exchange="okx", downtime_s=12))
     assert await _service(repos, notifier).send_event(payload) is AlertOutcome.SENT
     assert notifier.sent[0].silent
-    assert "OKX recovered" in notifier.sent[0].text
+    assert "OKX снова доступна" in notifier.sent[0].text
 
 
 async def test_stale_system_event_dropped() -> None:
@@ -114,7 +114,7 @@ async def test_realert_context_reaches_the_message() -> None:
     assert await _service(repos, notifier).send_opportunity(evaluation_id, context) is (
         AlertOutcome.SENT
     )
-    assert "Re-alert #1" in notifier.sent[0].text
+    assert "Повтор №1" in notifier.sent[0].text
 
 
 async def test_episode_closed_is_silent() -> None:
@@ -123,4 +123,4 @@ async def test_episode_closed_is_silent() -> None:
     payload = event_to_payload(event, emitted_at_ms=EVALUATED_AT_MS + 5_000)
     assert await _service(repos, notifier).send_event(payload) is AlertOutcome.SENT
     assert notifier.sent[0].silent
-    assert "Opportunity closed" in notifier.sent[0].text
+    assert "Возможность закрылась" in notifier.sent[0].text

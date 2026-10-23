@@ -1,4 +1,4 @@
-"""Telegram HTML message templates.
+"""Telegram HTML message templates (user-facing text is Russian).
 
 Every dynamic value passes through :func:`esc` (``html.escape``): exchange-provided strings
 (network codes, error texts) must never be able to inject markup.
@@ -39,8 +39,16 @@ EXCHANGE_DISPLAY_NAMES: Final[dict[str, str]] = {
 
 QUARANTINE_ROUTES_SHOWN: Final = 10
 QUARANTINE_REASONS: Final[dict[str, str]] = {
-    "unverified_persistent": "spread persists without a verified transfer path",
-    "transfer_unavailable": "deposits/withdrawals are disabled",
+    "unverified_persistent": "спред держится, а маршрут перевода не подтверждён",
+    "transfer_unavailable": "ввод или вывод монеты отключён",
+}
+EPISODE_CLOSE_REASONS: Final[dict[str, str]] = {
+    "gap": "спред исчез",
+    "quarantined": "связка отправлена в карантин",
+    "restart": "сканер перезапускался",
+}
+STOP_REASONS: Final[dict[str, str]] = {
+    "shutdown": "сканер остановлен или перезапускается (docker stop / make down-local)",
 }
 
 
@@ -93,15 +101,15 @@ def fmt_time(epoch_ms: int) -> str:
 
 
 def fmt_duration(seconds: int) -> str:
-    """``45s`` / ``3m 20s`` / ``2h 05m``."""
+    """Russian short form: seconds, minutes + seconds, or hours + minutes."""
     seconds = max(seconds, 0)
     if seconds < 60:
-        return f"{seconds}s"
+        return f"{seconds} с"
     minutes, secs = divmod(seconds, 60)
     if minutes < 60:
-        return f"{minutes}m {secs:02d}s"
+        return f"{minutes} мин {secs:02d} с"
     hours, minutes = divmod(minutes, 60)
-    return f"{hours}h {minutes:02d}m"
+    return f"{hours} ч {minutes:02d} мин"
 
 
 def truncate(text: str) -> str:
@@ -126,50 +134,50 @@ class OpportunityFormatter:
         quote = esc(evaluation.quote)
 
         rows = [
-            ("Buy fee", fmt_usd(bd.fee_buy_usd)),
-            ("Sell fee", fmt_usd(bd.fee_sell_usd)),
-            ("Slippage", fmt_usd(bd.slippage_usd)),
-            ("Transfer", self._transfer_cost(evaluation)),
+            ("Комиссия покупки", fmt_usd(bd.fee_buy_usd)),
+            ("Комиссия продажи", fmt_usd(bd.fee_sell_usd)),
+            ("Проскальзывание", fmt_usd(bd.slippage_usd)),
+            ("Перевод", self._transfer_cost(evaluation)),
         ]
         width = max(len(label) for label, _ in rows)
         table = "\n".join(f"{label.ljust(width)}  {value}" for label, value in rows)
 
         context = context or AlertContext()
-        title = "Arbitrage Opportunity"
+        title = "Арбитражная возможность"
         if context.realert:
-            title = f"Re-alert #{context.realert}: spread is growing"
+            title = f"Повтор №{context.realert}: спред растёт"
         lines = [
             f"💹 <b>{esc(title)}</b> · <code>{esc(evaluation.symbol)}</code>",
             *(
                 [
-                    f"🔁 Net was <b>{fmt_usd(Decimal(context.previous_net_usd), signed=True)}"
-                    "</b> at the previous alert"
+                    f"🔁 В прошлом алерте чистая прибыль была "
+                    f"<b>{fmt_usd(Decimal(context.previous_net_usd), signed=True)}</b>"
                 ]
                 if context.realert and context.previous_net_usd
                 else []
             ),
             SEPARATOR,
-            f"🟢 <b>BUY</b> on <b>{buy}</b> @ <code>{fmt_price(bd.best_ask_buy)}</code>"
-            f" · VWAP <code>{fmt_price(bd.vwap_buy)}</code>",
-            f"🔴 <b>SELL</b> on <b>{sell}</b> @ <code>{fmt_price(bd.best_bid_sell)}</code>"
-            f" · VWAP <code>{fmt_price(bd.vwap_sell)}</code>",
+            f"🟢 <b>ПОКУПКА</b> на <b>{buy}</b> по <code>{fmt_price(bd.best_ask_buy)}</code>"
+            f" · средняя <code>{fmt_price(bd.vwap_buy)}</code>",
+            f"🔴 <b>ПРОДАЖА</b> на <b>{sell}</b> по <code>{fmt_price(bd.best_bid_sell)}</code>"
+            f" · средняя <code>{fmt_price(bd.vwap_sell)}</code>",
             "",
-            f"💰 <b>Net profit: {fmt_usd(bd.net_profit_usd, signed=True)}"
+            f"💰 <b>Чистая прибыль: {fmt_usd(bd.net_profit_usd, signed=True)}"
             f" ({fmt_pct(bd.net_profit_pct)})</b>",
-            f"📈 Gross spread: <b>{fmt_pct(bd.gross_spread_pct)}</b>",
-            f"📦 Size: <b>{fmt_usd(bd.cost_quote)}</b> {quote} → "
+            f"📈 Спред до издержек: <b>{fmt_pct(bd.gross_spread_pct)}</b>",
+            f"📦 Объём: <b>{fmt_usd(bd.cost_quote)}</b> {quote} → "
             f"<b>{fmt_amount(bd.base_bought)}</b> {base}",
             SEPARATOR,
-            "🧾 <b>Cost breakdown</b>",
+            "🧾 <b>Издержки</b>",
             f"<pre>{esc(table)}</pre>",
             self._transfer_line(evaluation),
             *(
-                ["ℹ️ <i>Taker fee is an estimate (not reported per pair by the exchange).</i>"]
+                ["ℹ️ <i>Комиссия тейкера оценочная (биржа не отдаёт её по паре).</i>"]
                 if evaluation.fees_estimated
                 else []
             ),
-            f"<blockquote>⏱ Book age: {evaluation.buy_book_age_ms} ms / "
-            f"{evaluation.sell_book_age_ms} ms\n"
+            f"<blockquote>⏱ Возраст стаканов: {evaluation.buy_book_age_ms} мс / "
+            f"{evaluation.sell_book_age_ms} мс\n"
             f"🕒 {fmt_time(evaluation.evaluated_at_ms)}</blockquote>",
         ]
         return truncate("\n".join(lines))
@@ -178,10 +186,10 @@ class OpportunityFormatter:
     def _transfer_cost(evaluation: SpreadEvaluation) -> str:
         bd = evaluation.breakdown
         if bd is None:
-            return "n/a"
+            return "н/д"
         if not evaluation.transfer_verified:
             # Only a per-asset chain tax can be priced without a verified network.
-            return f"{fmt_usd(bd.transfer_fee_usd)} tax + n/a" if bd.transfer_fee_usd else "n/a"
+            return f"{fmt_usd(bd.transfer_fee_usd)} налог + н/д" if bd.transfer_fee_usd else "н/д"
         return fmt_usd(bd.transfer_fee_usd)
 
     @staticmethod
@@ -189,11 +197,11 @@ class OpportunityFormatter:
         transfer = evaluation.transfer
         if transfer.status is TransferStatus.VERIFIED:
             network = esc(transfer.network or "?")
-            return f"🔁 Transfer: ✅ verified via <b>{network}</b>"
+            return f"🔁 Перевод: ✅ подтверждён, сеть <b>{network}</b>"
         note = f" — {esc(transfer.note)}" if transfer.note else ""
         return (
-            "⚠️ <b>Transfer path unverified</b>"
-            f"{note}\n<i>Check deposit/withdrawal status manually before acting.</i>"
+            "⚠️ <b>Маршрут перевода не подтверждён</b>"
+            f"{note}\n<i>Перед действием проверьте статус ввода/вывода вручную.</i>"
         )
 
 
@@ -206,21 +214,22 @@ class SystemEventFormatter:
             case ScannerStarted():
                 return self._started(event)
             case ScannerStopped():
+                reason = STOP_REASONS.get(event.reason, event.reason)
                 return (
-                    "🛑 <b>Nexus Spread Scanner stopped</b>\n"
-                    f"<blockquote>{esc(event.reason)}</blockquote>"
+                    "🛑 <b>Nexus Spread Scanner остановлен</b>\n"
+                    f"<blockquote>{esc(reason)}</blockquote>"
                 )
             case ExchangeDown():
                 return (
-                    f"⚠️ <b>{esc(exchange_name(event.exchange))} unreachable</b>\n"
+                    f"⚠️ <b>{esc(exchange_name(event.exchange))} недоступна</b>\n"
                     f"{SEPARATOR}\n"
-                    f"Consecutive failures: <b>{event.consecutive_failures}</b>\n"
+                    f"Ошибок подряд: <b>{event.consecutive_failures}</b>\n"
                     f"<blockquote>{esc(event.error[:500])}</blockquote>"
                 )
             case ExchangeRecovered():
                 return (
-                    f"✅ <b>{esc(exchange_name(event.exchange))} recovered</b>\n"
-                    f"Downtime: <b>{event.downtime_s} s</b>"
+                    f"✅ <b>{esc(exchange_name(event.exchange))} снова доступна</b>\n"
+                    f"Простой: <b>{event.downtime_s} с</b>"
                 )
             case EpisodeClosed():
                 return self._episode_closed(event)
@@ -231,9 +240,10 @@ class SystemEventFormatter:
     def _quarantined(event: RoutesQuarantined) -> str:
         shown = event.routes[:QUARANTINE_ROUTES_SHOWN]
         lines = [
-            f"🚫 <b>{len(event.routes)} route(s) quarantined</b> for <b>{event.duration_h} h</b>",
-            "<i>No alerts and no order-book checks; lifted early if the transfer path "
-            "becomes verified.</i>",
+            f"🚫 <b>В карантин отправлено связок: {len(event.routes)}</b>"
+            f" на <b>{event.duration_h} ч</b>",
+            "<i>Алертов и проверки стаканов по ним не будет; карантин снимется раньше, "
+            "если маршрут перевода подтвердится.</i>",
             SEPARATOR,
         ]
         for route in shown:
@@ -245,26 +255,27 @@ class SystemEventFormatter:
             if route.note:
                 lines.append(f"  <i>{esc(route.note[:200])}</i>")
         if hidden := len(event.routes) - len(shown):
-            lines.append(f"… and {hidden} more")
+            lines.append(f"… и ещё {hidden}")
         return truncate("\n".join(lines))
 
     @staticmethod
     def _episode_closed(event: EpisodeClosed) -> str:
-        survived = {True: "✅ yes", False: "❌ no", None: "n/a"}[event.survived_latency]
+        survived = {True: "✅ да", False: "❌ нет", None: "н/д"}[event.survived_latency]
         peak_usd = fmt_usd(Decimal(event.peak_net_usd), signed=True)
         peak_pct = fmt_pct(Decimal(event.peak_net_pct))
         return "\n".join(
             [
-                f"🏁 <b>Opportunity closed</b> · <code>{esc(event.symbol)}</code>",
+                f"🏁 <b>Возможность закрылась</b> · <code>{esc(event.symbol)}</code>",
                 f"{esc(exchange_name(event.buy_exchange))} → "
                 f"{esc(exchange_name(event.sell_exchange))}",
                 SEPARATOR,
-                f"⏱ Duration: <b>{fmt_duration(event.duration_s)}</b>"
-                f" · {event.evaluations} evaluations",
-                f"💰 Peak net: <b>{peak_usd} ({peak_pct})</b>",
-                f"⚡ Survived execution latency: <b>{survived}</b>",
-                *([f"🔁 Re-alerts: {event.realerts}"] if event.realerts else []),
-                f"<blockquote>Closed: {esc(event.reason)}</blockquote>",
+                f"⏱ Длительность: <b>{fmt_duration(event.duration_s)}</b>"
+                f" · проверок: {event.evaluations}",
+                f"💰 Максимум чистой прибыли: <b>{peak_usd} ({peak_pct})</b>",
+                f"⚡ Пережила задержку исполнения: <b>{survived}</b>",
+                *([f"🔁 Повторных алертов: {event.realerts}"] if event.realerts else []),
+                f"<blockquote>Причина закрытия: "
+                f"{esc(EPISODE_CLOSE_REASONS.get(event.reason, event.reason))}</blockquote>",
             ]
         )
 
@@ -272,9 +283,9 @@ class SystemEventFormatter:
     def _started(event: ScannerStarted) -> str:
         exchanges = "\n".join(
             f"{'🔑' if e.authenticated else '🌐'} <b>{esc(exchange_name(e.name))}</b>"
-            f" — {e.markets} markets"
+            f" — рынков: {e.markets}"
             + (
-                f" · transfers {e.transfer_coverage_pct}%"
+                f" · переводы {e.transfer_coverage_pct}%"
                 if e.transfer_coverage_pct is not None
                 else ""
             )
@@ -283,15 +294,16 @@ class SystemEventFormatter:
         return truncate(
             "\n".join(
                 [
-                    "🚀 <b>Nexus Spread Scanner started</b>",
+                    "🚀 <b>Nexus Spread Scanner запущен</b>",
                     SEPARATOR,
                     exchanges,
                     "",
-                    f"🔗 Common symbols: <b>{event.common_symbols}</b>",
-                    f"🎯 Threshold: <b>≥ {esc(event.min_net_profit_pct)}%</b> and "
-                    f"<b>≥ ${esc(event.min_net_profit_usd)}</b> net",
-                    f"📦 Reference size: <b>${esc(event.reference_notional_usd)}</b>",
-                    "<blockquote>🔑 read-only API key · 🌐 public data only</blockquote>",
+                    f"🔗 Общих пар: <b>{event.common_symbols}</b>",
+                    f"🎯 Порог: чистая прибыль <b>≥ {esc(event.min_net_profit_pct)}%</b> и "
+                    f"<b>≥ ${esc(event.min_net_profit_usd)}</b>",
+                    f"📦 Расчётный объём: <b>${esc(event.reference_notional_usd)}</b>",
+                    "<blockquote>🔑 ключ только для чтения"
+                    " · 🌐 только публичные данные</blockquote>",
                 ]
             )
         )
