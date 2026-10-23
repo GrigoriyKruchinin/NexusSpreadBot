@@ -203,8 +203,12 @@ read-only ключи по разделу 3, впишите их в `.env` и с�
 
 1. gate.io → профиль → **API Management** → **Create API Key**.
 2. Тип: **API v4 Key**, название `nexus-scanner-readonly`.
-3. Account mode: **Classic** (или текущий режим вашего аккаунта).
-4. Permissions: для **Spot/Margin** и **Wallet** выберите **Read Only**.
+   > Если появилась ошибка **«Please setup fund password (safepwd) first»** — сначала задайте
+   > фонд-пароль: **Security Settings → Fund Password** (нужна 2FA), затем повторите.
+3. Account Type: **Trading Account** (обычный ключ основного аккаунта).
+   **Не выбирайте Testnet** — ключи тестовой сети на боевом API дают `INVALID_KEY`.
+   Third-party account тоже не нужен.
+4. Permissions: для **Spot Trading** и **Wallet** выберите **Read Only**.
    **Withdraw** — не включать. Остальные разделы — отключены.
 5. IP whitelist: можно не указывать.
 6. Сохраните:
