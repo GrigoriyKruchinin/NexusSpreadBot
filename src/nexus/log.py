@@ -22,6 +22,8 @@ _SENSITIVE_KEYS: Final = frozenset(
 _SECRET_PATTERNS: Final[tuple[tuple[re.Pattern[str], str], ...]] = (
     # Telegram bot token, also inside API URLs (/bot<token>/sendMessage)
     (re.compile(r"(?<!\d)\d{6,}:[A-Za-z0-9_-]{30,}"), "<telegram-token>"),
+    # URL credentials (redis/postgres/amqp DSNs): scheme://user:pass@host -> scheme://***@host
+    (re.compile(r"://[^:/@\s]*:[^@\s]+@"), "://***@"),
     # Signed query parameters
     (re.compile(r"(?i)\b(signature|sign|apikey|api_key|passphrase)=([^&\s\"']+)"), r"\1=***"),
     # Exchange auth headers rendered in error messages

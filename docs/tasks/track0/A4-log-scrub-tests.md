@@ -6,7 +6,7 @@
 - reviewers: security (leak scenarios), tech-lead
 - complexity: low (code already sets httpx/httpcore/ccxt >= WARNING; the work is proof plus one pattern)
 - depends_on: A2 (CI runs the new tests)
-- status: todo
+- status: done (2026-10-23; tests in tests/unit/test_log_leaks.py; URL-credential pattern added to src/nexus/log.py; no gitleaks allowlist change; todo R-07 tick pending orchestrator)
 
 ## Goal
 Prove with unit tests that no secret reaches logs via httpx/httpcore/stdlib loggers, Celery
