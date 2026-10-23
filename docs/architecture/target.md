@@ -1,7 +1,9 @@
 # Target architecture — Nexus Spread Scanner
 
 Date: 2026-10-23. Author: architect. Status: accepted (U2, ADR 0006; revised after critical
-review: smaller split, config-based core list, typed capabilities, DEX seam on paper only).
+review: smaller split, config-based core list, typed capabilities, DEX seam on paper only;
+§10 security model and §7 legal constraints added 2026-10-23 after security review
+`docs/audit/security-review-architecture.md` and legal review `docs/legal/review-vision-architecture.md`).
 Baseline: `docs/audit/03-architecture-as-is.md`, `08-data-and-contracts.md`, `13-risk-register.md`.
 Decisions: ADR 0001 (no withdrawal), 0002 (bitget/mexc extension), 0003 (modular monolith),
 0004 (source plug-in contract), 0005 (clock domains), 0006 (U2: DEX seam only, risk-manager).
@@ -125,13 +127,12 @@ One writer per table/key; readers listed. Purge is a privileged delete by mainte
 | Redis `nexus:quarantine:*` | scanner/quarantine | — | source of truth; Postgres = history |
 | Redis `nexus:heartbeat:scanner` | scanner/ScannerRuntime | `nexus healthcheck` | 120 s TTL |
 | Redis `nexus:lock:scanner` (new) | scanner/ScannerRuntime | — | `SET NX PX` lease, renewed each sweep |
-| Celery payloads | scanner (producer) | workers | add `v` field (I8) |
+| Celery payloads | scanner (producer) | workers | add `v` field (I8); JSON only; never contain secrets (§10) |
 
 GO/NO-GO analytics read only rows whose exchange is in `CORE_EXCHANGES` (ADR 0002/0004).
 
-DB roles (R-09/TD-03), minimum for the MVP: `nexus_app` (DML, used by scanner and workers),
-`nexus_migrator` (DDL), `nexus_ro` (analytics/dashboards, read-only). A per-service split
-(scanner / alerts / maintenance) is added only if the security review requires it. Tests use
+DB roles (R-09/TD-03): three app roles `nexus_app` / `nexus_migrator` / `nexus_ro` plus a
+separate test role; grants and the per-service split trigger are in §10.1. Tests use
 `nexus_test` only (R-01).
 
 ## 5. Async correctness contract
@@ -197,6 +198,19 @@ kill switch, stale-data guard). The `risk-manager` agent writes its specs in `do
 Stage 2 design (ADR 0006). The scanner never gains order code. No withdrawal code at any stage
 without a new ADR (ADR 0001). Nothing in this section is in scope now.
 
+Constraints the Stage 2 design must satisfy (legal review A2/A4/A5, security S-13):
+- **Spot order endpoints only.** No Binance Convert API (Binance: "not suitable for ... price
+  arbitrage") and no Convert/OTC/RFQ-type endpoints on any venue for arbitrage.
+- **No self-crossing:** never place orders that can match against our own orders (wash
+  trading / self-matching is a ToS breach); respect venue rate limits.
+- **Tax records:** `orders`, `fills` and any transfer records are retained as tax records
+  (>= 5 years, exact term per accountant), excluded from maintenance purge, with an export path
+  for the accountant.
+- **Official APIs only, no web-UI scraping** (ToS "automated access via API only"); this already
+  holds in Stage 1 for all sources.
+- Executor gets its own DB role, own Redis ACL user and its own trade-only key with IP whitelist;
+  the scanner never receives trade-capable keys. A security audit gates Stage 2 code.
+
 ## 8. Observability seam
 
 Scanner components report through a narrow `IMetrics` port (counter/gauge/histogram, no-op
@@ -207,3 +221,58 @@ the port keeps that decision out of the core. Until then, structured log events 
 
 Pure Decimal engine and its math; REST re-check of streamed legs before alert; Postgres as the
 analytics store; Redis + Celery topology; Docker Compose as the run base; Alembic linear chain.
+
+## 10. Security model
+
+Source: `docs/audit/security-review-architecture.md` (S-01..S-14). Stage 1 = single local host,
+public/read-only data; one trust domain for our own containers.
+
+### 10.1 Database roles and grants (S-01, S-02)
+
+| Role | Rights | Used by |
+|---|---|---|
+| bootstrap superuser (`POSTGRES_USER`) | everything | postgres init / manual admin only; never in any app service env |
+| `nexus_migrator` | owner of schema `public` objects, DDL; sets grants + `ALTER DEFAULT PRIVILEGES` | `migrator` container only |
+| `nexus_app` | `SELECT, INSERT, UPDATE, DELETE` on app tables, `USAGE` on sequences; no `TRUNCATE`, no DDL, no `CREATE` on schema, not owner; `NOSUPERUSER NOCREATEDB NOCREATEROLE` | scanner, worker-alerts, worker-maintenance |
+| `nexus_ro` | `SELECT` only (+ default privileges for future tables) | analytics, dashboards, `pg_dump` backups |
+| `nexus_test_owner` | owner of DB `nexus_test` only; `CONNECT` on `nexus` revoked | integration tests, restore drill |
+
+The test role is defence in depth for R-01: even if the DB-name guard is bypassed, it cannot
+reach live data. `statement_timeout` / `lock_timeout` are set per role (`ALTER ROLE ... SET`),
+the server-side half of B5. CI uses its own ephemeral Postgres service.
+
+**Per-service split** (`nexus_scanner`, `nexus_alerts`, `nexus_maint`, and per-service Redis ACL
+users) becomes required before the first of: a VPS / any non-local host, the Stage 2 executor,
+or any role/container holding money-touching credentials.
+
+### 10.2 Redis (S-04, S-11)
+- Auth on: `requirepass` (or one ACL app user with the default user disabled) loaded from a
+  file/secret, never inline in compose. Healthcheck uses `REDISCLI_AUTH`, not `redis-cli -a`.
+- Broker/Redis URLs with credentials are scrubbed in logs (`scheme://user:pass@` pattern).
+- `maxmemory` with `noeviction` (broker safety); Redis is never published to the host.
+- Scanner lease (C10) value is a random token; renew/release only on match (compare-and-set).
+
+### 10.3 Celery (S-05)
+`task_serializer="json"`, `accept_content=["json"]`, `result_accept_content=["json"]`; pickle
+never. Payloads are validated incl. `v`; unknown versions are logged and rejected, not crashed
+on. Payloads never carry secrets. HTML-escaping in Telegram templates stays mandatory.
+
+### 10.4 Exchange key model (S-08, U3)
+- Stage 1: one key per core venue, **read-only scope only** (no trade, withdraw, transfer,
+  sub-account or universal-transfer), IP whitelist to the host egress IP where supported,
+  separate from any personal/trading key; rotated on suspicion and at Stage 2 start.
+  Passphrases (okx, kucoin) are secrets.
+- Keys are entered only by the user via `.env` / Docker secrets following a `docs/guides/`
+  file (U3); never through agents or chat.
+- Startup check where the venue exposes it (e.g. binance `apiRestrictions`): refuse to start if
+  trading or withdrawal permission is detected. The GET-only guard is installed on every
+  authenticated client (unit-tested).
+- Extension venues (bitget/mexc) get no key variables in the scanner env while disabled.
+- Logs never contain the raw `repr` of ccxt auth errors without `scrub` (S-07).
+
+### 10.5 Secrets delivery and hardening (S-09, S-10, S-12)
+Plain env vars are acceptable for local Stage 1 only. **Docker/Compose secrets files (`*_FILE`)
+are required before any VPS** or shared-host soak. Before VPS also: no published Postgres port,
+digest-pinned images + image scan in CI, `cap_drop: [ALL]` / `no-new-privileges` / memory and
+pid limits. External-heartbeat ping URL is a secret (`SecretStr`, scrubbed).
+

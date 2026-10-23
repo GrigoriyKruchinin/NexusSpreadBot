@@ -2,7 +2,7 @@
 
 Date: 2026-10-23. Author: creative-ceo. Status: accepted by the user 2026-10-23 (three proposals confirmed; Rework rule extended, see section 5 and ADR 0007).
 Revised 2026-10-23 after the legal review (`docs/legal/review-vision-architecture.md`, V1-V3, V7):
-income tax added to costs (basis of the 2 % bar open, see section 3), legal GO gate = G1-G4,
+income tax added to costs (2 % bar is after tax, user decision 2026-10-23), legal GO gate = G1-G4,
 sanctioned tokens/venues out of scope, pivot 2 precondition.
 Inputs: `CLAUDE.md`, `docs/pipeline/intake.md`, `docs/pipeline/nexus-appendix.md`,
 `docs/product/stage1-history.md`, ADR 0001, 0002, 0006, `docs/architecture/target.md`,
@@ -36,9 +36,9 @@ GO needs **all three**:
    inventory held between exchanges, and **income tax** on the gains (Argentine schedular rate,
    indicatively 15 %, *unverified for this case*; owner: quant-analyst + the user's accountant,
    legal review V2/G3).
-   **Open (user decision):** whether the 2 % bar is measured before or after income tax. At
-   ~15 % tax this is material: 2 % pre-tax is ~1.7 % after tax; 2 % after tax needs ~2.35 %
-   pre-tax. Until the user decides, `quant-analyst` reports both numbers side by side.
+   **Decided (user, 2026-10-23):** the 2 % bar is measured **after** income tax (money kept).
+   At ~15 % tax (unverified) this needs ~2.35 % pre-tax; `quant-analyst` also shows the
+   pre-tax figure for reference.
 2. **Out-of-sample:** the number comes from data the model was not tuned on (tune on period A,
    judge on later period B). In-sample paper profit does not count.
 3. **Legal:** gates **G1-G4** of the legal review are each ticked as cleared in a checklist file
@@ -188,7 +188,7 @@ exchange set, not the no-withdrawal rule.
 - Verified episodes per day with net >= $5 surviving >= 2 s latency (target 5-10).
 - Hedged paper P&L and ROC after rebalance costs, separately from mark-to-market.
 - Concentration: share of profit from the top route and top coin (alarm above ~50 %).
-- Out-of-sample net return per month vs the 2 % bar, with a range, not a point; pre-tax and
-  after-tax side by side until the basis is decided (section 3).
+- Out-of-sample net return per month vs the 2 % bar, with a range, not a point; judged
+  after tax (pre-tax shown for reference, section 3).
 - Gap between assumed and observed costs once real fee/transfer data is in.
 - Time and money spent so far vs expected payoff (revisit at each stage end).
