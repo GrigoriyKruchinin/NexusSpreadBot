@@ -1,8 +1,12 @@
 # Nexus — Product vision
 
 Date: 2026-10-23. Author: creative-ceo. Status: accepted by the user 2026-10-23 (three proposals confirmed; Rework rule extended, see section 5 and ADR 0007).
+Revised 2026-10-23 after the legal review (`docs/legal/review-vision-architecture.md`, V1-V3, V7):
+income tax added to costs (basis of the 2 % bar open, see section 3), legal GO gate = G1-G4,
+sanctioned tokens/venues out of scope, pivot 2 precondition.
 Inputs: `CLAUDE.md`, `docs/pipeline/intake.md`, `docs/pipeline/nexus-appendix.md`,
-`docs/product/stage1-history.md`, ADR 0001, 0002, 0006, `docs/architecture/target.md`.
+`docs/product/stage1-history.md`, ADR 0001, 0002, 0006, `docs/architecture/target.md`,
+`docs/legal/review-vision-architecture.md`.
 
 ## 1. Purpose (one paragraph)
 
@@ -28,11 +32,25 @@ GO needs **all three**:
 
 1. **Money:** net return >= **2 % per month** on the allocated capital (about $10-20k USDT, so
    roughly $200-400 per month), after *every* cost: taker fees, order-book slippage, withdrawal
-   and network fees, transfer taxes, rebalancing, failed or half-filled legs, and price risk on
-   inventory held between exchanges.
+   and network fees, transfer taxes, rebalancing, failed or half-filled legs, price risk on
+   inventory held between exchanges, and **income tax** on the gains (Argentine schedular rate,
+   indicatively 15 %, *unverified for this case*; owner: quant-analyst + the user's accountant,
+   legal review V2/G3).
+   **Open (user decision):** whether the 2 % bar is measured before or after income tax. At
+   ~15 % tax this is material: 2 % pre-tax is ~1.7 % after tax; 2 % after tax needs ~2.35 %
+   pre-tax. Until the user decides, `quant-analyst` reports both numbers side by side.
 2. **Out-of-sample:** the number comes from data the model was not tuned on (tune on period A,
    judge on later period B). In-sample paper profit does not count.
-3. **Legal:** no blocking verdict in `docs/legal/`.
+3. **Legal:** gates **G1-G4** of the legal review are each ticked as cleared in a checklist file
+   in `docs/legal/` (owner: lawyer, with human lawyer/accountant confirmation where marked
+   *unverified*), and no blocking verdict exists. "No blocker found" alone is not enough.
+   Gates (details: [`docs/legal/review-vision-architecture.md`](../legal/review-vision-architecture.md), section 1):
+   - **G1** KYC/residence on every core account is truthful and consistent (Argentina, global
+     entity, not an EU entity).
+   - **G2** server/VPS location is not a restricted jurisdiction for any core venue.
+   - **G3** Argentine and Russian tax position is known (residency start, rate, records,
+     currency-control reporting).
+   - **G4** no account in another person's name, no multi-accounting, no third-party KYC.
 
 Plain-language reading of 2 %: about 27 % per year compounded. That is the bar to beat plain
 USDT yield products and the user's own time, not just zero. Note it is also a tiny absolute sum;
@@ -58,15 +76,18 @@ Re-enter when the user has an Argentine DNI and can pass KYC (about 6 months fro
 code (ADR 0001); live keys for agents; GUI/frontend; derivatives, margin, leverage; HTX
 (sanctions); custody of other people's money; selling signals to third parties.
 
+**Out (permanently, not lifted by GO):** A7A5 and other sanctioned tokens (excluded from the
+symbol universe); Garantex/Grinex and other sanctioned venues (legal review V3, section 5).
+
 ## 5. What each outcome leads to
 
 The verdict comes from `quant-analyst` (`viability-verdict`) plus `lawyer`; the user decides at UF.
 
 | Outcome | Evidence needed | What happens next |
 |---|---|---|
-| **GO** | All three GO conditions hold; positive after rebalancing and mark-to-market; result stable across at least two separate periods and not dependent on 1-2 routes or coins (the soak showed 24 of 30 episodes from one route, LUNC) | Stage 2: executor behind ADR 0001 revision, risk-manager limits, kill switch, trade-only keys (no withdrawal, IP whitelist), start with minimal size and a paper-vs-live comparison for weeks. Live money only on explicit user confirmation. |
+| **GO** | All three GO conditions hold (incl. G1-G4 ticked); positive after rebalancing and mark-to-market; result stable across at least two separate periods and not dependent on 1-2 routes or coins (the soak showed 24 of 30 episodes from one route, LUNC) | Stage 2: executor behind ADR 0001 revision, risk-manager limits, kill switch, trade-only keys (no withdrawal, IP whitelist), start with minimal size and a paper-vs-live comparison for weeks. Live money only on explicit user confirmation. |
 | **Rework** (iteration 1-5) | Net return is below the threshold, but money may exist elsewhere. The goal is to **find a way to earn on spreads**, not to prove the current hypothesis. | A search loop of up to **5 iterations** (see below). |
-| **NO-GO** | Net below threshold out-of-sample, or only positive via unverifiable assumptions, or a blocking legal verdict | Stop spending on trading. Keep the repo as a finished, honest analysis (the NO-GO is itself the deliverable), then choose a pivot below. |
+| **NO-GO** | Net below threshold out-of-sample, or only positive via unverifiable assumptions, or a blocking legal verdict (any of G1-G4 cannot be cleared) | Stop spending on trading. Keep the repo as a finished, honest analysis (the NO-GO is itself the deliverable), then choose a pivot below. |
 
 ### Iteration loop (user decision 2026-10-23, ADR 0007)
 
@@ -91,16 +112,23 @@ approaches, up to **5 iterations**:
 
 1. **Portfolio project (default).** Tidy README, architecture docs, ADRs, audit trail, a short
    write-up "what 5 CEX spreads actually look like after costs". Cheap, real value for a
-   job search; the quality ratchet already supports it.
+   job search; the quality ratchet already supports it. Never publish keys, account IDs,
+   balances or KYC data; a LICENSE must be chosen (legal review V6).
 2. **Analytics/monitoring tool for traders.** Dashboards and episode statistics (route
    persistence, dead-route detection, transfer-status coverage). Honest caveat: demand is
-   unproven, competitors exist, and selling anything adds legal and support burden. Test with
-   a one-page description before building anything.
-3. **Research dataset.** Publish anonymised episode statistics. Low cost, low income, some
-   reputation value.
+   unproven, competitors exist, and selling anything adds legal and support burden.
+   **Precondition: a legal opinion first** on (a) market-data redistribution licences per
+   venue (e.g. OKX ToS cl. 8.1 bars selling the Services), (b) whether paid analysis counts as
+   investment advice under Argentine capital-markets rules (CNV), (c) tax/consumer registration
+   (legal review V7). Only after that, test demand with a one-page description before building
+   anything.
+3. **Research dataset.** Publish anonymised, aggregated episode statistics only (no raw
+   order-book dumps) until each venue's data terms are checked (legal review V8). Low cost, low
+   income, some reputation value.
 4. **Different edge, same plumbing** (funding-rate or DEX/CEX dislocations). Only as a new
-   hypothesis with its own GO criterion; never as "the scanner is built, so find something it
-   can trade".
+   hypothesis with its own GO criterion and its own legal review (derivatives and DEX have
+   separate restrictions, legal review V9); never as "the scanner is built, so find something
+   it can trade".
 5. **Stop.** Archive. Also a legitimate choice.
 
 I do not recommend pivoting to "signals as a paid service" without a legal opinion and a
@@ -131,7 +159,8 @@ demand test: it converts a trading question into a customer-liability question.
   needs more than one regime (calm and volatile) before a verdict is trusted.
 - **A7. Legal is a formality.** Argentine tax and reporting of crypto gains, exchange ToS
   on API arbitrage, and KYC limits for the user are real. A blocking verdict is a stop, not a
-  risk to "manage later".
+  risk to "manage later". The legal review names Russian nationality as a KYC risk factor at
+  every venue — the largest legal-operational risk for capital at GO.
 - **A8. Single-person ops.** One operator, one laptop/VPS, no on-call. A silent failure with
   real money live is the worst case; Stage 2 needs kill switch and alerts before capital.
 - **A9. Scope discipline.** DEX and extra exchanges are tempting escapes from a weak CEX
@@ -159,6 +188,7 @@ exchange set, not the no-withdrawal rule.
 - Verified episodes per day with net >= $5 surviving >= 2 s latency (target 5-10).
 - Hedged paper P&L and ROC after rebalance costs, separately from mark-to-market.
 - Concentration: share of profit from the top route and top coin (alarm above ~50 %).
-- Out-of-sample net return per month vs the 2 % bar, with a range, not a point.
+- Out-of-sample net return per month vs the 2 % bar, with a range, not a point; pre-tax and
+  after-tax side by side until the basis is decided (section 3).
 - Gap between assumed and observed costs once real fee/transfer data is in.
 - Time and money spent so far vs expected payoff (revisit at each stage end).
