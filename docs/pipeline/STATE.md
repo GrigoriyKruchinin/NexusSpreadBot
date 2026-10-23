@@ -4,7 +4,7 @@
 - Trajectory M (MVP/analysis, GO/NO-GO protocol). Branch `chore/agent-pipeline-adoption`, pushed; not
   merged to `main` (merge/PR only with user consent). CI green on HEAD incl. integration (gh CLI works
   now: `gh run list`, `gh run view <id>`).
-- Unit tests 666, branch coverage ~90.5 %, ruff 0, mypy --strict 0 (ratchet floor: 89 %).
+- Unit tests 720, branch coverage ~90.5 %, ruff 0, mypy --strict 0 (ratchet floor: 89 %).
 
 ## Done this session (all committed + pushed)
 - Phase 5 tail: legal + security reviews of vision/architecture; target.md §10 security model; A5 split
@@ -14,15 +14,18 @@
   accepted; follow-ups F-1..F-5 in todo).
 - B14 conditional venues reporting (tech-lead r2 + security accepted; R2-1 carried into B15 card).
 - A5a backups: scripts + roles `nexus_ro`, `nexus_test_owner`, DB `nexus_test` bootstrapped on the
-  local cluster; first dump + restore drill PASSED (`docs/reports/restore-drill.md`).
+  local cluster; first dump + restore drill PASSED (`docs/reports/restore-drill.md`). Reviews: tech-lead
+  r2 ACCEPT, security r2 ACCEPT w/ follow-ups (R2-1/R2-2/N1/N2 fixed in 1674089; N3/N4 nits open).
+  Daily cron 03:15 `make backup` in user crontab (log ~/nexus-backups/backup.log); heartbeat deferred
+  to VPS (A5d) by user decision.
 - Research: exchange key permissions, expansion candidates (20 ranked, batches),
   legal review of expansion venues `docs/legal/expansion-venues-review.md`.
 - Vision: GO bar after tax; GO-HOLD outcome (ADR 0008); Bybit + gateio = conditional venues.
 
 ## In flight / next (in order)
-1. **A5a reviews** (security + tech-lead) were cut off by a rate limit: re-run both
-   (write `docs/audit/security-review-A5a.md`, `docs/audit/tech-lead-review-A5a.md`).
-2. A5a leftovers (ask user): free external heartbeat service; enable daily backup schedule.
+1. After 2026-10-24 03:15: check backup.log + new dump with `.counts` sidecar; ask user U4 OK to re-run
+   `make restore-drill` on it (old dump has no sidecar, drill refuses it); record in restore-drill.md.
+2. (done) A5a reviews + leftovers.
 3. Stage-end for Track 0 + B14: tester regression + analyzer delta audit, then summary to user.
 4. **B15** shadow paper portfolios (needs migration; A5a gate passed; user U4 OK required before
    applying to live `nexus`; capital $10,000 per set; includes R2-1 fix).
