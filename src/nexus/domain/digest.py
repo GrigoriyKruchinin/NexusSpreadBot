@@ -100,6 +100,17 @@ class PaperStats:
 
 
 @dataclass(frozen=True, slots=True)
+class PortfolioSummary:
+    """One shadow portfolio (venue set) since its first record - never backfilled."""
+
+    portfolio_id: str
+    since_ms: int
+    trades: int
+    hedged_pnl_usd: Decimal
+    """Realized arbitrage minus virtual transfer fees since ``since_ms``."""
+
+
+@dataclass(frozen=True, slots=True)
 class QuarantineSummary:
     """A quarantine started in the window."""
 
@@ -127,3 +138,5 @@ class DigestData:
     """Configured conditional venues (lowercase ids)."""
     unverified_evaluations: int = 0
     """Qualifying evaluations that were not alerted for lack of a verified transfer path."""
+    portfolios: tuple[PortfolioSummary, ...] = ()
+    """Shadow portfolios that have records (``all`` first)."""

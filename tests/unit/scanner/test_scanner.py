@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import Sequence
 from dataclasses import replace
 from decimal import Decimal as D
+from typing import Any
 
 import pytest
 
@@ -37,7 +38,7 @@ from nexus.interfaces.repositories import ExchangeMetadataStats, IMetadataStatsR
 from nexus.scanner import service
 from nexus.scanner.episodes import EpisodeTracker
 from nexus.scanner.health import ExchangeHealthTracker
-from nexus.scanner.paper import PaperTrader
+from nexus.scanner.paper import PaperBook, PaperTrader
 from nexus.scanner.quarantine import QuarantineManager
 from nexus.scanner.service import Repositories, Scanner, ScannerConfig
 from nexus.scanner.streams import OrderBookStreams
@@ -89,6 +90,8 @@ class Harness:
         episodes: bool = False,
         quarantine: bool = False,
         paper: bool = False,
+        paper_sets: dict[str, frozenset[str] | None] | None = None,
+        max_candidates: int = 10,
     ) -> None:
         self.clock = ManualClock()
         self.a = (FeeLookupExchange if fee_lookup else FakeExchange)("a", self.clock)
@@ -157,7 +160,7 @@ class Harness:
                 ticker_interval_s=0.01,
                 metadata_refresh_s=3600,
                 orderbook_depth=20,
-                max_candidates_per_sweep=10,
+                max_candidates_per_sweep=max_candidates,
                 max_concurrent_requests_per_exchange=2,
                 snapshot_top_k=5,
                 heartbeat_ttl_s=60,
@@ -169,20 +172,35 @@ class Harness:
             streams=self.streams,
             episodes=self.episodes,
             quarantine=self.quarantine,
-            paper=PaperTrader(
-                PaperConfig(
-                    usdt_per_exchange=D(1000),
-                    coin_per_route_usd=D(1000),
-                    rebalance_threshold_pct=D(20),
-                    rebalance_delay_ms=30 * 60_000,
-                ),
-                self.paper_repo,
-                NetSpreadEstimator(replace(spread, include_transfer_cost=False), self.clock),
-                self.clock,
-            )
-            if paper
-            else None,
+            paper=self._paper_book(spread, paper_sets) if paper else None,
         )
+
+    def _paper_book(
+        self, spread: EstimatorConfig, sets: dict[str, frozenset[str] | None] | None
+    ) -> PaperBook:
+        estimator = NetSpreadEstimator(replace(spread, include_transfer_cost=False), self.clock)
+        return PaperBook(
+            {
+                name: PaperTrader(
+                    _paper_config(),
+                    self.paper_repo,
+                    estimator,
+                    self.clock,
+                    portfolio_id=name,
+                    venues=venues,
+                )
+                for name, venues in (sets or {"all": None}).items()
+            }
+        )
+
+
+def _paper_config() -> PaperConfig:
+    return PaperConfig(
+        usdt_per_exchange=D(1000),
+        coin_per_route_usd=D(1000),
+        rebalance_threshold_pct=D(20),
+        rebalance_delay_ms=30 * 60_000,
+    )
 
 
 @pytest.fixture
@@ -611,7 +629,7 @@ async def test_phantom_streamed_level_is_not_alerted() -> None:
 # ------------------------------------------------------------------ episodes
 
 
-def _episode_harness(**kwargs: bool) -> Harness:
+def _episode_harness(**kwargs: Any) -> Harness:
     h = Harness(episodes=True, **kwargs)
     h.a.quote("ABC/USDT", "99.9", "100")
     h.b.quote("ABC/USDT", "101", "101.1")
@@ -1007,7 +1025,7 @@ async def test_alert_is_paper_traded_after_latency_and_rebalanced() -> None:
     assert episode_id == 1
     assert outcome.breakdown is not None
     assert outcome.breakdown.transfer_fee_usd == 0  # no per-trade transfer: rebalancing
-    portfolio = h.scanner._paper.portfolio  # type: ignore[union-attr]
+    portfolio = h.scanner._paper.trader().portfolio  # type: ignore[union-attr]
     # The whole USDT on A and the coin on B were used: both sides are rebalanced virtually.
     routes = {
         (r.asset, r.from_exchange, r.to_exchange): r for r in h.paper_repo.rebalances.values()
@@ -1053,7 +1071,7 @@ async def test_paper_portfolio_resumes_after_restart() -> None:
     await h.scanner.refresh_metadata()
     await h.scanner.sweep()
     await _settle(h)
-    before = h.scanner._paper.portfolio  # type: ignore[union-attr]
+    before = h.scanner._paper.trader().portfolio  # type: ignore[union-attr]
     resumed = PaperTrader(
         before.config,
         h.paper_repo,
@@ -1076,7 +1094,7 @@ async def test_failed_commit_rolls_back_memory() -> None:
     h.paper_repo.fail_next = True
     await h.scanner.sweep()
     await _settle(h)
-    portfolio = h.scanner._paper.portfolio  # type: ignore[union-attr]
+    portfolio = h.scanner._paper.trader().portfolio  # type: ignore[union-attr]
     assert portfolio.realized == 0  # the trade was not persisted -> not kept in memory
     assert portfolio.in_flight == []
     assert h.paper_repo.trades == []
@@ -1102,7 +1120,7 @@ async def test_resume_failure_disables_paper_trading() -> None:
     async def broken() -> None:
         raise ConnectionError("db down")
 
-    h.paper_repo.load_state = broken  # type: ignore[method-assign]
+    h.paper_repo.load_state = broken  # type: ignore[method-assign,assignment]
     stop = asyncio.Event()
 
     async def beat_then_stop(service: str, ttl_s: int) -> None:

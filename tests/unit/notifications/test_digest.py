@@ -6,6 +6,7 @@ from nexus.domain.digest import (
     EpisodeStats,
     EpisodeSummary,
     PaperStats,
+    PortfolioSummary,
     QuarantineSummary,
 )
 from nexus.notifications.digest import DigestFormatter
@@ -155,8 +156,8 @@ def test_digest_conditional_block_golden() -> None:
     assert text.split("\n")[2:7] == [
         "⚠️ Условные биржи (данные собираются, торговать пока нельзя): Bybit, Gate.io",
         "━━━━━━━━━━━━━━━━━━━━",
-        "Эпизоды:   все 24 | без условных 6",
-        "Бумажный P&amp;L (hedged): все +$41.20 | без условных ≈ +$9.75 (оценка)",
+        "Эпизоды:   все 24 | без условных (фильтр) 6",
+        "Бумажный P&amp;L (hedged): все +$41.20 | без условных (фильтр) ≈ +$9.75 (оценка)",
         "━━━━━━━━━━━━━━━━━━━━",
     ]
     assert len(text) < 4096
@@ -199,8 +200,8 @@ def test_digest_shows_na_when_excl_values_are_missing() -> None:
         paper=PaperStats(realized_total_usd=D("50.20"), rebalance_total_usd=D("9")),
     )
     lines = DigestFormatter().render(data, "UTC").split("\n")
-    assert lines[4] == "Эпизоды:   все 24 | без условных н/д"
-    assert lines[5] == "Бумажный P&amp;L (hedged): все +$41.20 | без условных н/д"
+    assert lines[4] == "Эпизоды:   все 24 | без условных (фильтр) н/д"
+    assert lines[5] == "Бумажный P&amp;L (hedged): все +$41.20 | без условных (фильтр) н/д"
     no_paper = DigestFormatter().render(replace(base, paper=None), "UTC").split("\n")
     assert no_paper[5] == "Бумажный P&amp;L (hedged): н/д"
 
@@ -237,3 +238,30 @@ async def test_digest_log_has_conditional_fields() -> None:
     assert record["conditional_venues"] == ["bybit", "gateio"]
     assert record["total_all"] == {"episodes": 24, "paper_hedged_pnl_usd": "41.20"}
     assert record["total_excl_conditional"] == {"episodes": 6, "paper_hedged_pnl_usd": "9.75"}
+
+
+def test_digest_portfolio_lines_and_accrual_footer() -> None:
+    data = replace(
+        _cond_data(("bybit", "gateio")),
+        portfolios=(
+            PortfolioSummary("all", T0 - 5 * DAY, 120, D("41.20")),
+            PortfolioSummary("excl_conditional", T0 - DAY, 40, D("-3.50")),
+            PortfolioSummary("<b>x", T0, 0, D(0)),
+        ),
+    )
+    text = DigestFormatter().render(data, "UTC")
+    assert "📦 <b>Наборы бирж</b> (реальная симуляция по набору)" in text
+    assert "• <code>all</code> с 13 Oct: сделок 120 · hedged +$41.20" in text
+    assert "• <code>excl_conditional</code> с 17 Oct: сделок 40 · hedged -$3.50" in text
+    assert "&lt;b&gt;x" in text
+    assert "<b>x" not in text
+    assert "копятся только с момента добавления набора" in text
+    assert len(text) < 4096
+
+
+def test_digest_without_extra_portfolios_has_no_set_block() -> None:
+    only_all = replace(_cond_data(("bybit",)), portfolios=(PortfolioSummary("all", T0, 3, D("1")),))
+    text = DigestFormatter().render(only_all, "UTC")
+    assert "Наборы бирж" not in text
+    assert "копятся" not in text
+    assert "Наборы бирж" not in DigestFormatter().render(_cond_data(("bybit",)), "UTC")

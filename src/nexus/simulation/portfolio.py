@@ -19,6 +19,9 @@ USD_QUOTE = "USDT"
 """Quote asset of the paper inventory. Accepted simplification: every USD stablecoin quote
 (USDT/USDC) is booked as USDT 1:1 - depeg and cross-stable conversion costs are ignored."""
 
+DEFAULT_PORTFOLIO_ID = "all"
+"""The primary shadow portfolio (every enabled venue); rows written before B15 belong to it."""
+
 Venue = tuple[str, str]
 """``(exchange, asset)``."""
 
@@ -65,6 +68,8 @@ class PaperConfig:
     """Trades smaller than this fraction of the target size are skipped (no inventory)."""
     transfer_tax_pct: Mapping[str, Decimal] = field(default_factory=dict)
     """On-chain transfer tax per asset (percent of the amount moved after the fee)."""
+    coin_budget_per_venue_usd: Decimal | None = None
+    """Fixed cap of the coin inventory seeded on one venue (``None`` = unlimited, legacy)."""
 
     def __post_init__(self) -> None:
         if self.usdt_per_exchange <= ZERO or self.coin_per_route_usd <= ZERO:
@@ -76,6 +81,25 @@ class PaperConfig:
         if self.rebalance_delay_ms < 0:
             msg = "rebalance_delay_ms must not be negative"
             raise ValueError(msg)
+
+
+def allocate_capital(
+    capital_usd: Decimal, venue_count: int, usdt_share_pct: Decimal
+) -> tuple[Decimal, Decimal]:
+    """Split the fixed set capital equally over the venues: ``(usdt, coin_budget)`` per venue.
+
+    ``venue_count * (usdt + coin_budget) == capital_usd``, so every set (whatever its size)
+    deploys the same total capital at most.
+    """
+    if venue_count < 2:
+        msg = "a venue set needs at least 2 venues"
+        raise ValueError(msg)
+    if not ZERO < usdt_share_pct < HUNDRED:
+        msg = "usdt share must be within (0, 100) percent"
+        raise ValueError(msg)
+    per_venue = capital_usd / venue_count
+    usdt = per_venue * usdt_share_pct / HUNDRED
+    return usdt, per_venue - usdt
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +206,16 @@ class PaperPortfolio:
     rebalance_costs: Decimal = ZERO
     blocked: dict[Venue, int] = field(default_factory=dict)
     """Destination venues whose last rebalance had no verified network -> blocked-at ms."""
+    venues: frozenset[str] | None = None
+    """The venue set this portfolio may touch (``None`` = unrestricted, legacy/tests)."""
+
+    def _require_in_set(self, *exchanges: str) -> None:
+        if self.venues is None:
+            return
+        for exchange in exchanges:
+            if exchange not in self.venues:
+                msg = f"venue {exchange!r} is not in this portfolio's venue set"
+                raise ValueError(msg)
 
     # ------------------------------------------------------------------ prices & seeding
 
@@ -193,8 +227,10 @@ class PaperPortfolio:
     def ensure_seeded(self, buy_exchange: str, sell_exchange: str, base: str) -> bool:
         """Seed USDT on both venues and the coin on the sell venue on first use.
 
-        Returns False when the coin has no price yet (cannot be seeded).
+        Returns False when the coin has no price yet (cannot be seeded). When the sell venue's
+        coin budget is used up the coin is left unseeded (the trade then skips for lack of coin).
         """
+        self._require_in_set(buy_exchange, sell_exchange)
         for exchange in (buy_exchange, sell_exchange):
             self._seed((exchange, USD_QUOTE), self.config.usdt_per_exchange, Decimal(1))
         if (sell_exchange, base) in self.seeds:
@@ -202,8 +238,24 @@ class PaperPortfolio:
         price = self.prices.get(base)
         if price is None:
             return False
-        self._seed((sell_exchange, base), self.config.coin_per_route_usd / price, price)
+        usd = self._coin_seed_usd(sell_exchange)
+        if usd > ZERO:
+            self._seed((sell_exchange, base), usd / price, price)
         return True
+
+    def _coin_seed_usd(self, exchange: str) -> Decimal:
+        budget = self.config.coin_budget_per_venue_usd
+        if budget is None:
+            return self.config.coin_per_route_usd
+        used = sum(
+            (
+                s.amount * s.price
+                for (ex, asset), s in self.seeds.items()
+                if ex == exchange and asset != USD_QUOTE
+            ),
+            ZERO,
+        )
+        return max(ZERO, min(self.config.coin_per_route_usd, budget - used))
 
     def _seed(self, venue: Venue, amount: Decimal, price: Decimal) -> None:
         if venue in self.seeds:
@@ -228,6 +280,7 @@ class PaperPortfolio:
 
         Returns ``(0, reason)`` when the available inventory is below the minimum size.
         """
+        self._require_in_set(buy_exchange, sell_exchange)
         if not self.ensure_seeded(buy_exchange, sell_exchange, base):
             return ZERO, SkipReason.NO_PRICE
         usdt_venue, coin_venue = (buy_exchange, USD_QUOTE), (sell_exchange, base)
@@ -308,6 +361,9 @@ class PaperPortfolio:
                 needs.append(RebalanceNeed(asset, source, exchange, amount))
         return needs
 
+    def _in_set(self, exchange: str) -> bool:
+        return self.venues is None or exchange in self.venues
+
     def _recently_blocked(self, venue: Venue, now_ms: int) -> bool:
         blocked_at = self.blocked.get(venue)
         return blocked_at is not None and now_ms - blocked_at < self.config.blocked_retry_ms
@@ -320,7 +376,7 @@ class PaperPortfolio:
         surpluses = [
             (self.balance(exchange, a) - self._seeded(exchange, a), exchange)
             for (exchange, a) in self.balances
-            if a == asset and exchange != exclude
+            if a == asset and exchange != exclude and self._in_set(exchange)
         ]
         positive = [(s, e) for s, e in surpluses if s > ZERO]
         return max(positive)[1] if positive else None
@@ -410,9 +466,10 @@ class PaperPortfolio:
         holdings: Iterable[tuple[str, str, Decimal, Seed | None]],
         in_flight: Iterable[Rebalance],
         totals: Mapping[str, Decimal],
+        venues: frozenset[str] | None = None,
     ) -> PaperPortfolio:
         """Rebuild from the last balance snapshot, open transfers and running totals."""
-        portfolio = cls(config)
+        portfolio = cls(config, venues=venues)
         for exchange, asset, amount, seed in holdings:
             portfolio.balances[(exchange, asset)] = amount
             if seed is not None:

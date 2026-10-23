@@ -84,6 +84,7 @@ async def test_collect_digest(sessions: Sessions) -> None:
         RebalanceStatus.IN_FLIGHT,
     )  # fmt: skip
     await paper.commit(
+        portfolio_id="all",
         at_ms=T0 + H,
         trades=[(trade, a.id), (skip, None)],
         rebalances=[transfer],
@@ -131,8 +132,12 @@ async def test_uptime_and_retention_of_new_tables(sessions: Sessions) -> None:
     await _episode(episodes, opened=now_ms - 200 * 24 * H, symbol="OPEN/USDT")  # still open
     paper = PaperRepository(sessions)
     holding = [PaperHolding("a", "USDT", D(1), Seed(D(1), D(1)), D(1))]
-    await paper.commit(at_ms=now_ms - 30 * 24 * H, trades=[], rebalances=[], holdings=holding)
-    await paper.commit(at_ms=now_ms - 20 * 24 * H, trades=[], rebalances=[], holdings=holding)
+    await paper.commit(
+        portfolio_id="all", at_ms=now_ms - 30 * 24 * H, trades=[], rebalances=[], holdings=holding
+    )
+    await paper.commit(
+        portfolio_id="all", at_ms=now_ms - 20 * 24 * H, trades=[], rebalances=[], holdings=holding
+    )
     counts = await RetentionRepository(sessions).purge(
         snapshots_before=now - timedelta(days=7),
         evaluations_before=now - timedelta(days=30),

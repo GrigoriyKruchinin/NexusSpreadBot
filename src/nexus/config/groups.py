@@ -16,6 +16,7 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from nexus.config.base import NexusBaseSettings, StrTuple
+from nexus.config.venue_sets import DEFAULT_VENUE_SETS, validate_venue_sets_syntax
 
 _EXCHANGE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _MIN_DB_PASSWORD_LENGTH = 12
@@ -380,9 +381,18 @@ class PaperSettings(NexusBaseSettings):
 
     enabled: bool = True
     """Simulate trades and inventory on every alert (no exchange access, nothing moves)."""
-    usdt_per_exchange: Decimal = Field(default=Decimal(1_000), gt=0)
-    coin_per_route_usd: Decimal = Field(default=Decimal(1_000), gt=0)
-    """Virtual coin inventory seeded on the sell venue at the first-seen mid price."""
+    capital_usd: Decimal = Field(default=Decimal(10_000), gt=0)
+    """Fixed virtual capital of EVERY venue set (user decision 2026-10-23), split equally over
+    the set's venues. Replaces the old per-venue seed that grew with every new route."""
+    usdt_share_pct: Decimal = Field(default=Decimal(50), gt=0, lt=100)
+    """Share of each venue's capital held as USDT; the rest is the coin inventory budget."""
+    coin_per_route_usd: Decimal = Field(default=Decimal(250), gt=0)
+    """Virtual coin inventory seeded on the sell venue at the first-seen mid price, taken from
+    the venue's coin budget (when the budget is used up, further coins are not seeded)."""
+    venue_sets: str = DEFAULT_VENUE_SETS
+    """Shadow portfolios (``name`` or ``name=spec``, ``;``-separated), see
+    :mod:`nexus.config.venue_sets`. Data of a set accrues only from the moment it is added
+    (no backfill); removing a set stops accrual, its rows stay."""
     trade_notional_usd: Decimal = Field(default=Decimal(1_000), gt=0)
     rebalance_threshold_pct: Decimal = Field(default=Decimal(20), gt=0, lt=100)
     """A balance below this share of its starting amount triggers a virtual rebalance."""
@@ -391,6 +401,11 @@ class PaperSettings(NexusBaseSettings):
     latency_ms: int = Field(default=2_000, ge=0, le=60_000)
     """Simulated detection-to-execution latency: a new episode is re-checked on REST books
     taken this long after detection ("survived latency")."""
+
+    @field_validator("venue_sets")
+    @classmethod
+    def _venue_sets_syntax(cls, value: str) -> str:
+        return validate_venue_sets_syntax(value)
 
 
 class DigestSettings(NexusBaseSettings):

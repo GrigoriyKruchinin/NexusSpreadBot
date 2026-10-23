@@ -60,7 +60,7 @@ from nexus.interfaces.repositories import (
 )
 from nexus.scanner.episodes import EpisodeTracker
 from nexus.scanner.health import ExchangeHealthTracker
-from nexus.scanner.paper import PaperTrader
+from nexus.scanner.paper import PaperBook
 from nexus.scanner.quarantine import QuarantineManager
 from nexus.scanner.streams import OrderBookStreams
 from nexus.scanner.universe import MarketUniverse, UniverseFilter
@@ -159,7 +159,7 @@ class Scanner:
         streams: OrderBookStreams | None = None,
         episodes: EpisodeTracker | None = None,
         quarantine: QuarantineManager | None = None,
-        paper: PaperTrader | None = None,
+        paper: PaperBook | None = None,
     ) -> None:
         self._adapters = dict(adapters)
         self._authenticated = dict(authenticated)
@@ -178,6 +178,8 @@ class Scanner:
         self._episodes = episodes
         self._quarantine = quarantine
         self._paper = paper
+        self._route_sets: dict[str, frozenset[str]] = {}
+        """Route -> shadow portfolios it is a candidate of in the current sweep."""
         self._new_quarantines: list[RouteQuarantine] = []
         self._parked_at: dict[str, int] = {}
         """Last stored ticker-level record per quarantined route (rate limit)."""
@@ -357,7 +359,7 @@ class Scanner:
         quarantined = await self._refresh_quarantine()
         live = [r for r in routes if _route_key(r) not in quarantined]
         parked = [r for r in routes if _route_key(r) in quarantined]
-        candidates = self._finder.select(live, self._config.max_candidates_per_sweep)
+        candidates = self._select_candidates(live)
         parked_evaluations = self._parked_evaluations(parked, quarantined)
         self._streamed_books = 0
         evaluations, timed_out = await self._evaluate_candidates(candidates)
@@ -421,6 +423,25 @@ class Scanner:
             active_streams=self._streams.active if self._streams is not None else 0,
         )
         return result
+
+    def _select_candidates(self, live: list[RouteQuote]) -> list[RouteQuote]:
+        """Top-N routes to evaluate; with shadow portfolios the cap applies inside every set.
+
+        The evaluation list is the union over the sets, and ``self._route_sets`` remembers
+        which sets each route is a candidate of (a set only paper-trades its own candidates).
+        """
+        limit = self._config.max_candidates_per_sweep
+        sets = (
+            {pid: venues for pid, venues in self._paper.sets.items() if venues is not None}
+            if self._paper is not None
+            else {}
+        )
+        if not sets:
+            self._route_sets = {}
+            return self._finder.select(live, limit)
+        picked = self._finder.select_per_set(live, limit, sets)
+        self._route_sets = picked.membership
+        return picked.routes
 
     async def _track_episodes(
         self, evaluations: Sequence[SpreadEvaluation]
@@ -669,7 +690,11 @@ class Scanner:
         except Exception:  # the Redis dedup key still prevents a duplicate alert
             log.exception("episode_alert_mark_failed", episode_id=episode_id)
         if self._paper is not None:
-            self._spawn(self._paper_trade(episode_id, evaluation))
+            self._spawn(
+                self._paper_trade(
+                    episode_id, evaluation, self._route_sets.get(evaluation.route_key)
+                )
+            )
         log.info(
             "opportunity_alerted",
             route=evaluation.route_key,
@@ -686,8 +711,17 @@ class Scanner:
         self._latency_checks.add(task)
         task.add_done_callback(self._latency_checks.discard)
 
-    async def _paper_trade(self, episode_id: int, evaluation: SpreadEvaluation) -> None:
-        """Execute the alert on paper, on REST books taken after the simulated latency."""
+    async def _paper_trade(
+        self,
+        episode_id: int,
+        evaluation: SpreadEvaluation,
+        portfolio_ids: frozenset[str] | None,
+    ) -> None:
+        """Execute the alert on paper, on REST books taken after the simulated latency.
+
+        ``portfolio_ids`` = the shadow portfolios whose own top-N held the route this sweep
+        (``None`` = no per-set cap in force: every set containing both legs trades).
+        """
         if self._paper is None:  # pragma: no cover - only scheduled with a paper trader
             return
         try:
@@ -698,6 +732,7 @@ class Scanner:
                 self._fetch_book(evaluation.sell_exchange, symbol, allow_stream=False),
             )
             await self._paper.execute(
+                portfolio_ids=portfolio_ids,
                 episode_id=episode_id,
                 symbol=symbol,
                 base=evaluation.base,

@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import statistics
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import replace
 from decimal import Decimal
 
@@ -22,6 +22,7 @@ from nexus.domain.spread import SpreadBreakdown, TransferQuote
 from nexus.engine.estimator import NetSpreadEstimator
 from nexus.interfaces.repositories import IPaperRepository, PaperHolding
 from nexus.simulation.portfolio import (
+    DEFAULT_PORTFOLIO_ID,
     USD_QUOTE,
     PaperConfig,
     PaperPortfolio,
@@ -54,8 +55,16 @@ class PaperTrader:
         repository: IPaperRepository,
         estimator: NetSpreadEstimator,
         clock: Clock,
+        *,
+        portfolio_id: str = DEFAULT_PORTFOLIO_ID,
+        venues: frozenset[str] | None = None,
     ) -> None:
-        """``estimator`` prices trades: trade notional, no per-trade transfer cost."""
+        """``estimator`` prices trades: trade notional, no per-trade transfer cost.
+
+        ``portfolio_id``/``venues`` make this one shadow portfolio (a venue set): own
+        inventory, rebalancing sources, cooldowns and persistence rows; it only trades routes
+        whose both legs are in ``venues`` (``None`` = unrestricted, legacy).
+        """
         if estimator.config.include_transfer_cost:
             msg = "paper estimator must not charge transfer costs per trade (rebalancing does)"
             raise ValueError(msg)
@@ -63,7 +72,9 @@ class PaperTrader:
         self._repo = repository
         self._estimator = estimator
         self._clock = clock
-        self.portfolio = PaperPortfolio(config)
+        self.portfolio_id = portfolio_id
+        self.venues = venues
+        self.portfolio = PaperPortfolio(config, venues=venues)
         self._last_snapshot_ms: int | None = None
         self._last_trade_ms: dict[str, int] = {}
         self._lock = asyncio.Lock()
@@ -71,7 +82,7 @@ class PaperTrader:
 
     async def start(self) -> None:
         """Resume the portfolio from the last persisted state, if any."""
-        state = await self._repo.load_state()
+        state = await self._repo.load_state(self.portfolio_id)
         if state is None:
             return
         self.portfolio = PaperPortfolio.restore(
@@ -79,12 +90,14 @@ class PaperTrader:
             [(h.exchange, h.asset, h.amount, h.seed) for h in state.holdings],
             state.in_flight,
             {"realized": state.realized, "rebalance_costs": state.rebalance_costs},
+            venues=self.venues,
         )
         for holding in state.holdings:
             if holding.price_usd is not None and holding.asset != USD_QUOTE:
                 self.portfolio.mark_price(holding.asset, holding.price_usd)
         log.info(
             "paper_resumed",
+            portfolio=self.portfolio_id,
             venues=len(state.holdings),
             in_flight=len(state.in_flight),
             realized=str(state.realized),
@@ -96,18 +109,12 @@ class PaperTrader:
         markets: Mapping[str, Mapping[str, MarketInfo]],
     ) -> None:
         """Median top-of-book mid per base asset across exchanges (USD-stable quotes)."""
-        mids: dict[str, list[Decimal]] = {}
-        for exchange, by_symbol in tickers.items():
-            exchange_markets = markets.get(exchange, {})
-            for symbol, ticker in by_symbol.items():
-                market = exchange_markets.get(symbol)
-                if market is None or ticker.bid is None or ticker.ask is None:
-                    continue
-                if not ZERO < ticker.bid <= ticker.ask <= ticker.bid * (1 + MAX_TICKER_SPREAD):
-                    continue  # crossed / broken / illiquid top of book
-                mids.setdefault(market.base, []).append((ticker.bid + ticker.ask) / 2)
-        for asset, values in mids.items():
-            self.portfolio.mark_price(asset, Decimal(statistics.median(values)))
+        self.mark_mids(median_mids(tickers, markets))
+
+    def mark_mids(self, mids: Mapping[str, Decimal]) -> None:
+        """Apply prices computed by :func:`median_mids` (shared by all shadow portfolios)."""
+        for asset, price in mids.items():
+            self.portfolio.mark_price(asset, price)
 
     async def execute(
         self,
@@ -141,6 +148,7 @@ class PaperTrader:
                 self._last_trade_ms[_route(outcome)] = now
         log.info(
             "paper_trade",
+            portfolio=self.portfolio_id,
             route=_route(outcome),
             executed=outcome.executed,
             skip_reason=outcome.skip_reason.value if outcome.skip_reason else None,
@@ -214,20 +222,29 @@ class PaperTrader:
     async def on_sweep(self, network_quote: NetworkQuoter) -> None:
         """Settle arrived transfers, start due rebalances, snapshot periodically."""
         async with self._lock:
-            before = copy.deepcopy(self.portfolio)
             now = self._tick()
-            changes = [*self.portfolio.settle(now), *self._rebalance(now, network_quote)]
             due = (
                 self._last_snapshot_ms is None
                 or now - self._last_snapshot_ms >= SNAPSHOT_INTERVAL_MS
-            )
-            if not changes and not (due and self.portfolio.seeds):
+            ) and bool(self.portfolio.seeds)
+            if not (due or self._has_work(now)):
+                return  # the common quiet sweep: no state copy, no I/O
+            before = copy.deepcopy(self.portfolio)
+            changes = [*self.portfolio.settle(now), *self._rebalance(now, network_quote)]
+            if not changes and not due:
                 return
             try:
                 await self._commit(now, [], changes, snapshot=True)
             except Exception:
                 self.portfolio = before
                 raise
+
+    def _has_work(self, now: int) -> bool:
+        """A transfer arrives or a balance needs a refill (both read-only checks)."""
+        portfolio = self.portfolio
+        return any(r.arrives_at_ms <= now for r in portfolio.in_flight) or bool(
+            portfolio.rebalance_needs(now)
+        )
 
     def _tick(self) -> int:
         """Strictly increasing commit time: the latest snapshot set is always unambiguous."""
@@ -244,6 +261,7 @@ class PaperTrader:
             started.append(rebalance)
             log.info(
                 "paper_rebalance",
+                portfolio=self.portfolio_id,
                 asset=need.asset,
                 route=f"{need.from_exchange}>{need.to_exchange}",
                 amount=str(need.amount),
@@ -278,7 +296,11 @@ class PaperTrader:
             ]
         )
         stored = await self._repo.commit(
-            at_ms=now, trades=trades, rebalances=rebalances, holdings=holdings
+            portfolio_id=self.portfolio_id,
+            at_ms=now,
+            trades=trades,
+            rebalances=rebalances,
+            holdings=holdings,
         )
         # Remember database ids of transfers still in flight (needed to mark them completed).
         ids = {self._identity(r): r.id for r in stored if r.status is RebalanceStatus.IN_FLIGHT}
@@ -291,6 +313,134 @@ class PaperTrader:
     @staticmethod
     def _identity(r: Rebalance) -> tuple[str, str, str, int]:
         return (r.asset, r.from_exchange, r.to_exchange, r.started_at_ms)
+
+
+def median_mids(
+    tickers: Mapping[str, Mapping[str, Ticker]],
+    markets: Mapping[str, Mapping[str, MarketInfo]],
+) -> dict[str, Decimal]:
+    """Median sane top-of-book mid per base asset over all exchanges (computed once per sweep)."""
+    mids: dict[str, list[Decimal]] = {}
+    for exchange, by_symbol in tickers.items():
+        exchange_markets = markets.get(exchange, {})
+        for symbol, ticker in by_symbol.items():
+            market = exchange_markets.get(symbol)
+            if market is None or ticker.bid is None or ticker.ask is None:
+                continue
+            if not ZERO < ticker.bid <= ticker.ask <= ticker.bid * (1 + MAX_TICKER_SPREAD):
+                continue  # crossed / broken / illiquid top of book
+            mids.setdefault(market.base, []).append((ticker.bid + ticker.ask) / 2)
+    return {asset: Decimal(statistics.median(values)) for asset, values in mids.items()}
+
+
+class PaperBook:
+    """All shadow portfolios (venue sets) fed by the same evaluation stream.
+
+    Each set is an independent :class:`PaperTrader` (own lock, inventory, rebalancing,
+    cooldowns, database rows): a trade, a blocked transfer or a storage failure in one set
+    never changes another. Prices are shared (one median per sweep).
+    """
+
+    def __init__(self, traders: Mapping[str, PaperTrader]) -> None:
+        """``traders`` by portfolio id; ``all`` first by convention."""
+        if not traders:
+            msg = "at least one paper portfolio is required"
+            raise ValueError(msg)
+        self.traders: dict[str, PaperTrader] = dict(traders)
+
+    @property
+    def sets(self) -> dict[str, frozenset[str] | None]:
+        """Venue set per portfolio id (``None`` = unrestricted)."""
+        return {pid: t.venues for pid, t in self.traders.items()}
+
+    def trader(self, portfolio_id: str = DEFAULT_PORTFOLIO_ID) -> PaperTrader:
+        """One shadow portfolio."""
+        return self.traders[portfolio_id]
+
+    async def start(self) -> None:
+        """Resume every portfolio from its own last persisted state (a new set starts fresh)."""
+        for trader in self.traders.values():
+            await trader.start()
+
+    def mark_prices(
+        self,
+        tickers: Mapping[str, Mapping[str, Ticker]],
+        markets: Mapping[str, Mapping[str, MarketInfo]],
+    ) -> None:
+        """One median per asset for all portfolios (valuations stay comparable)."""
+        mids = median_mids(tickers, markets)
+        for trader in self.traders.values():
+            trader.mark_mids(mids)
+
+    def members(self, buy_exchange: str, sell_exchange: str) -> list[str]:
+        """Portfolios whose venue set contains both legs of the route."""
+        return [
+            pid
+            for pid, venues in self.sets.items()
+            if venues is None or (buy_exchange in venues and sell_exchange in venues)
+        ]
+
+    async def execute(
+        self,
+        *,
+        portfolio_ids: Collection[str] | None = None,
+        episode_id: int | None,
+        symbol: str,
+        base: str,
+        buy_book: OrderBook | None,
+        sell_book: OrderBook | None,
+        buy_market: MarketInfo | None,
+        sell_market: MarketInfo | None,
+        transfer: TransferQuote,
+        network_quote: NetworkQuoter,
+    ) -> dict[str, TradeOutcome]:
+        """Paper-trade one alert in every eligible set (``portfolio_ids`` narrows further).
+
+        Eligible = both legs inside the set's venues. Sets run concurrently; a failing set is
+        logged and does not stop the others.
+        """
+        buy = buy_market.exchange if buy_market else ""
+        sell = sell_market.exchange if sell_market else ""
+        eligible = self.members(buy, sell)
+        if portfolio_ids is not None:
+            eligible = [pid for pid in eligible if pid in portfolio_ids]
+        results = await asyncio.gather(
+            *(
+                self.traders[pid].execute(
+                    episode_id=episode_id,
+                    symbol=symbol,
+                    base=base,
+                    buy_book=buy_book,
+                    sell_book=sell_book,
+                    buy_market=buy_market,
+                    sell_market=sell_market,
+                    transfer=transfer,
+                    network_quote=network_quote,
+                )
+                for pid in eligible
+            ),
+            return_exceptions=True,
+        )
+        outcomes: dict[str, TradeOutcome] = {}
+        for pid, result in zip(eligible, results, strict=True):
+            if isinstance(result, asyncio.CancelledError):
+                raise result
+            if isinstance(result, BaseException):
+                log.error("paper_trade_failed", portfolio=pid, error=type(result).__name__)
+                continue
+            outcomes[pid] = result
+        return outcomes
+
+    async def on_sweep(self, network_quote: NetworkQuoter) -> None:
+        """Settle / rebalance / snapshot every portfolio; failures are isolated per set."""
+        results = await asyncio.gather(
+            *(t.on_sweep(network_quote) for t in self.traders.values()), return_exceptions=True
+        )
+        for pid, result in zip(self.traders, results, strict=True):
+            if isinstance(result, asyncio.CancelledError):
+                raise result
+            if isinstance(result, BaseException):
+                log.error("paper_sweep_failed", portfolio=pid, error=type(result).__name__)
 
 
 def _route(outcome: TradeOutcome) -> str:

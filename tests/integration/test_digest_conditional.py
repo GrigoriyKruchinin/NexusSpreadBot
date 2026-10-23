@@ -61,6 +61,7 @@ async def _seed_paper(
     if old_trade:  # before the window: totals are "since start", so it still counts
         trades.append((_trade("binance", "kucoin", T0 - 5 * H), None))
     await paper.commit(
+        portfolio_id="all",
         at_ms=T0 + H,
         trades=trades,
         rebalances=list(rebalances),

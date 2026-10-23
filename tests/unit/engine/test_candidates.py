@@ -1,7 +1,8 @@
 from decimal import Decimal as D
 
 from nexus.domain.models import Ticker
-from nexus.engine.candidates import CandidateFilter, CandidateFinder
+from nexus.domain.quarantine import route_key
+from nexus.engine.candidates import CandidateFilter, CandidateFinder, RouteQuote
 from tests.unit.engine.conftest import market
 
 
@@ -79,3 +80,50 @@ def test_select_limit() -> None:
         "c": {"ABC/USDT": _t("c", "104", "105")},
     }
     assert len(FINDER.select(FINDER.rank_routes(tickers, MARKETS), limit=1)) == 1
+
+
+# ------------------------------------------------------------------ per-set cap (B15)
+
+
+def _route(sym: str, buy: str, sell: str, net: str) -> RouteQuote:
+    return RouteQuote(sym, buy, sell, D(1), D(2), D(net) + D("0.2"), D(net))
+
+
+def test_cap_binds_in_all_but_not_in_excl_conditional() -> None:
+    routes = [
+        _route("A/USDT", "g", "a", "9"),  # touches the conditional venue g
+        _route("B/USDT", "g", "b", "8"),
+        _route("C/USDT", "a", "g", "7"),
+        _route("D/USDT", "a", "b", "1"),  # only route of the excl set that fits in the top-3?
+        _route("E/USDT", "b", "a", "0.9"),
+    ]
+    sets = {"all": frozenset("abg"), "excl": frozenset("ab")}
+    picked = FINDER.select_per_set(routes, 3, sets)
+    assert [r.symbol for r in FINDER.select(routes, 3)] == ["A/USDT", "B/USDT", "C/USDT"]
+    # all: A, B, C (cap binds, D/E crowded out); excl: D, E (g routes are not in the set)
+    assert picked.membership[route_key("D/USDT", "a", "b")] == frozenset({"excl"})
+    assert picked.membership[route_key("A/USDT", "g", "a")] == frozenset({"all"})
+    assert {r.symbol for r in picked.routes} == {"A/USDT", "B/USDT", "C/USDT", "D/USDT", "E/USDT"}
+
+
+def test_route_in_both_sets_is_listed_once_with_both_memberships() -> None:
+    routes = [_route("A/USDT", "a", "b", "5")]
+    sets = {"all": frozenset("abg"), "excl": frozenset("ab")}
+    picked = FINDER.select_per_set(routes, 3, sets)
+    assert len(picked.routes) == 1
+    assert picked.membership[route_key("A/USDT", "a", "b")] == frozenset({"all", "excl"})
+
+
+def test_a_route_needs_both_legs_in_the_set() -> None:
+    routes = [_route("A/USDT", "a", "g", "5")]
+    picked = FINDER.select_per_set(routes, 3, {"excl": frozenset("ab")})
+    assert picked.routes == []
+    assert picked.membership == {}
+
+
+def test_single_all_set_equals_plain_select() -> None:
+    routes = [
+        _route(f"{c}/USDT", "a", "b", str(n)) for c, n in zip("ABCD", (4, 3, 2, 1), strict=True)
+    ]
+    picked = FINDER.select_per_set(routes, 2, {"all": frozenset("ab")})
+    assert picked.routes == FINDER.select(routes, 2)

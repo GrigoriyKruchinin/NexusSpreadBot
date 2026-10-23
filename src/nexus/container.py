@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import replace
 
+import structlog
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -40,7 +41,7 @@ from nexus.persistence.repositories import (
 )
 from nexus.scanner.episodes import EpisodeTracker
 from nexus.scanner.health import ExchangeHealthTracker
-from nexus.scanner.paper import PaperTrader
+from nexus.scanner.paper import PaperBook, PaperTrader
 from nexus.scanner.quarantine import QuarantineManager
 from nexus.scanner.service import Repositories, Scanner, ScannerConfig
 from nexus.scanner.streams import OrderBookStreams
@@ -48,8 +49,10 @@ from nexus.scanner.universe import UniverseFilter
 from nexus.services.alerts import AlertService
 from nexus.services.digest import DigestService
 from nexus.services.maintenance import RetentionService
-from nexus.simulation.portfolio import PaperConfig
+from nexus.simulation.portfolio import PaperConfig, allocate_capital
 from nexus.workers.dispatch import CeleryAlertDispatcher
+
+log = structlog.get_logger(__name__)
 
 
 def build_adapters(settings: ScannerRoleSettings) -> dict[str, BaseExchangeAdapter]:
@@ -64,11 +67,13 @@ def build_adapters(settings: ScannerRoleSettings) -> dict[str, BaseExchangeAdapt
     }
 
 
-def build_paper_trader(
+def build_paper_book(
     settings: ScannerRoleSettings, sessions: async_sessionmaker[AsyncSession], clock: Clock
-) -> PaperTrader | None:
-    """Paper simulation (``PAPER_ENABLED``): trades priced at the paper notional, without
-    per-trade transfer cost (inventory is rebalanced virtually instead)."""
+) -> PaperBook | None:
+    """Shadow paper portfolios (``PAPER_ENABLED``, ``PAPER_VENUE_SETS``): one independent
+    :class:`PaperTrader` per venue set with the SAME fixed capital (``PAPER_CAPITAL_USD``),
+    trades priced at the paper notional without per-trade transfer cost (inventory is
+    rebalanced virtually instead)."""
     paper = settings.paper
     if not paper.enabled:
         return None
@@ -77,19 +82,33 @@ def build_paper_trader(
         reference_notional_usd=paper.trade_notional_usd,
         include_transfer_cost=False,
     )
-    return PaperTrader(
-        PaperConfig(
-            usdt_per_exchange=paper.usdt_per_exchange,
-            coin_per_route_usd=paper.coin_per_route_usd,
-            rebalance_threshold_pct=paper.rebalance_threshold_pct,
-            rebalance_delay_ms=paper.rebalance_delay_min * 60_000,
-            trade_notional_usd=paper.trade_notional_usd,
-            transfer_tax_pct=dict(settings.spread.transfer_tax_pct),
-        ),
-        PaperRepository(sessions),
-        NetSpreadEstimator(pricing, clock),
-        clock,
-    )
+    repository = PaperRepository(sessions)
+    traders: dict[str, PaperTrader] = {}
+    for name, venues in settings.venue_sets.items():
+        usdt, coin_budget = allocate_capital(paper.capital_usd, len(venues), paper.usdt_share_pct)
+        traders[name] = PaperTrader(
+            PaperConfig(
+                usdt_per_exchange=usdt,
+                coin_per_route_usd=min(paper.coin_per_route_usd, coin_budget),
+                rebalance_threshold_pct=paper.rebalance_threshold_pct,
+                rebalance_delay_ms=paper.rebalance_delay_min * 60_000,
+                trade_notional_usd=paper.trade_notional_usd,
+                transfer_tax_pct=dict(settings.spread.transfer_tax_pct),
+                coin_budget_per_venue_usd=coin_budget,
+            ),
+            repository,
+            NetSpreadEstimator(pricing, clock),
+            clock,
+            portfolio_id=name,
+            venues=frozenset(venues),
+        )
+        log.info(
+            "paper_portfolio_configured",
+            portfolio=name,
+            venues=list(venues),
+            capital_usd=str(paper.capital_usd),
+        )
+    return PaperBook(traders)
 
 
 def redis_client(url: str, socket_timeout_s: float) -> Redis:
@@ -184,7 +203,7 @@ async def scanner_scope(settings: ScannerRoleSettings) -> AsyncIterator[Scanner]
                 close_gap_ms=settings.episodes.close_gap_s * 1000,
                 clock=clock,
             ),
-            paper=build_paper_trader(settings, sessions, clock),
+            paper=build_paper_book(settings, sessions, clock),
             quarantine=QuarantineManager(
                 RedisQuarantineStore(redis, clock),
                 QuarantineRepository(sessions),

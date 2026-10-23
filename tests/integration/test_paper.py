@@ -31,7 +31,7 @@ def _holdings(p: PaperPortfolio) -> list[PaperHolding]:
 
 async def test_commit_and_load_state(sessions: Sessions) -> None:
     repo = PaperRepository(sessions)
-    assert await repo.load_state() is None
+    assert await repo.load_state("all") is None
     p = PaperPortfolio(
         PaperConfig(D(1000), D(1000), D(20), 30 * 60_000, trade_notional_usd=D(1000))
     )
@@ -44,13 +44,14 @@ async def test_commit_and_load_state(sessions: Sessions) -> None:
         RebalanceNeed("ABC", "a", "b", D(1)), TransferQuote(TransferStatus.UNKNOWN), T0
     )
     stored = await repo.commit(
+        portfolio_id="all",
         at_ms=T0,
         trades=[(executed, None), (skipped, None)],
         rebalances=[rebalance, blocked],
         holdings=_holdings(p),
     )
     assert all(r.id is not None for r in stored)
-    state = await repo.load_state()
+    state = await repo.load_state("all")
     assert state is not None
     assert state.realized == D("7.98101")
     assert state.rebalance_costs == D(1)  # blocked transfers cost nothing
@@ -58,11 +59,12 @@ async def test_commit_and_load_state(sessions: Sessions) -> None:
     assert {(h.exchange, h.asset): h.amount for h in state.holdings} == dict(p.balances)
 
     await repo.commit(
+        portfolio_id="all",
         at_ms=T0 + 1,
         trades=[],
         rebalances=[replace(stored[0], status=RebalanceStatus.COMPLETED)],
         holdings=_holdings(p),
     )
-    state = await repo.load_state()
+    state = await repo.load_state("all")
     assert state is not None
     assert state.in_flight == []

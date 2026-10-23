@@ -9,9 +9,10 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import ColumnElement, delete, func, or_, select, update
+from sqlalchemy import ColumnElement, and_, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import aliased
 
 from nexus.domain.conditional import touches_conditional
 from nexus.domain.digest import (
@@ -19,6 +20,7 @@ from nexus.domain.digest import (
     EpisodeStats,
     EpisodeSummary,
     PaperStats,
+    PortfolioSummary,
     QuarantineSummary,
 )
 from nexus.domain.episodes import EpisodeCloseReason, OpportunityEpisode
@@ -62,7 +64,13 @@ from nexus.persistence.models import (
     SpreadEvaluationRow,
     SpreadSnapshotRow,
 )
-from nexus.simulation.portfolio import Rebalance, RebalanceStatus, Seed, TradeOutcome
+from nexus.simulation.portfolio import (
+    DEFAULT_PORTFOLIO_ID,
+    Rebalance,
+    RebalanceStatus,
+    Seed,
+    TradeOutcome,
+)
 
 Sessions = async_sessionmaker[AsyncSession]
 
@@ -413,9 +421,10 @@ class QuarantineRepository(_Repository, IQuarantineRepository):
             )
 
 
-def _trade_row(outcome: TradeOutcome, episode_id: int | None) -> PaperTradeRow:
+def _trade_row(portfolio_id: str, outcome: TradeOutcome, episode_id: int | None) -> PaperTradeRow:
     bd = outcome.breakdown if outcome.executed else None
     return PaperTradeRow(
+        portfolio_id=portfolio_id,
         executed_at=ms_to_datetime(outcome.at_ms),
         episode_id=episode_id,
         symbol=outcome.symbol,
@@ -433,8 +442,9 @@ def _trade_row(outcome: TradeOutcome, episode_id: int | None) -> PaperTradeRow:
     )
 
 
-def _rebalance_values(rebalance: Rebalance) -> dict[str, Any]:
+def _rebalance_values(portfolio_id: str, rebalance: Rebalance) -> dict[str, Any]:
     return {
+        "portfolio_id": portfolio_id,
         "asset": rebalance.asset,
         "from_exchange": rebalance.from_exchange,
         "to_exchange": rebalance.to_exchange,
@@ -472,6 +482,7 @@ class PaperRepository(_Repository, IPaperRepository):
     async def commit(
         self,
         *,
+        portfolio_id: str,
         at_ms: int,
         trades: Sequence[tuple[TradeOutcome, int | None]],
         rebalances: Sequence[Rebalance],
@@ -480,23 +491,29 @@ class PaperRepository(_Repository, IPaperRepository):
         """One transaction: a crash can never persist a transfer without its balances."""
         stored: list[Rebalance] = []
         async with self._sessions.begin() as session:
-            session.add_all(_trade_row(outcome, episode_id) for outcome, episode_id in trades)
+            session.add_all(
+                _trade_row(portfolio_id, outcome, episode_id) for outcome, episode_id in trades
+            )
             for rebalance in rebalances:
                 if rebalance.id is None:
-                    row = PaperRebalanceRow(**_rebalance_values(rebalance))
+                    row = PaperRebalanceRow(**_rebalance_values(portfolio_id, rebalance))
                     session.add(row)
                     await session.flush()
                     stored.append(replace(rebalance, id=row.id))
                 else:
                     await session.execute(
                         update(PaperRebalanceRow)
-                        .where(PaperRebalanceRow.id == rebalance.id)
+                        .where(
+                            PaperRebalanceRow.id == rebalance.id,
+                            PaperRebalanceRow.portfolio_id == portfolio_id,
+                        )
                         .values(status=rebalance.status.value)
                     )
                     stored.append(rebalance)
             captured_at = ms_to_datetime(at_ms)
             session.add_all(
                 PaperBalanceSnapshotRow(
+                    portfolio_id=portfolio_id,
                     captured_at=captured_at,
                     exchange=h.exchange,
                     asset=h.asset,
@@ -509,14 +526,17 @@ class PaperRepository(_Repository, IPaperRepository):
             )
         return stored
 
-    async def load_state(self) -> PaperState | None:
-        """Latest snapshot set + open transfers + totals from the trade/rebalance history."""
+    async def load_state(self, portfolio_id: str) -> PaperState | None:
+        """Latest snapshot set + open transfers + totals of one portfolio."""
+        snap, trade, rebal = PaperBalanceSnapshotRow, PaperTradeRow, PaperRebalanceRow
         async with self._sessions() as session:
-            latest = await session.scalar(select(func.max(PaperBalanceSnapshotRow.captured_at)))
+            latest = await session.scalar(
+                select(func.max(snap.captured_at)).where(snap.portfolio_id == portfolio_id)
+            )
             if latest is None:
                 return None
             rows = await session.scalars(
-                select(PaperBalanceSnapshotRow).where(PaperBalanceSnapshotRow.captured_at == latest)
+                select(snap).where(snap.portfolio_id == portfolio_id, snap.captured_at == latest)
             )
             holdings = [
                 PaperHolding(
@@ -531,19 +551,21 @@ class PaperRepository(_Repository, IPaperRepository):
                 for r in rows
             ]
             open_rows = await session.scalars(
-                select(PaperRebalanceRow).where(
-                    PaperRebalanceRow.status == RebalanceStatus.IN_FLIGHT.value
+                select(rebal).where(
+                    rebal.portfolio_id == portfolio_id,
+                    rebal.status == RebalanceStatus.IN_FLIGHT.value,
                 )
             )
             in_flight = [_row_to_rebalance(r) for r in open_rows]
             realized = await session.scalar(
-                select(func.coalesce(func.sum(PaperTradeRow.net_usd), 0)).where(
-                    PaperTradeRow.executed.is_(True)
+                select(func.coalesce(func.sum(trade.net_usd), 0)).where(
+                    trade.portfolio_id == portfolio_id, trade.executed.is_(True)
                 )
             )
             costs = await session.scalar(
-                select(func.coalesce(func.sum(PaperRebalanceRow.fee_usd), 0)).where(
-                    PaperRebalanceRow.status != RebalanceStatus.BLOCKED.value
+                select(func.coalesce(func.sum(rebal.fee_usd), 0)).where(
+                    rebal.portfolio_id == portfolio_id,
+                    rebal.status != RebalanceStatus.BLOCKED.value,
                 )
             )
         return PaperState(
@@ -692,6 +714,7 @@ class DigestRepository(_Repository, IDigestRepository):
                 )
             )
             paper = await self._paper(session, since, until, self._conditional)
+            portfolios = await self._portfolios(session, until)
             quarantines, active = await self._quarantines(session, since, until)
             uptime = await self._uptime(session, since, until)
             coverage = await self._coverage(session, until)
@@ -706,7 +729,52 @@ class DigestRepository(_Repository, IDigestRepository):
             coverage_pct=coverage,
             conditional_venues=self._conditional,
             unverified_evaluations=int(unverified or 0),
+            portfolios=portfolios,
         )
+
+    @staticmethod
+    async def _portfolios(session: AsyncSession, until: datetime) -> tuple[PortfolioSummary, ...]:
+        """Per shadow portfolio: first snapshot (``since``), trade count, hedged P&L."""
+        snap, trade, rebal = PaperBalanceSnapshotRow, PaperTradeRow, PaperRebalanceRow
+        firsts = (
+            await session.execute(
+                select(snap.portfolio_id, func.min(snap.captured_at))
+                .where(snap.captured_at < until)
+                .group_by(snap.portfolio_id)
+            )
+        ).all()
+        done = (
+            await session.execute(
+                select(
+                    trade.portfolio_id,
+                    func.count(),
+                    func.coalesce(func.sum(trade.net_usd), 0),
+                )
+                .where(trade.executed.is_(True), trade.executed_at < until)
+                .group_by(trade.portfolio_id)
+            )
+        ).all()
+        fees = (
+            await session.execute(
+                select(rebal.portfolio_id, func.coalesce(func.sum(rebal.fee_usd), 0))
+                .where(rebal.status != RebalanceStatus.BLOCKED.value, rebal.started_at < until)
+                .group_by(rebal.portfolio_id)
+            )
+        ).all()
+        trades = {str(pid): (int(n), Decimal(net or 0)) for pid, n, net in done}
+        costs = {str(pid): Decimal(total or 0) for pid, total in fees}
+        summaries = [
+            PortfolioSummary(
+                portfolio_id=str(pid),
+                since_ms=datetime_to_ms(first),
+                trades=trades.get(str(pid), (0, Decimal(0)))[0],
+                hedged_pnl_usd=trades.get(str(pid), (0, Decimal(0)))[1]
+                - costs.get(str(pid), Decimal(0)),
+            )
+            for pid, first in firsts
+        ]
+        summaries.sort(key=lambda p: (p.portfolio_id != DEFAULT_PORTFOLIO_ID, p.portfolio_id))
+        return tuple(summaries)
 
     @staticmethod
     async def _episodes(
@@ -721,7 +789,7 @@ class DigestRepository(_Repository, IDigestRepository):
             )
         ).all()
         if not rows:
-            return EpisodeStats()
+            return EpisodeStats(total_excl_conditional=0)  # quiet day: 0, not "unknown"
         quarantined = [r for r in rows if r.close_reason == EpisodeCloseReason.QUARANTINED.value]
         rest = [r for r in rows if r.close_reason != EpisodeCloseReason.QUARANTINED.value]
         verified = sum(1 for r in rest if r.transfer_status == TransferStatus.VERIFIED.value)
@@ -761,14 +829,18 @@ class DigestRepository(_Repository, IDigestRepository):
     ) -> PaperStats | None:
         latest = await session.scalar(
             select(func.max(PaperBalanceSnapshotRow.captured_at)).where(
-                PaperBalanceSnapshotRow.captured_at < until
+                PaperBalanceSnapshotRow.portfolio_id == DEFAULT_PORTFOLIO_ID,
+                PaperBalanceSnapshotRow.captured_at < until,
             )
         )
         if latest is None:
             return None
         holdings = (
             await session.scalars(
-                select(PaperBalanceSnapshotRow).where(PaperBalanceSnapshotRow.captured_at == latest)
+                select(PaperBalanceSnapshotRow).where(
+                    PaperBalanceSnapshotRow.portfolio_id == DEFAULT_PORTFOLIO_ID,
+                    PaperBalanceSnapshotRow.captured_at == latest,
+                )
             )
         ).all()
         prices = {h.asset: h.price_usd for h in holdings if h.price_usd is not None}
@@ -786,7 +858,8 @@ class DigestRepository(_Repository, IDigestRepository):
         in_flight = (
             await session.scalars(
                 select(PaperRebalanceRow).where(
-                    PaperRebalanceRow.status == RebalanceStatus.IN_FLIGHT.value
+                    PaperRebalanceRow.portfolio_id == DEFAULT_PORTFOLIO_ID,
+                    PaperRebalanceRow.status == RebalanceStatus.IN_FLIGHT.value,
                 )
             )
         ).all()
@@ -794,6 +867,7 @@ class DigestRepository(_Repository, IDigestRepository):
             ((r.amount - r.fee) * (prices.get(r.asset) or 0) for r in in_flight), Decimal(0)
         )
         window_trades = (
+            PaperTradeRow.portfolio_id == DEFAULT_PORTFOLIO_ID,
             PaperTradeRow.executed_at >= since,
             PaperTradeRow.executed_at < until,
         )
@@ -816,10 +890,17 @@ class DigestRepository(_Repository, IDigestRepository):
             )
         )
         window_rebalances = (
+            PaperRebalanceRow.portfolio_id == DEFAULT_PORTFOLIO_ID,
             PaperRebalanceRow.started_at >= since,
             PaperRebalanceRow.started_at < until,
         )
-        moved = PaperRebalanceRow.status != RebalanceStatus.BLOCKED.value
+        moved = and_(
+            PaperRebalanceRow.portfolio_id == DEFAULT_PORTFOLIO_ID,
+            PaperRebalanceRow.status != RebalanceStatus.BLOCKED.value,
+        )
+        own_trades = and_(
+            PaperTradeRow.portfolio_id == DEFAULT_PORTFOLIO_ID, PaperTradeRow.executed.is_(True)
+        )
         rebalance_usd = await session.scalar(
             select(func.coalesce(func.sum(PaperRebalanceRow.fee_usd), 0)).where(
                 *window_rebalances, moved
@@ -832,9 +913,7 @@ class DigestRepository(_Repository, IDigestRepository):
             )
         )
         realized_total = await session.scalar(
-            select(func.coalesce(func.sum(PaperTradeRow.net_usd), 0)).where(
-                PaperTradeRow.executed.is_(True)
-            )
+            select(func.coalesce(func.sum(PaperTradeRow.net_usd), 0)).where(own_trades)
         )
         rebalance_total = await session.scalar(
             select(func.coalesce(func.sum(PaperRebalanceRow.fee_usd), 0)).where(moved)
@@ -843,7 +922,7 @@ class DigestRepository(_Repository, IDigestRepository):
         # (buy/sell, from/to) is a conditional venue. Equity/mark-to-market is not split.
         realized_excl = await session.scalar(
             select(func.coalesce(func.sum(PaperTradeRow.net_usd), 0)).where(
-                PaperTradeRow.executed.is_(True), trade_free_clause(conditional)
+                own_trades, trade_free_clause(conditional)
             )
         )
         rebalance_excl = await session.scalar(
@@ -944,11 +1023,19 @@ class RetentionRepository(_Repository, IRetentionRepository):
     ) -> dict[str, int]:
         """Delete rows past their retention window (see the interface for what is kept)."""
         async with self._sessions.begin() as session:
-            latest_paper = select(func.max(PaperBalanceSnapshotRow.captured_at)).scalar_subquery()
+            # The latest snapshot set of EVERY portfolio survives (each has its own timeline).
+            newer = aliased(PaperBalanceSnapshotRow)
+            has_newer = (
+                select(newer.id)
+                .where(
+                    newer.portfolio_id == PaperBalanceSnapshotRow.portfolio_id,
+                    newer.captured_at > PaperBalanceSnapshotRow.captured_at,
+                )
+                .exists()
+            )
             paper_snapshots = await session.execute(
                 delete(PaperBalanceSnapshotRow).where(
-                    PaperBalanceSnapshotRow.captured_at < snapshots_before,
-                    PaperBalanceSnapshotRow.captured_at < latest_paper,
+                    PaperBalanceSnapshotRow.captured_at < snapshots_before, has_newer
                 )
             )
             metadata_stats = await session.execute(

@@ -303,45 +303,74 @@ class MemoryQuarantine(IQuarantineStore, IQuarantineRepository):
         self.lifted.append((route_key, at_ms))
 
 
+@dataclass
+class PaperData:
+    """Records of one shadow portfolio."""
+
+    trades: list[tuple[TradeOutcome, int | None]] = field(default_factory=list)
+    rebalances: dict[int, Rebalance] = field(default_factory=dict)
+    snapshots: list[tuple[int, list[PaperHolding]]] = field(default_factory=list)
+
+
 class MemoryPaper(IPaperRepository):
-    """Paper records in memory (``commit`` keeps the same atomic shape as Postgres)."""
+    """Paper records in memory (``commit`` keeps the same atomic shape as Postgres).
+
+    ``trades`` / ``rebalances`` / ``snapshots`` are the primary portfolio (``all``); other
+    shadow portfolios live in :attr:`data`.
+    """
 
     def __init__(self) -> None:
-        self.trades: list[tuple[TradeOutcome, int | None]] = []
-        self.rebalances: dict[int, Rebalance] = {}
-        self.snapshots: list[tuple[int, list[PaperHolding]]] = []
+        self.data: dict[str, PaperData] = {"all": PaperData()}
         self.fail_next = False
+        self.fail_portfolios: set[str] = set()
+        self._next_id = 1
+
+    @property
+    def trades(self) -> list[tuple[TradeOutcome, int | None]]:
+        return self.data["all"].trades
+
+    @property
+    def rebalances(self) -> dict[int, Rebalance]:
+        return self.data["all"].rebalances
+
+    @property
+    def snapshots(self) -> list[tuple[int, list[PaperHolding]]]:
+        return self.data["all"].snapshots
 
     async def commit(
         self,
         *,
+        portfolio_id: str,
         at_ms: int,
         trades: Sequence[tuple[TradeOutcome, int | None]],
         rebalances: Sequence[Rebalance],
         holdings: Sequence[PaperHolding],
     ) -> list[Rebalance]:
-        if self.fail_next:
+        if self.fail_next or portfolio_id in self.fail_portfolios:
             self.fail_next = False
             raise ConnectionError("db down")
-        self.trades.extend(trades)
+        data = self.data.setdefault(portfolio_id, PaperData())
+        data.trades.extend(trades)
         stored = []
         for rebalance in rebalances:
             if rebalance.id is None:
-                rebalance = replace(rebalance, id=len(self.rebalances) + 1)
-            self.rebalances[rebalance.id] = rebalance  # type: ignore[index]
+                rebalance = replace(rebalance, id=self._next_id)
+                self._next_id += 1
+            data.rebalances[rebalance.id] = rebalance  # type: ignore[index]
             stored.append(rebalance)
-        self.snapshots.append((at_ms, list(holdings)))
+        data.snapshots.append((at_ms, list(holdings)))
         return stored
 
-    async def load_state(self) -> PaperState | None:
-        if not self.snapshots:
+    async def load_state(self, portfolio_id: str) -> PaperState | None:
+        data = self.data.get(portfolio_id)
+        if data is None or not data.snapshots:
             return None
-        executed = [t for t, _ in self.trades if t.executed]
+        executed = [t for t, _ in data.trades if t.executed]
         return PaperState(
-            holdings=self.snapshots[-1][1],
+            holdings=data.snapshots[-1][1],
             in_flight=[
-                r for r in self.rebalances.values() if r.status is RebalanceStatus.IN_FLIGHT
+                r for r in data.rebalances.values() if r.status is RebalanceStatus.IN_FLIGHT
             ],
             realized=sum((t.net_usd for t in executed), D(0)),
-            rebalance_costs=sum((r.fee_usd for r in self.rebalances.values()), D(0)),
+            rebalance_costs=sum((r.fee_usd for r in data.rebalances.values()), D(0)),
         )

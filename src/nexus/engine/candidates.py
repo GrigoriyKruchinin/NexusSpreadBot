@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from nexus.domain.models import ZERO, MarketInfo, Ticker
+from nexus.domain.quarantine import route_key
 
 HUNDRED = Decimal(100)
 
@@ -33,6 +34,16 @@ class CandidateFilter:
     min_net_profit_pct: Decimal
     max_gross_spread_pct: Decimal
     min_quote_volume_usd: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class SetSelection:
+    """Union of the per-set top-N candidates and which sets each route is a candidate of."""
+
+    routes: list[RouteQuote]
+    """Ranked like :meth:`CandidateFinder.select` (best fee-bound net first), no duplicates."""
+    membership: dict[str, frozenset[str]]
+    """``route_key -> names of the venue sets whose own top-N contains the route``."""
 
 
 class CandidateFinder:
@@ -98,6 +109,26 @@ class CandidateFinder:
         ]
         selected.sort(key=lambda r: (-r.fee_bound_net_pct, r.symbol))
         return selected[:limit]
+
+    def select_per_set(
+        self, routes: list[RouteQuote], limit: int, sets: Mapping[str, frozenset[str]]
+    ) -> SetSelection:
+        """Apply the top-N cap separately inside every venue set.
+
+        A route belongs to a set only if BOTH legs are in the set; the cap is applied after
+        that restriction, so a route crowded out of ``all`` by conditional-venue routes still
+        competes in ``excl_conditional`` (no crowd-out bias). The evaluation list is the union.
+        """
+        members: dict[str, set[str]] = defaultdict(set)
+        by_key: dict[str, RouteQuote] = {}
+        for name, venues in sets.items():
+            inside = [r for r in routes if r.buy_exchange in venues and r.sell_exchange in venues]
+            for route in self.select(inside, limit):
+                key = route_key(route.symbol, route.buy_exchange, route.sell_exchange)
+                by_key[key] = route
+                members[key].add(name)
+        union = sorted(by_key.values(), key=lambda r: (-r.fee_bound_net_pct, r.symbol))
+        return SetSelection(union, {k: frozenset(v) for k, v in members.items()})
 
     def _liquid(self, ticker: Ticker) -> bool:
         threshold = self._config.min_quote_volume_usd

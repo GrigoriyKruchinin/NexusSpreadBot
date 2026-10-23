@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal
 from typing import Final
 from zoneinfo import ZoneInfo
 
-from nexus.domain.digest import DigestData, EpisodeStats, PaperStats
+from nexus.domain.digest import DigestData, EpisodeStats, PaperStats, PortfolioSummary
 from nexus.notifications.formatting import (
     QUARANTINE_REASONS,
     SEPARATOR,
@@ -31,6 +32,7 @@ SKIP_REASONS: Final[dict[str, str]] = {
     "no_price": "нет цены монеты",
     "recent_fill": "связка только что торговалась",
 }
+MIN_PORTFOLIOS_SHOWN: Final = 2
 LATENCY_MARK: Final[dict[bool | None, str]] = {True: " ⚡", False: " 🐢", None: ""}
 
 
@@ -52,6 +54,7 @@ class DigestFormatter:
             *self._episodes(data.episodes),
             SEPARATOR,
             *self._paper(data.paper),
+            *self._portfolios(data.portfolios, local),
             SEPARATOR,
             *self._quarantine(data),
             SEPARATOR,
@@ -81,14 +84,36 @@ class DigestFormatter:
             f"⚠️ Условные биржи (данные собираются, торговать пока нельзя): {names}",
             SEPARATOR,
             f"Эпизоды:   все {data.episodes.total} | без условных "
-            f"{'н/д' if ep_excl is None else ep_excl}",
+            f"(фильтр) {'н/д' if ep_excl is None else ep_excl}",
             "Бумажный P&amp;L (hedged): "
             + (
-                f"все {fmt_usd(paper.hedged_pnl_usd, signed=True)} | без условных {excl_text}"
+                f"все {fmt_usd(paper.hedged_pnl_usd, signed=True)} "
+                f"| без условных (фильтр) {excl_text}"
                 if paper
                 else "н/д"
             ),
         ]
+
+    @staticmethod
+    def _portfolios(
+        portfolios: tuple[PortfolioSummary, ...], local: Callable[[int], str]
+    ) -> list[str]:
+        """Per-set simulation lines, only once more than one set has records."""
+        if len(portfolios) < MIN_PORTFOLIOS_SHOWN:
+            return []
+        lines = [SEPARATOR, "📦 <b>Наборы бирж</b> (реальная симуляция по набору)"]
+        for p in portfolios:
+            since = datetime.fromtimestamp(p.since_ms / 1000, tz=ZoneInfo("UTC"))
+            lines.append(
+                f"• <code>{esc(p.portfolio_id)}</code> с {since:%d %b}: сделок {p.trades}"
+                f" · hedged {fmt_usd(p.hedged_pnl_usd, signed=True)}"
+            )
+        lines.append(
+            "<blockquote>Данные набора копятся только с момента добавления набора: "
+            "без истории назад. Строки «фильтр» выше - оценка по уже записанным сделкам."
+            "</blockquote>"
+        )
+        return lines
 
     @staticmethod
     def _episodes(stats: EpisodeStats) -> list[str]:

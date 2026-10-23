@@ -125,17 +125,19 @@ class IPaperRepository(ABC):
     async def commit(
         self,
         *,
+        portfolio_id: str,
         at_ms: int,
         trades: Sequence[tuple[TradeOutcome, int | None]],
         rebalances: Sequence[Rebalance],
         holdings: Sequence[PaperHolding],
     ) -> list[Rebalance]:
         """Atomically store trades (with episode ids), rebalance inserts/updates and a full
-        balance snapshot; returns the rebalances with their ids."""
+        balance snapshot of one portfolio; returns the rebalances with their ids."""
 
     @abstractmethod
-    async def load_state(self) -> PaperState | None:
-        """Latest snapshot, in-flight rebalances and running totals (``None`` = fresh)."""
+    async def load_state(self, portfolio_id: str) -> PaperState | None:
+        """Latest snapshot, in-flight rebalances and running totals of one portfolio
+        (``None`` = fresh / the set was just added)."""
 
 
 @dataclass(frozen=True, slots=True)

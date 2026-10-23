@@ -25,6 +25,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from nexus.simulation.portfolio import DEFAULT_PORTFOLIO_ID
+
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
     "uq": "uq_%(table_name)s_%(column_0_name)s",
@@ -234,9 +236,15 @@ class PaperTradeRow(Base):
     """A simulated trade (executed or skipped with a reason)."""
 
     __tablename__ = "paper_trades"
-    __table_args__ = (Index("ix_paper_trades_executed_at", "executed_at"),)
+    __table_args__ = (
+        Index("ix_paper_trades_portfolio_executed_at", "portfolio_id", "executed_at"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    portfolio_id: Mapped[str] = mapped_column(
+        String(32), default=DEFAULT_PORTFOLIO_ID, server_default=DEFAULT_PORTFOLIO_ID
+    )
+    """Venue set (shadow portfolio) the trade belongs to."""
     executed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     episode_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("opportunity_episodes.id", ondelete="SET NULL")
@@ -260,11 +268,14 @@ class PaperRebalanceRow(Base):
 
     __tablename__ = "paper_rebalances"
     __table_args__ = (
-        Index("ix_paper_rebalances_started_at", "started_at"),
-        Index("ix_paper_rebalances_status", "status"),
+        Index("ix_paper_rebalances_portfolio_started_at", "portfolio_id", "started_at"),
+        Index("ix_paper_rebalances_portfolio_status", "portfolio_id", "status"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    portfolio_id: Mapped[str] = mapped_column(
+        String(32), default=DEFAULT_PORTFOLIO_ID, server_default=DEFAULT_PORTFOLIO_ID
+    )
     asset: Mapped[str] = mapped_column(String(32))
     from_exchange: Mapped[str] = mapped_column(String(32))
     to_exchange: Mapped[str] = mapped_column(String(32))
@@ -282,9 +293,14 @@ class PaperBalanceSnapshotRow(Base):
     """Paper holdings of one venue at a point in time (the latest set restores the state)."""
 
     __tablename__ = "paper_balance_snapshots"
-    __table_args__ = (Index("ix_paper_balance_snapshots_captured_at", "captured_at"),)
+    __table_args__ = (
+        Index("ix_paper_balance_snapshots_portfolio_captured_at", "portfolio_id", "captured_at"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    portfolio_id: Mapped[str] = mapped_column(
+        String(32), default=DEFAULT_PORTFOLIO_ID, server_default=DEFAULT_PORTFOLIO_ID
+    )
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     exchange: Mapped[str] = mapped_column(String(32))
     asset: Mapped[str] = mapped_column(String(32))

@@ -83,3 +83,11 @@ def test_empty_conditional_list_keeps_every_row() -> None:
         assert sql.startswith("NOT (")
         assert sql.count("(1 != 1)") == 2
         assert "IN ()" not in sql
+
+
+async def test_empty_window_reports_zero_excl_conditional_not_unknown() -> None:
+    """R2-1: a quiet day must show 'без условных 0', never 'н/д'."""
+    session: Any = _Session([])
+    stats = await DigestRepository._episodes(session, T, T, ("bybit", "gateio"))
+    assert stats.total == 0
+    assert stats.total_excl_conditional == 0
