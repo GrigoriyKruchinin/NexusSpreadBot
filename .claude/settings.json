@@ -1,4 +1,5 @@
 {
+  "agent": "orchestrator",
   "permissions": {
     "allow": [
       "Bash(uv sync:*)",
@@ -6,32 +7,52 @@
       "Bash(uv lock:*)",
       "Bash(uv run ruff:*)",
       "Bash(uv run mypy:*)",
-      "Bash(uv run pytest:*)",
-      "Bash(uv run alembic:*)",
+      "Bash(uv run pytest -m \"not integration\":*)",
       "Bash(make lint)",
       "Bash(make format)",
       "Bash(make typecheck)",
       "Bash(make test)",
       "Bash(make test-cov)",
       "Bash(make check)",
-      "Bash(docker compose -f docker-compose.local.yml ps)",
+      "Bash(docker compose -f docker-compose.local.yml ps:*)",
       "Bash(docker compose -f docker-compose.local.yml logs:*)",
+      "Bash(docker compose -f docker-compose.local.yml config:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push origin main)"
+      "Bash(git push origin chore/*)",
+      "Bash(git push origin feat/*)",
+      "Bash(git push origin fix/*)"
+    ],
+    "ask": [
+      "Bash(make test-integration)",
+      "Bash(uv run pytest -m integration:*)",
+      "Bash(make up-local)",
+      "Bash(make down-local)",
+      "Bash(make migrate)"
     ],
     "deny": [
+      "Bash(git push origin main)",
       "Bash(git push --force:*)",
       "Bash(git push -f:*)",
       "Bash(git push --force-with-lease:*)",
       "Bash(git commit --no-verify:*)",
       "Bash(git reset --hard:*)",
+      "Bash(docker system prune:*)",
+      "Bash(docker compose -f docker-compose.local.yml down -v:*)",
       "Read(./.env)",
       "Read(./.env.*.local)",
       "Read(./secrets/**)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "cat docs/pipeline/STATE.md 2>/dev/null || true"}]}
+    ],
+    "PreCompact": [
+      {"hooks": [{"type": "command", "command": "echo 'Before compaction: update docs/pipeline/STATE.md and commit.' >&2"}]}
     ]
   }
 }
