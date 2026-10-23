@@ -16,6 +16,6 @@
 - A6 done (6766bfd), security ACCEPT (docs/audit/security-review-A6.md), follow-ups F2-F6 pending; tech-lead round 1: RETURN (docs/audit/tech-lead-review-track0.md; B1/A4/B1a/A2a/CI accepted); backend-lead fixing.
 - Legal addendum: Gate User Agreement 2.5 lists Argentina AND Russia as restricted (needs human re-read) -> G1.2 blocked; Binance RF-resident account: change residence, do not open second account. User decided 2026-10-23: gateio same rule as Bybit — GO numbers with and without gateio; without written Gate confirmation of serving Argentine residents by UF -> judge without it.
 - User says keys for binance/gateio/kucoin/okx are already in .env (not read; .env is gitignored, untracked). Until A6 lands, user must confirm manually: read-only, withdrawals off, IP whitelist.
-- A6 round-1 fixes committed (ee38592); tech-lead round 2 running.
+- A6 round-1 fixes committed (ee38592); tech-lead round 2: ACCEPT; Track 0 code accepted. Next stage-end: tester + security + delta audit.
 - User request 2026-10-23: (a) logs/Telegram show the list of conditional venues (not tradable now: Bybit, gateio, ...) and aggregate totals WITH and WITHOUT them (combined, not per venue); (b) expand analysed venues (up to ~20, more is better): research candidates first, user will register and get keys. crypto-specialist researching; card for (a) pending.
 - Agents added this session need a fresh session to register: creative-ceo, risk-manager.

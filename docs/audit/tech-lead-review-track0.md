@@ -91,3 +91,42 @@
   checksum-verified, test DB name asserted (R-01). First run still pending (STATE.md).
 - Process: todo.md A6 was ticked in the same commit before reviews; acceptable per workflow, but
   untick if this RETURN is not closed before U3.
+
+## Round 2 (2026-10-23)
+
+- Reviewed: 5134508 (`KEY_POLICY_*` passthrough), ee38592 (round-1 fixes). Round 2 of max 3.
+- `make check`: ruff 0, mypy --strict 0 (131 files), **625 passed**, 12 deselected; branch
+  coverage **90 %** total, `key_policy.py` 97 %. Not worse than baseline (481 / 89 %).
+
+### Must-fix status
+
+| # | Status | Evidence |
+|---|---|---|
+| 1 | resolved | `verify_key_policies` catches `Exception` -> `REQUEST_FAILED`, class name only; test with `ReadOnlyViolationError`/`ConfigurationError`/`ValueError(FAKE_KEY)` checks other venues still run and no leak. `CancelledError` (BaseException) still propagates, correct. |
+| 2 | resolved | Binance: any `enable*`/`permits*` key not known and not `False` refuses (non-bool too); OKX: `scopes - {"read_only"}` refuses. Tests for new flags/scopes. |
+| 3 | resolved | README "Extension runs" = public-data only; guide sections 3, 3.6, 3.7, `.env` template and section 7 checklist updated. |
+| 4 | resolved | `key_info_method` removed from `bybit.py`. |
+| 5 | resolved | 5134508; card status line updated. |
+
+### Should-fix status
+
+- 6 resolved: `fetch_key_info` uses `max_attempts=1`; test asserts one transport call.
+- 8 resolved: scanner `restart: on-failure:5` with comment.
+- 9 resolved: `key_policy_parser_error` warning, class name only; tested.
+- 10 resolved: `_scope_rule` echoes only `[A-Za-z0-9_]{1,40}`, else `permission:unexpected_scope`;
+  Bybit `SubMemberTransfer*` mapped to a fixed name.
+- 12 resolved (early): CIDR prefix <= /8 counts as unbound. Note: /9../31 still counts as a
+  binding — revisit the threshold at U3 (follow-up F-4).
+- 7, 11, 13 deferred (see backlog). No regressions found: `_call` default behaviour unchanged
+  (`limit = self.max_attempts` when not given), parser tests unchanged except intended renames.
+
+### Verdict: **ACCEPT** A6 (Track 0 fully accepted)
+
+Follow-up backlog (low, non-blocking; may be one card):
+- F-1 (#7): verify venues concurrently (`asyncio.gather`, isolated) — worst case now
+  ~5 x 2 x `timeout_ms` sequential.
+- F-2 (#11): `IKeyIntrospection` Protocol in `nexus/interfaces/` instead of `getattr`.
+- F-3 (#13): guard test asserts `_ws` / transfer fallback clients carry no `apiKey`.
+- F-4 (#12): decide CIDR width threshold at U3 (currently /8).
+- F-5: `.env.example:65-66` still says "see README Extension runs to add them back" — now
+  contradicts README; reword to "keys for these venues are refused (A6)".
