@@ -4,9 +4,12 @@ Date: 2026-10-23. Author: creative-ceo. Status: accepted by the user 2026-10-23 
 Revised 2026-10-23 after the legal review (`docs/legal/review-vision-architecture.md`, V1-V3, V7):
 income tax added to costs (2 % bar is after tax, user decision 2026-10-23), legal GO gate = G1-G4,
 sanctioned tokens/venues out of scope, pivot 2 precondition.
+Revised 2026-10-23 (user product decision, ADR 0008): third outcome **GO-HOLD** (analytical GO,
+gates not all met) added to section 5; DEX development allowed after analytical GO (GO or GO-HOLD),
+amending ADR 0006.
 Inputs: `CLAUDE.md`, `docs/pipeline/intake.md`, `docs/pipeline/nexus-appendix.md`,
-`docs/product/stage1-history.md`, ADR 0001, 0002, 0006, `docs/architecture/target.md`,
-`docs/legal/review-vision-architecture.md`.
+`docs/product/stage1-history.md`, ADR 0001, 0002, 0006, 0007, 0008, `docs/architecture/target.md`,
+`docs/legal/review-vision-architecture.md`, `docs/legal/go-gates-checklist.md`.
 
 ## 1. Purpose (one paragraph)
 
@@ -52,6 +55,10 @@ GO needs **all three**:
      currency-control reporting).
    - **G4** no account in another person's name, no multi-accounting, no third-party KYC.
 
+**Analytical GO** = conditions 1 and 2 hold (the money is there, out-of-sample, after all costs).
+Full **GO** = analytical GO plus condition 3 plus the launch preconditions in section 5 (GO-HOLD
+exit). Analytical GO with condition 3 or the launch preconditions not yet met = **GO-HOLD**.
+
 Plain-language reading of 2 %: about 27 % per year compounded. That is the bar to beat plain
 USDT yield products and the user's own time, not just zero. Note it is also a tiny absolute sum;
 see assumption A1.
@@ -60,6 +67,9 @@ see assumption A1.
 
 **In (Stage 1, now):**
 - Spot spreads between the five core CEX: binance, bybit, gateio, kucoin, okx (ADR 0002, 0006).
+- **Data collection for Bybit and Binance runs in any case** (user decision 2026-10-23), from
+  public data, regardless of account or key status. GO numbers are reported with and without
+  Bybit (checklist G1.7).
 - Net-spread engine, episode tracking, quarantine of dead routes, paper inventory with
   simulated rebalancing, daily digest, PostgreSQL analytics.
 - Public read-only data; read-only keys only for fee and deposit/withdraw status.
@@ -67,7 +77,8 @@ see assumption A1.
 - Docker-first, open-source dashboards only, no paid services without approval.
 
 **Seam only (prepared, not built):** DEX legs. Only `LegQuote` and the asset-identity registry
-exist (ADR 0006). No `dex-engineer`, no DEX code until after the GO result.
+exist (ADR 0006). No `dex-engineer`, no DEX code until **analytical GO** (GO or GO-HOLD,
+ADR 0008 amending ADR 0006).
 
 **Extension, off the main flow:** bitget and mexc adapters (ADR 0002). Excluded from GO numbers.
 Re-enter when the user has an Argentine DNI and can pass KYC (about 6 months from 2026-10).
@@ -75,6 +86,7 @@ Re-enter when the user has an Argentine DNI and can pass KYC (about 6 months fro
 **Out (until GO plus explicit user confirmation):** any order, withdrawal, transfer or address
 code (ADR 0001); live keys for agents; GUI/frontend; derivatives, margin, leverage; HTX
 (sanctions); custody of other people's money; selling signals to third parties.
+GO-HOLD does **not** lift any of these.
 
 **Out (permanently, not lifted by GO):** A7A5 and other sanctioned tokens (excluded from the
 symbol universe); Garantex/Grinex and other sanctioned venues (legal review V3, section 5).
@@ -85,9 +97,51 @@ The verdict comes from `quant-analyst` (`viability-verdict`) plus `lawyer`; the 
 
 | Outcome | Evidence needed | What happens next |
 |---|---|---|
-| **GO** | All three GO conditions hold (incl. G1-G4 ticked); positive after rebalancing and mark-to-market; result stable across at least two separate periods and not dependent on 1-2 routes or coins (the soak showed 24 of 30 episodes from one route, LUNC) | Stage 2: executor behind ADR 0001 revision, risk-manager limits, kill switch, trade-only keys (no withdrawal, IP whitelist), start with minimal size and a paper-vs-live comparison for weeks. Live money only on explicit user confirmation. |
+| **GO** | All three GO conditions hold (incl. G1-G4 ticked) and the launch preconditions are met (Argentine DNI, all keys; see GO-HOLD exit); positive after rebalancing and mark-to-market; result stable across at least two separate periods and not dependent on 1-2 routes or coins (the soak showed 24 of 30 episodes from one route, LUNC) | Stage 2: executor behind ADR 0001 revision, risk-manager limits, kill switch, trade-only keys (no withdrawal, IP whitelist), start with minimal size and a paper-vs-live comparison for weeks. Live money only on explicit user confirmation. |
+| **GO-HOLD** | Analytical GO (conditions 1 and 2 hold, with the same stability and concentration tests as GO), but not all of: G1-G4 cleared, keys, account access, confirmed residence, Argentine DNI | The project does **not** stop and does **not** pivot. It keeps developing **without putting money in** and waits until every condition is met. Rules below. |
 | **Rework** (iteration 1-5) | Net return is below the threshold, but money may exist elsewhere. The goal is to **find a way to earn on spreads**, not to prove the current hypothesis. | A search loop of up to **5 iterations** (see below). |
 | **NO-GO** | Net below threshold out-of-sample, or only positive via unverifiable assumptions, or a blocking legal verdict (any of G1-G4 cannot be cleared) | Stop spending on trading. Keep the repo as a finished, honest analysis (the NO-GO is itself the deliverable), then choose a pivot below. |
+
+> Decided (user, 2026-10-23): a gate that is only *not yet* cleared (waiting for keys, DNI,
+> residence update, accountant answer) leads to GO-HOLD. If a qualified (human) lawyer says the
+> activity exposes the user to real legal penalties (fines or criminal liability), the project
+> stops: that is NO-GO, not GO-HOLD. The user considers this unlikely.
+
+### GO-HOLD rules (user decision 2026-10-23, ADR 0008)
+
+User's words (recorded as given): "We collect data for Bybit and Binance in any case. If analysis
+shows the approach is profitable (analytical GO) but some conditions are not met (keys, account
+access, confirmed residence — i.e. legal/access gates G1-G4), the project does NOT stop and does
+NOT pivot: it keeps developing without putting money in (DEX integration, data collection), and
+waits until all conditions are met for deploy and earning. Production/money launch only after
+the user gets the Argentine DNI and all keys."
+
+1. **No capital.** No money is allocated, deposited for Nexus, or put at risk.
+2. **No real orders.** ADR 0001 and hard rules 1-3 are unchanged: no order, withdrawal, transfer
+   or address code; no trading permission on keys; agents have no live keys.
+3. **Scanner and data collection keep running** on all core venues (binance, bybit, gateio,
+   kucoin, okx), including Bybit and Binance public data, whatever their account/key status.
+   Paper inventory and the daily digest continue, so the out-of-sample record keeps growing.
+4. **DEX work is allowed** (ADR 0008): `dex-engineer` may be activated, DEX read-only quotes and
+   the E1-E3 migration steps may be scheduled. DEX remains read-only (no wallet keys, no signing,
+   no swaps). DEX routes do **not** enter the GO numbers until they pass their own
+   out-of-sample check and their own legal review (legal review V9, pivot 4).
+5. **Periodic gate re-check.** `lawyer` re-checks `docs/legal/go-gates-checklist.md` at least
+   monthly and on any trigger: DNI issued, Bybit block lifted or answered, a venue ToS change,
+   residence update on an account, an accountant answer (G3). Status goes into `STATE.md`.
+6. **Exit to GO** only when **all** hold: G1-G4 cleared in the checklist; the user has the
+   Argentine DNI; the user has keys for every venue in the final GO set (venues the GO was judged on, e.g. without Bybit if it stays blocked; user decision 2026-10-23), created per U3 guide, withdrawals disabled, IP
+   whitelist); a fresh quant re-check (rule 7) passes; ADR 0001 revisit done (section 7). Then the
+   user confirms at **U5** (launch/legal). Without that confirmation nothing goes live.
+7. **Edge decay during HOLD.** HOLD can last months (DNI expected ~2027-04); spreads in a crowded
+   market shrink. Before exit to GO, `quant-analyst` re-runs the verdict on data collected
+   **during HOLD** (out-of-sample relative to the original verdict, after tax, same stability
+   and concentration tests). Also re-run at least quarterly during HOLD, so decay is seen early.
+   - Still >= 2 %/month after tax: GO-HOLD stays (or exits to GO if rule 6 is met).
+   - Below the bar: back to **Rework**, using the iterations left under ADR 0007; if none are
+     left, NO-GO. DEX work already done is kept but does not by itself restore GO.
+8. **Cost guard.** HOLD running costs (VPS, the user's time) are tracked in section 8; if they
+   approach the expected monthly payoff, `creative-ceo` raises it at the next stage end.
 
 ### Iteration loop (user decision 2026-10-23, ADR 0007)
 
@@ -106,9 +160,12 @@ approaches, up to **5 iterations**:
    core engine is merged.
 4. Scope guard stays: no DEX build and no new money-touching code during iterations; the user
    confirms at each UF point.
-5. GO at any iteration -> Stage 2. After iteration 5 without GO -> NO-GO and the portfolio pivot.
+5. Analytical GO at any iteration -> GO (Stage 2) if all gates and launch preconditions are met,
+   otherwise GO-HOLD. After iteration 5 without analytical GO -> NO-GO and the portfolio pivot.
 
 ### Honest pivots after NO-GO (after 5 failed iterations)
+
+GO-HOLD is not a NO-GO: none of these pivots is triggered by GO-HOLD.
 
 1. **Portfolio project (default).** Tidy README, architecture docs, ADRs, audit trail, a short
    write-up "what 5 CEX spreads actually look like after costs". Cheap, real value for a
@@ -164,12 +221,18 @@ demand test: it converts a trading question into a customer-liability question.
 - **A8. Single-person ops.** One operator, one laptop/VPS, no on-call. A silent failure with
   real money live is the worst case; Stage 2 needs kill switch and alerts before capital.
 - **A9. Scope discipline.** DEX and extra exchanges are tempting escapes from a weak CEX
-  result. The rule: they follow a GO, they do not rescue a NO-GO.
+  result. The rule: they follow an **analytical GO** (GO or GO-HOLD), they do not rescue a
+  Rework or NO-GO.
+- **A10. A HOLD edge is still there at launch.** An edge measured in 2026 may be gone by the
+  time the DNI and keys arrive. GO-HOLD is a waiting state, not a promise; the re-check in
+  section 5 (rule 7) decides, not the original verdict. Sceptic's note: HOLD must not become an
+  open-ended reason to keep building; the quarterly re-check is its brake.
 
 ## 7. Revisit point for ADR 0001 (no withdrawal/transfer in code)
 
-ADR 0001 stays in force through the whole GO/NO-GO analysis. Revisit **only** at UF if the
-verdict is GO, and before any Stage 2 executor work starts. Questions to answer then:
+ADR 0001 stays in force through the whole GO/NO-GO analysis **and through GO-HOLD**. Revisit
+**only** at UF if the verdict is GO, or at the GO-HOLD exit (section 5, rule 6), and before any
+Stage 2 executor work starts. Questions to answer then:
 
 1. Is the profit still positive if rebalancing stays **manual** (user moves funds, bot only
    alerts "inventory skewed")? If yes, ADR 0001 can stand unchanged. This is my recommendation:
@@ -192,3 +255,5 @@ exchange set, not the no-withdrawal rule.
   after tax (pre-tax shown for reference, section 3).
 - Gap between assumed and observed costs once real fee/transfer data is in.
 - Time and money spent so far vs expected payoff (revisit at each stage end).
+- During GO-HOLD: status of each gate G1-G4 and of DNI/keys (date of last check), and the
+  trend of the re-checked monthly net return (is the edge decaying?).
