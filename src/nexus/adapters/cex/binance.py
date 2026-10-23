@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
+from collections.abc import Mapping
+from typing import Any, ClassVar
 
 from nexus.adapters.cex.binance_public import BinancePublicTransferSource
 from nexus.adapters.cex.ccxt_base import CcxtExchangeAdapter
@@ -20,6 +21,12 @@ class BinanceAdapter(CcxtExchangeAdapter):
     name: ClassVar[str] = "binance"
     ccxt_id: ClassVar[str] = "binance"
     static_market_fees: ClassVar[bool] = True
+    ccxt_options: ClassVar[Mapping[str, Any]] = {
+        "defaultType": "spot",
+        # Signed calls fail with -1021 when the host clock drifts (WSL after sleep).
+        "adjustForTimeDifference": True,
+        "recvWindow": 10_000,
+    }
     order_book_limits: ClassVar[tuple[int, ...] | None] = (5, 10, 20, 50, 100, 500, 1000)
 
     def _make_transfer_fallback(self) -> ITransferStatusSource | None:

@@ -575,6 +575,13 @@ def test_client_config_credentials_only_for_rest() -> None:
     assert rest["options"]["defaultType"] == "spot"
 
 
+def test_binance_adjusts_for_clock_drift() -> None:
+    options = _adapter("binance")._client_config()["options"]
+    assert options["defaultType"] == "spot"
+    assert options["adjustForTimeDifference"] is True
+    assert options["recvWindow"] == 10_000
+
+
 async def test_close_closes_clients() -> None:
     client = FakeCcxtClient("okx")
     await _adapter("okx", client).close()
