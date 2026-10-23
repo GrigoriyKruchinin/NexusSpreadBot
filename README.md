@@ -22,10 +22,21 @@ cost, and alerts you on Telegram. Every evaluation is stored in PostgreSQL for l
 > authenticated exchange client is wrapped in a runtime guard that blocks any non-GET request,
 > and a static (AST) test forbids fund-moving calls in the source tree.
 
-**Status:** Stage 1 (detector + alerts) and Stage 1.5 (signal quality & paper profit
-validation) implemented; Stage 1.5 soak run pending — see [todo.md](todo.md).
+**Status:** MVP / analysis. Stage 1 (detector + alerts) and Stage 1.5 (signal quality & paper
+profit validation) are implemented; the multi-day data soak and the GO/NO-GO analysis are next
+(net return >= 2 % per month after all costs is the success criterion). Roadmap: [todo.md](todo.md).
 Supported exchanges: Bybit, Binance, OKX, Gate.io, KuCoin, MEXC, Bitget (spot, USDT/USDC
 quotes). HTX is not supported.
+
+## Documentation
+
+| Topic | Where |
+|---|---|
+| Rules for contributors and AI agents | [CLAUDE.md](CLAUDE.md), [docs/conventions.md](docs/conventions.md) |
+| Current pipeline state | [docs/pipeline/STATE.md](docs/pipeline/STATE.md) |
+| Project audit (quality, security, risks) | [docs/audit/00-summary.md](docs/audit/00-summary.md) |
+| Decisions | [docs/decisions/](docs/decisions/) |
+| User guides (Russian) | [docs/guides/](docs/guides/) |
 
 ## Architecture
 
