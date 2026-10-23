@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from nexus.config.groups import DatabaseSettings
 from nexus.persistence.db import create_engine, create_session_factory
+from tests.db_guard import UnsafeDatabaseError, assert_test_database
 
 
 def _reachable(settings: DatabaseSettings) -> bool:
@@ -30,6 +31,10 @@ def db_settings() -> DatabaseSettings:
         settings = DatabaseSettings()
     except Exception as exc:
         pytest.skip(f"database not configured: {type(exc).__name__}")
+    try:
+        assert_test_database(settings.db)
+    except UnsafeDatabaseError as exc:
+        pytest.exit(str(exc), returncode=2)  # fail loudly, before any migration/TRUNCATE
     if not _reachable(settings):
         pytest.skip("database not reachable")
     command.upgrade(Config("alembic.ini"), "head")
@@ -40,6 +45,7 @@ def db_settings() -> DatabaseSettings:
 async def sessions(
     db_settings: DatabaseSettings,
 ) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    assert_test_database(db_settings.db)  # defence in depth before TRUNCATE
     engine = create_engine(db_settings, pooled=False)
     async with engine.begin() as conn:
         await conn.execute(

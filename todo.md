@@ -12,7 +12,7 @@ Ticks only after verification and commit.
 - [ ] U2: roadmap Now/Next/Later; decide DEX scope, `dex-engineer`, `risk-manager`
 
 ## Track 0 — Base (M1/M2 start)
-- [ ] R-01 Integration tests only on `nexus_test` DB, refuse otherwise
+- [x] R-01 Integration tests only on `nexus_test` DB, refuse otherwise
 - [ ] R-05 GitHub Actions CI (lint, mypy, unit, integration w/ services, secret scan, image build) + coverage floor 89 %
 - [ ] R-06 Bump certifi, protobuf (unpin or justify), pip-audit incl. dev group
 - [ ] R-07 Silence httpx INFO / scrub tokens in stdlib loggers
@@ -22,7 +22,7 @@ Ticks only after verification and commit.
 ## Track 1 — Retro-verification
 - [ ] `/audit`-style review for items 1.5.6 and 1.5.11 (security + tech-lead)
 - [ ] Verify transfer-status parsers (needs read-only keys; guide for user)
-- [ ] Resolve scope drift: bitget/mexc adapters (keep or remove, ADR)
+- [x] Resolve scope drift: bitget/mexc adapters kept as extension only (ADR 0002)
 
 ## M2 — Code quality (under characterization tests)
 - [ ] R-02 Isolate exchange failures in sweep (`gather(return_exceptions=True)`), per-route error counters
