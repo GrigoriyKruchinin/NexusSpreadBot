@@ -58,7 +58,7 @@ if [ -n "$url" ] && ! [[ "$url" =~ $url_re ]]; then
   url=""
 fi
 if [ -n "$url" ]; then
-  if printf 'url = "%s"\n' "$url" | curl -fsS --max-time 10 --retry 2 -o /dev/null --config - 2>/dev/null; then
+  if printf 'url = "%s"\n' "$url" | curl -q -fsS --max-time 10 --retry 2 -o /dev/null --config - 2>/dev/null; then
     log "heartbeat sent"
   else
     log "WARNING: heartbeat ping failed (details suppressed: URL is a secret)"

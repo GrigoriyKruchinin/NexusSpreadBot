@@ -27,6 +27,8 @@ dump="${1:-}"
 counts_file="${dump%.dump}.counts"
 [ -f "$counts_file" ] || die "drill FAILED: no counts sidecar ($(basename "$counts_file")); run 'make backup' and drill that dump"
 
+grep -qE '^[^|]+\|[0-9]+\|[0-9]+$' "$counts_file" || die "drill FAILED: counts sidecar has no data rows ($(basename "$counts_file"))"
+
 # Defence in depth: the restore role must not be a superuser.
 is_super="$(pg_run psql -U "$TARGET_USER" -d "$TARGET_DB" -At -c "select rolsuper from pg_roles where rolname=current_user" | tr -d '\r')"
 [ "$is_super" = "f" ] || die "role $TARGET_USER is not a verified non-superuser (got '$is_super'); aborting"
@@ -43,10 +45,14 @@ done < <(table_counts "$TARGET_USER" "$TARGET_DB")
 
 report="$BACKUP_DIR/restore-drill-last.txt"
 status=0
+rows=0
+rm -f -- "$report"   # never read a verdict from a stale report
+old_umask="$(umask)"; umask 077
 {
   printf '%-40s %10s %10s %10s %s\n' table restored before after verdict
   while IFS='|' read -r t lo hi; do
     [ -n "$t" ] || continue
+    rows=$((rows + 1))
     dst="${restored[$t]:-}"
     if [ -z "$dst" ]; then
       v="MISSING"; status=1; dst="-"
@@ -57,8 +63,8 @@ status=0
     fi
     printf '%-40s %10s %10s %10s %s\n' "$t" "$dst" "$lo" "$hi" "$v"
   done < "$counts_file"
-} | (umask 077; tee "$report") >&2 || true
-# tee runs in a pipeline subshell: recompute status from the saved report.
-grep -qE ' (MISSING|MISMATCH)$' "$report" && status=1
-[ -s "$report" ] || status=1
+} > "$report"
+umask "$old_umask"
+cat -- "$report" >&2
+[ "$rows" -gt 0 ] || status=1
 [ "$status" -eq 0 ] && log "drill PASSED" || die "drill FAILED"

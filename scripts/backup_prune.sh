@@ -5,14 +5,14 @@
 #  * weekly: among older dumps, the newest dump of each of the KEEP_WEEKLY (default 4) most recent ISO
 #            weeks that the daily window does not already cover.
 #  Other dumps are deleted, together with their .counts sidecar. Malformed names are never touched.
-#  The newest dump is never deleted. KEEP_* must be integers >= 1, otherwise nothing is deleted.
+#  The newest dump is never deleted. KEEP_* must be integers 1..9999, otherwise nothing is deleted.
 # Usage: backup_prune.sh <dir>
 set -euo pipefail
 dir="${1:?usage: backup_prune.sh <dir>}"
 keep_daily="${KEEP_DAILY:-7}"
 keep_weekly="${KEEP_WEEKLY:-4}"
 for v in "$keep_daily" "$keep_weekly"; do
-  [[ "$v" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: KEEP_DAILY/KEEP_WEEKLY must be integers >= 1 (got '$v')" >&2; exit 2; }
+  [[ "$v" =~ ^[1-9][0-9]{0,3}$ ]] || { echo "ERROR: KEEP_DAILY/KEEP_WEEKLY must be integers 1..9999 (got '$v')" >&2; exit 2; }
 done
 [ -d "$dir" ] || { echo "not a directory: $dir" >&2; exit 1; }
 
@@ -21,7 +21,9 @@ mapfile -t files < <(find "$dir" -maxdepth 1 -type f -printf '%f\n' | grep -E "$
 declare -A day_seen=() week_seen=()
 days=0
 weeks=0
+newest="${files[0]:-}"   # unconditional guard: never deleted, whatever the arithmetic says
 remove() {
+  [ "$1" != "$newest" ] || return 0
   rm -f -- "$dir/$1" "$dir/${1%.dump}.counts"
   echo "pruned $1" >&2
 }

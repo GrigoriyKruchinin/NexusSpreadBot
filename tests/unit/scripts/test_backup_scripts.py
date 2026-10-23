@@ -204,6 +204,43 @@ def test_prune_invalid_retention_deletes_nothing(sb: Sandbox, which: str, bad: s
     assert len(list(sb.backups.glob("nexus-*.dump"))) == 20
 
 
+@pytest.mark.parametrize("which", ["KEEP_DAILY", "KEEP_WEEKLY"])
+def test_prune_oversized_retention_deletes_nothing(sb: Sandbox, which: str) -> None:
+    sb.backups.mkdir()
+    _make_dumps(sb.backups, 20, date(2026, 10, 23))
+    result = sb.run([str(SCRIPTS / "backup_prune.sh"), str(sb.backups)], **{which: "9" * 20})
+    assert result.returncode != 0
+    assert len(list(sb.backups.glob("nexus-*.dump"))) == 20
+
+
+def test_prune_newest_survives_even_if_arithmetic_would_delete_it(sb: Sandbox) -> None:
+    # Run the script body with `[` failing numerically is not reachable via env any more, so
+    # exercise the guard directly: extract remove() and call it on the newest name.
+    sb.backups.mkdir()
+    names = _make_dumps(sb.backups, 3, date(2026, 10, 23))
+    newest = max(names)
+    script = (SCRIPTS / "backup_prune.sh").read_text()
+    start = script.index("newest=")
+    end = script.index("for base in")
+    harness = (
+        'set -euo pipefail\ndir="$1"\nfiles=("$2")\n'
+        + script[start:end]
+        + 'remove "$2"\nremove "$3"\n'
+    )
+    other = min(names)
+    result = subprocess.run(  # noqa: S603
+        ["/bin/bash", "-c", harness, "x", str(sb.backups), newest, other],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={"PATH": "/usr/bin:/bin"},
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (sb.backups / newest).exists()
+    assert not (sb.backups / other).exists()
+
+
 def test_prune_never_deletes_newest(sb: Sandbox) -> None:
     sb.backups.mkdir()
     _make_dumps(sb.backups, 20, date(2026, 10, 23))
@@ -324,6 +361,7 @@ def test_heartbeat_sent_from_0600_file_without_leaking_url(sb: Sandbox) -> None:
     curl_calls = [c for c in sb.calls() if c.startswith("curl ")]
     assert len(curl_calls) == 1
     assert "hc.example" not in curl_calls[0]  # not in argv
+    assert curl_calls[0].split()[1] == "-q"  # first argument: ignore ~/.curlrc
     assert "hc.example/ping/abc-123" in (sb.root / "calls.log.curl-stdin").read_text()
 
 
@@ -474,3 +512,24 @@ def test_bootstrap_sql_has_no_secrets_or_destructive_statements() -> None:
     assert sql.count("WHERE NOT EXISTS") == 3
     assert "TRUNCATE" not in sql.upper()
     assert "DROP " not in sql.upper()
+
+
+@pytest.mark.parametrize("counts", ["", "table|before|after\n", "\n\n"])
+def test_restore_empty_or_header_only_sidecar_fails(sb: Sandbox, counts: str) -> None:
+    dump = _good_dump(sb, counts)
+    result = sb.run([str(SCRIPTS / "restore_drill.sh"), str(dump)])
+    assert result.returncode != 0
+    assert "drill FAILED" in result.stderr
+    assert "PASSED" not in result.stderr
+    assert not any("pg_restore" in c for c in sb.calls())
+
+
+def test_restore_ignores_stale_passed_report(sb: Sandbox) -> None:
+    dump = _good_dump(sb)
+    report = sb.backups / "restore-drill-last.txt"
+    report.write_text("t1 5 4 6 ok\n")
+    sb.set_counts({}, {"t1": 99, "t2": 0})
+    result = sb.run([str(SCRIPTS / "restore_drill.sh"), str(dump)])
+    assert result.returncode != 0
+    assert "MISMATCH" in report.read_text()
+    assert " ok" not in report.read_text().splitlines()[0]
