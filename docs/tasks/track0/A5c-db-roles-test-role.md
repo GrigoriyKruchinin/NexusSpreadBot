@@ -47,3 +47,13 @@ Per-service roles, Redis ACL users, Stage 2 executor role, Docker hardening (A5d
 Switching the app to `nexus_app` can break existing code that assumes ownership (migrations at
 startup, `TRUNCATE` in maintenance purges): audit purge paths first (B7 uses batched `DELETE`).
 Ownership transfer of existing tables is a destructive-adjacent op on live data: backup first.
+
+## Follow-ups from A5a review (carried, do in this task)
+- S-A5a-6 / R1-8: `scripts/sql/bootstrap_backup_roles.sql` default privileges cover only the current owner. When
+  per-service roles arrive: `GRANT CONNECT ON DATABASE nexus` to `nexus_app`/`nexus_migrator` explicitly, and
+  `ALTER DEFAULT PRIVILEGES FOR ROLE nexus_migrator ... GRANT SELECT ... TO nexus_ro`, else `pg_dump` fails
+  (loudly). `default_transaction_read_only` is only a session default; the grants are the real control.
+- S-A5a-6: verify once that `psql -h 127.0.0.1 -U nexus_ro` from the host fails (no TCP login), re-check on VPS.
+- S-A5a-7: `nexus_test` holds a full copy of live data after each drill; revisit if tables ever hold account or
+  key-derived data.
+- S-A5a-8: if the dump ever switches to `--inserts`, filter pg_restore "Command was:" lines.

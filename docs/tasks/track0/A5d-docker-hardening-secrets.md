@@ -39,3 +39,9 @@ VPS provisioning, TLS/reverse proxy, per-service DB/Redis users (separate trigge
 ## Risks
 `read_only`/`cap_drop` can break ccxt or Celery temp-file usage; apply incrementally per service.
 Digest pins need a refresh routine (note in card at close).
+
+## Follow-ups from A5a review (carried)
+- S-A5a-5(c): `HEARTBEAT_URL` as a plain env var is acceptable for local Stage 1 only; on the VPS use
+  `HEARTBEAT_URL_FILE` (0600, owner-checked by `backup.sh`) or a Docker secret.
+- S-A5a-6: on the VPS no published Postgres port (target.md §10.5); re-verify that `nexus_ro` cannot log in over TCP.
+- Heartbeat service is deferred here by user decision 2026-10-23; the daily cron entry also moves to the VPS host.

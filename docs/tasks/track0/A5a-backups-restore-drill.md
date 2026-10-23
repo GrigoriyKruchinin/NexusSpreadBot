@@ -6,7 +6,7 @@
 - reviewers: security, tech-lead
 - complexity: medium (credentials handling, retention, restore verification)
 - depends_on: A1 (done); A5c for the `nexus_ro` and `nexus_test_owner` roles (may bootstrap minimal versions of both if A5c is not yet done, same grants as target.md §10.1)
-- status: DONE (2026-10-23): roles bootstrapped, backup + restore drill PASSED, see docs/reports/restore-drill.md. Pending: security/tech-lead review
+- status: DONE (2026-10-23): roles bootstrapped, backup + restore drill PASSED, see docs/reports/restore-drill.md. Review round 1 fixes applied (R1-1..R1-8, S-A5a-1..5), see docs/audit/*-A5a.md; pending round-2 re-review
 - **U4 gate: touches the live DB and Docker. User OK is required before execution (backups read the `nexus` DB, restore drill creates/overwrites `nexus_test`). Never restore into `nexus`.**
 
 ## Goal
@@ -28,7 +28,7 @@ migrations (B7/B8) have a proven safety net.
 5. **Restore drill:** latest dump restored into `nexus_test` as `nexus_test_owner` (never `nexus`);
    script refuses any target DB name other than `nexus_test`; row counts of key tables compared with
    the source and recorded in `docs/reports/restore-drill.md`; drill result is the gate for B7/B8.
-6. External heartbeat: free service only; ping URL is a secret (`SecretStr`, scrubbed, from file/env,
+6. (Amended by user decision 2026-10-23: daily schedule installed in the user crontab (03:15, `make backup`); the external heartbeat is deferred to the VPS (Stage 2). Code for it is ready and tested, no service configured.) External heartbeat: free service only; ping URL is a secret (`SecretStr`, scrubbed, from file/env,
    never committed); a missed backup raises an alert. Paid service needs user approval.
 7. Russian guide `docs/guides/backups.md` for the user (how to run, where files are, how to restore).
 8. No `docker compose down -v`, no `system prune`; `make check` not worse than baseline.

@@ -1,37 +1,61 @@
 #!/usr/bin/env bash
 # Daily logical backup of the live DB (read-only: pg_dump as the SELECT-only role nexus_ro).
-# Output: $BACKUP_DIR/nexus-<UTC timestamp>.dump (custom format, mode 0600), outside the repo.
-# Optional heartbeat: HEARTBEAT_URL_FILE (path to a file holding the ping URL) or HEARTBEAT_URL.
-# The URL is a secret: it is fed to curl through stdin config, never argv, and never logged.
+# Output (outside the repo, mode 0600):
+#   $BACKUP_DIR/nexus-<UTC timestamp>.dump    custom-format dump
+#   $BACKUP_DIR/nexus-<UTC timestamp>.counts  "table|rows_before|rows_after" (row counts taken just
+#                                             before and just after the dump; used by the restore drill)
+# Optional heartbeat: HEARTBEAT_URL_FILE (file, owned by you, mode 0600, holding the ping URL) or
+# HEARTBEAT_URL. The URL is a secret: fed to curl through stdin config, never argv, never logged.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/_backup_common.sh"
 umask 077
 
 ensure_backup_dir "$BACKUP_DIR"
+BACKUP_DIR="$REAL_BACKUP_DIR"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 final="$BACKUP_DIR/nexus-$stamp.dump"
 partial="$final.partial"
-trap 'rm -f -- "$partial"' EXIT
+counts_final="$BACKUP_DIR/nexus-$stamp.counts"
+counts_partial="$counts_final.partial"
+trap 'rm -f -- "$partial" "$counts_partial"' EXIT
 
 log "dumping $SOURCE_DB as $BACKUP_USER"
+before="$(table_counts "$BACKUP_USER" "$SOURCE_DB")"
 pg_run pg_dump -U "$BACKUP_USER" -d "$SOURCE_DB" --format=custom --no-password > "$partial"
+after="$(table_counts "$BACKUP_USER" "$SOURCE_DB")"
 [ -s "$partial" ] || die "dump is empty"
+[ -n "$before" ] || die "no tables found in $SOURCE_DB"
 # Cheap integrity check: the archive table of contents must be readable.
 pg_run pg_restore --list < "$partial" > /dev/null || die "dump failed pg_restore --list"
-chmod 600 "$partial"
+# Sidecar: join before/after by table name.
+export LC_ALL=C
+join -t '|' <(printf '%s\n' "$before" | sort -t '|' -k1,1) <(printf '%s\n' "$after" | sort -t '|' -k1,1) > "$counts_partial"
+chmod 600 "$partial" "$counts_partial"
 mv -- "$partial" "$final"
+mv -- "$counts_partial" "$counts_final"
 [ "$(stat -c %a "$final")" = "600" ] || die "dump file mode is not 0600"
 log "wrote $(basename "$final") ($(stat -c %s "$final") bytes)"
 
 "$(dirname "${BASH_SOURCE[0]}")/backup_prune.sh" "$BACKUP_DIR"
 
-# Heartbeat: only after a verified dump. A ping failure is logged but does not fail the backup;
-# a missed ping is what raises the alert on the external (free-tier) service.
+# Heartbeat: only after a verified dump. Problems are logged (never the URL) but do not fail the backup;
+# a missed ping is what raises the alert on the external service.
 url=""
-if [ -n "${HEARTBEAT_URL_FILE:-}" ] && [ -r "$HEARTBEAT_URL_FILE" ]; then
-  url="$(tr -d '[:space:]' < "$HEARTBEAT_URL_FILE")"
+url_re="^https://[A-Za-z0-9._~:/?#@!\$&'()*+,;=%-]+\$"
+if [ -n "${HEARTBEAT_URL_FILE:-}" ]; then
+  if [ ! -f "$HEARTBEAT_URL_FILE" ] || [ ! -r "$HEARTBEAT_URL_FILE" ]; then
+    log "WARNING: HEARTBEAT_URL_FILE is set but not a readable file; heartbeat skipped"
+  elif [ "$(stat -c %u "$HEARTBEAT_URL_FILE")" != "$(id -u)" ] || [ "$(stat -c %a "$HEARTBEAT_URL_FILE")" != "600" ]; then
+    log "WARNING: heartbeat file must be owned by you with mode 0600 (chmod 600); heartbeat skipped"
+  else
+    url="$(tr -d '[:space:]' < "$HEARTBEAT_URL_FILE")"
+  fi
 elif [ -n "${HEARTBEAT_URL:-}" ]; then
   url="$HEARTBEAT_URL"
+fi
+if [ -n "$url" ] && ! [[ "$url" =~ $url_re ]]; then
+  log "WARNING: heartbeat URL is not a plain https URL; heartbeat skipped (value not shown)"
+  url=""
 fi
 if [ -n "$url" ]; then
   if printf 'url = "%s"\n' "$url" | curl -fsS --max-time 10 --retry 2 -o /dev/null --config - 2>/dev/null; then
@@ -40,5 +64,5 @@ if [ -n "$url" ]; then
     log "WARNING: heartbeat ping failed (details suppressed: URL is a secret)"
   fi
 else
-  log "heartbeat not configured (skipped)"
+  log "heartbeat not configured or skipped"
 fi
