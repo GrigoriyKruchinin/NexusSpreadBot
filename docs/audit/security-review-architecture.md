@@ -75,3 +75,41 @@ Record this trigger in `target.md` §4.
 ## Out of scope / not verified
 No code was run; no gitleaks/pip-audit run in this review (see `06-security-baseline.md`).
 Exchange-specific permission-introspection endpoints need crypto-specialist confirmation per venue.
+
+## Re-check 2026-10-23
+
+Re-read: `target.md` §4, §7, §10; `migration-plan.md` (A5a-A5d, findings mapping);
+`docs/reports/exchange-key-permissions.md`; `.github/workflows/ci.yml`, `.gitleaks.toml`.
+Spot-checked: `.pre-commit-config.yaml`, `docker-compose.local.yml` (key names only, no values),
+`pyproject.toml` pins. `.env` not read. Status is about the design/plan (code lands in the steps).
+
+| # | Status | Evidence / gap |
+|---|---|---|
+| S-01 | addressed | Grant table §10.1; A5c acceptance (no TRUNCATE/DROP/CREATE, superuser absent from app env). |
+| S-02 | addressed | `nexus_test_owner` without `CONNECT` on `nexus` (§10.1, A5c); CI uses ephemeral Postgres, DB-name assert + pytest guard. |
+| S-03 | addressed | A5a: `nexus_ro`, `.pgpass`/`_FILE`, dir outside repo/volume, 0600, retention, off-host encryption, restore drill into `nexus_test`; B7/B8 depend on it. |
+| S-04 | addressed | §10.2 + A5b (file secret, `REDISCLI_AUTH`, URL scrub + test, `noeviction`, unpublished). |
+| S-05 | addressed | §10.3 + B12 acceptance (pickle not accepted, unknown `v` rejected). Not yet in code (`workers/app.py` has no serializer pin) - expected, B12 pending. |
+| S-06 | partial | CI good: gitleaks pinned version+SHA256, full history each run, `--redact`, fails on finding; allowlist scoped rule+path+value; `permissions: contents: read`; actions SHA-pinned; `persist-credentials: false`; no repo secrets; no `pull_request_target`; pip-audit runtime+dev. **Gap G1:** no gitleaks hook in `.pre-commit-config.yaml` (only `detect-private-key`). **Gap G2:** A2 row text still says only "secret scan" (mapping line covers it; cosmetic). |
+| S-07 | partial | Mapping line puts test-based acceptance on A4, and §10.4 has the ccxt-`repr` rule, but **G3:** A4 row itself still reads "silence httpx INFO, scrub tokens"; the A4 task card must carry the three tests (httpx `/bot<token>/`, Celery args, DSN/URL creds). |
+| S-08 | partial | §10.4 key policy matches; crypto report gives per-venue checks. **G4:** no migration step owns the `KeyPolicyCheck` startup check + "GET-only guard on every authenticated client" test (mapped only to "U3 guide + B1"); §10.4 lacks the report's fail-closed rule (unparseable/missing field -> refuse), "log booleans only, never the response body", missing-IP-binding -> refuse, and the kucoin/gateio attestation fallback. **G5 (open in code):** B1 is done but `docker-compose.local.yml` still passes `MEXC_*`/`BITGET_*` key vars to the scanner; `.env.example` still lists them. |
+| S-09 | addressed | §10.5 + A5d: `*_FILE` secrets required before VPS/shared host. |
+| S-10 | addressed | §10.5 + A5d (digest pins, image scan, cap_drop, no-new-privileges, mem/pid limits, no published Postgres on VPS). Minor: log-size limits on postgres/redis not named. |
+| S-11 | addressed | §10.2 + C10 (random token, compare-and-set renew/release, test). |
+| S-12 | partial (minor) | Ping URL as secret in §10.5/A5a; "free service only, paid needs user approval" not stated. |
+| S-13 | addressed | §7 last bullet (own DB role, Redis ACL user, trade-only IP-whitelisted key; security audit gates Stage 2). |
+| S-14 | partial (minor) | CI pip-audit fails on any finding (runtime+dev). A3 row lacks "documented reason for protobuf pin" and the "new dev deps pass pip-audit" note (C8). |
+
+Required before closing (small, no redesign):
+1. G4 - add a step (e.g. A6 "key policy startup check", owner backend-lead + crypto-specialist,
+   dep U3) and add fail-closed / booleans-only / IP-refuse / attestation lines to `target.md` §10.4.
+2. G5 - remove `MEXC_*`/`BITGET_*` from the scanner env in compose (B1 follow-up card).
+3. G1 - add pinned gitleaks pre-commit hook using `.gitleaks.toml`.
+4. G3 - A4 task card lists the three scrub tests as acceptance.
+Optional: G2, S-10 log limits, S-12 free-only, S-14 A3 wording.
+
+### Verdict: ACCEPT (design), with 4 tracked follow-ups
+
+No blocker remains in the architecture. Stage 1 may proceed; G4 must be done before U3 (first
+real keys), G5 before any soak that loads keys, G1/G3 with A4. A first green CI run is still
+pending (todo A2) and is not verified here.

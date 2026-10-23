@@ -1,9 +1,8 @@
 # STATE (updated 2026-10-23)
 
-- Trajectory: M (MVP/analysis, GO/NO-GO protocol on). Branch: `chore/agent-pipeline-adoption` (local, not pushed).
+- Trajectory: M (MVP/analysis, GO/NO-GO protocol on). Branch: `chore/agent-pipeline-adoption` (pushed to origin 2026-10-23).
 - Done: Phases 0-4; Phase 5 core: vision (docs/product/vision.md), target architecture + migration plan (docs/architecture/), ADR 0002-0006 accepted. U2 answered: DEX seam only (A), risk-manager and creative-ceo agents added, bitget/mexc = extension only.
 - Track 0: R-01 done (3d5441f). B1 done (2862593). R-05 CI committed (f6b5abb), first run pending. Open: R-06 deps, R-07 log scrub, R-09 backups, LICENSE (user).
-- Next: (1) project-manager cuts task cards from migration-plan: B1 first (CORE_EXCHANGES, default EXCHANGES_ENABLED excludes bitget/mexc), then A2 CI; (2) lawyer + security review of vision/architecture; (3) continue Track 0.
 - User confirmed vision proposals 2026-10-23: portfolio = default pivot after NO-GO; manual rebalancing (ADR 0001 unchanged); Rework = up to 5 iterations of searching for any profitable spread approach (ADR 0007). Goal: find a way to earn, not to prove one hypothesis.
 - Risks noted: security may want per-service DB roles back (architect cut to 3); stale thresholds 500/2000 ms need quant tuning; B7 migration needs backups + user OK.
 - Known: live DB paper data wiped 2026-10-23 (R-01); soak must restart. No backups yet. Integration tests need DB `nexus_test` and POSTGRES_DB=nexus_test (ask first).
@@ -11,4 +10,6 @@
 - User decided 2026-10-23: 2 %/month GO bar is AFTER income tax. Push of working branch allowed.
 - Security review: accept with changes (docs/audit/security-review-architecture.md), applied to target.md section 10; A5 split into A5a-A5d. Legal: no Stage-1 blocker, GO needs G1-G4. Key-permission research: docs/reports/exchange-key-permissions.md.
 - Next after this: project-manager re-cuts A5a-A5d cards + todo; tech-lead/security quick re-check of target.md section 10; lawyer creates G1-G4 checklist.
+- User idea 2026-10-23 (G2): optional per-exchange proxy in adapters (ccxt supports it) instead of dropping a venue. Not now (no server yet). Before design: lawyer checks each core exchange ToS on proxy/VPN (geo-circumvention is usually prohibited -> freeze risk); legit use = static egress IP for key whitelist. Proxy URL = secret, off by default. Add to todo backlog after PM finishes todo edit.
+- Security re-check: ACCEPT (design). Follow-ups: A6 key-policy startup check before U3 (no real keys before it); B1 follow-up: drop MEXC_*/BITGET_* from compose scanner env + .env.example; gitleaks pre-commit hook; A4 three scrub tests. Legal checklist: docs/legal/go-gates-checklist.md (G1/G3/G4 at risk, G2 open). Open user question: Bybit in GO set while blocked.
 - Agents added this session need a fresh session to register: creative-ceo, risk-manager.
