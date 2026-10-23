@@ -1,11 +1,10 @@
 # STATE (updated 2026-10-23)
 
 - Trajectory: M (MVP/analysis, GO/NO-GO protocol on). Branch: `chore/agent-pipeline-adoption` (local, not pushed).
-- Phase 0-3 done: intake, audit (docs/audit/00-16), stage assessment, team approved (variant 1, 14 agents).
-- Phase 4 done in this commit: CLAUDE.md, agents, skills, settings, conventions, todo.md, guide.
-- Phase 5 partly done: architect target + migration plan + ADR 0002-0005 (proposed 0003-0005) in docs/architecture, docs/decisions. Track 0: R-01 done (3d5441f). Still open: creative-ceo vision (agent file missing), lawyer/security review.
-- Next: remaining Track 0 (R-05 CI, R-06 deps, R-07 log scrub, R-09 backups), vision, then U2.
-- Meanwhile allowed: M2 track 0 tasks (test-DB guard R-01, CI, deps R-06, log scrub R-07).
-- Blockers / waiting on user: none. U2 pending (DEX scope A/B/C, dex-engineer, risk-manager, accept ADR 0003-0005). User decision 2026-10-23: bitget/mexc = extension only (ADR 0002); code default EXCHANGES_ENABLED still includes them (fix = step B1).
-- Known: live DB paper data was wiped 2026-10-23 (R-01); soak must restart. No backups yet.
-- Adoption instructions file deleted; its project appendix is in docs/pipeline/nexus-appendix.md.
+- Done: Phases 0-4; Phase 5 core: vision (docs/product/vision.md), target architecture + migration plan (docs/architecture/), ADR 0002-0006 accepted. U2 answered: DEX seam only (A), risk-manager and creative-ceo agents added, bitget/mexc = extension only.
+- Track 0: R-01 done (3d5441f). Open: R-05 CI, R-06 deps, R-07 log scrub, R-09 backups, LICENSE (user).
+- Next: (1) project-manager cuts task cards from migration-plan: B1 first (CORE_EXCHANGES, default EXCHANGES_ENABLED excludes bitget/mexc), then A2 CI; (2) lawyer + security review of vision/architecture; (3) continue Track 0.
+- Waiting on user (non-blocking), vision.md proposals: Rework = one time-boxed iteration; default NO-GO pivot = portfolio; manual rebalancing (ADR 0001 unchanged).
+- Risks noted: security may want per-service DB roles back (architect cut to 3); stale thresholds 500/2000 ms need quant tuning; B7 migration needs backups + user OK.
+- Known: live DB paper data wiped 2026-10-23 (R-01); soak must restart. No backups yet. Integration tests need DB `nexus_test` and POSTGRES_DB=nexus_test (ask first).
+- Agents added this session need a fresh session to register: creative-ceo, risk-manager.

@@ -8,8 +8,9 @@ Ticks only after verification and commit.
 - [x] Audit `docs/audit/00-16`, stage assessment
 - [x] U1 team approved (14 agents)
 - [x] Claude files, conventions, STATE, context plan, guide
-- [ ] Phase 5: vision (`creative-ceo`), target architecture + migration plan (`architect`), lawyer/security review
-- [ ] U2: roadmap Now/Next/Later; decide DEX scope, `dex-engineer`, `risk-manager`
+- [x] Phase 5: vision (`docs/product/vision.md`), target architecture + migration plan, ADR 0003-0005 accepted
+- [ ] Phase 5 tail: lawyer/security review of vision+architecture; user confirms 3 vision proposals (Rework rule, portfolio pivot, manual rebalancing)
+- [x] U2 decisions: DEX seam only (ADR 0006), risk-manager added; roadmap = `docs/architecture/migration-plan.md` (project-manager cuts cards)
 
 ## Track 0 — Base (M1/M2 start)
 - [x] R-01 Integration tests only on `nexus_test` DB, refuse otherwise

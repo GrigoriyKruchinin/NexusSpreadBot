@@ -29,7 +29,7 @@ after all costs, plus no blocking legal verdict (`docs/legal/`).
 ## Agents (`.claude/agents/`, only `orchestrator` calls others)
 orchestrator (opus) · analyzer · project-manager · scribe · architect · tech-lead · backend-lead ·
 tester · security · devops · quant-analyst · crypto-specialist · observability-engineer · lawyer.
-Later: creative-ceo (Phase 5), maybe dex-engineer, risk-manager (decide at U2).
+Added: creative-ceo (Phase 5), risk-manager added at U2 (2026-10-23). DEX: seam only, dex-engineer deferred until after GO (ADR 0006).
 Critics (tech-lead, security, analyzer, lawyer) never edit code.
 
 ## Commands (verified in audit, see docs/audit/04)
