@@ -6,7 +6,7 @@
 - reviewers: security (workflow permissions, secrets, pinned actions), tech-lead (gates vs baseline)
 - complexity: medium (several jobs, service containers, test-DB safety)
 - depends_on: A1 (done, 3d5441f), B1 (so CI runs the final default config)
-- status: implemented locally, awaiting first CI run (not committed/pushed)
+- status: review (committed in f6b5abb, awaiting first CI run)
 
 ## Goal
 Every push/PR to `main` and working branches runs lint, mypy, unit tests with a coverage floor,
