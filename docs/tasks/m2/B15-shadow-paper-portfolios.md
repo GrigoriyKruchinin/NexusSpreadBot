@@ -79,7 +79,7 @@ changing GO thresholds; DEX; proxying; capital sizing decisions (value comes fro
 `docker-compose.local.yml`, `tests/unit/...`, `tests/integration/...`, `todo.md`.
 
 ## Open points for NEEDS_USER at implementation time
-- Fixed capital value and tax rate for the GO report ($10,000 per set, user decision 2026-10-23; tax rate from the user).
+- Fixed capital value and tax rate for the GO report ($10,000 per set, user decision 2026-10-23). Tax rate RESOLVED 2026-10-23: report shows both 15 % and 35 %; GO verdict uses the worse (35 %).
 
 ## Carried over
 - R2-1 from `docs/audit/tech-lead-review-B14.md` (Round 2): `_episodes` returns bare `EpisodeStats()`

@@ -28,7 +28,7 @@
 2. (done) A5a reviews + leftovers.
 3. (done) Stage-end Track 0 + B14: regression clean (`docs/reports/regression-track0-B14.md`), delta audit
    `docs/audit/delta-track0-B14.md` (R-01/05/06/07 closed; new D-01..D-07; pre-soak gates in todo M3).
-4. **B15** shadow paper portfolios (needs migration; A5a gate passed; user U4 OK required before
+4. **B15** (in progress: part 1 = config/sim/migration with backend-lead; part 2 = GO report with quant) shadow paper portfolios (needs migration; A5a gate passed; user U4 OK required before
    applying to live `nexus`; capital $10,000 per set; includes R2-1 fix).
 5. **B16** public-only probe of batch 1 per legal verdicts: BingX, XT, Toobit OK; Bitfinex, Phemex
    public only. Batch 2: WEEX after DNI; DigiFinex, Deepcoin public only; Poloniex, LBank do not register.
@@ -36,6 +36,7 @@
 7. Then soak (needs B15 + backups running), quant, GO/NO-GO.
 
 ## User decisions (2026-10-23)
+- B15 GO report tax rate: show BOTH 15 % and 35 %; GO judged on the worse (35 %). Preliminary, accountant to confirm.
 - GO bar 2 %/month **after** income tax. GO-HOLD = analytical GO but gates unmet -> keep developing
   without money (DEX allowed), launch after DNI + keys for the final GO venue set. Real legal
   penalties (fines/criminal, per a human lawyer) -> NO-GO/stop.
