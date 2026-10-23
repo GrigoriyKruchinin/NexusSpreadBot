@@ -151,6 +151,7 @@ def test_scheduler_has_no_secrets_groups() -> None:
 def test_scanner_loads_without_telegram(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("POSTGRES_PASSWORD", DB_PASSWORD)
     monkeypatch.setenv("EXCHANGES_ENABLED", "bybit,okx")
+    monkeypatch.setenv("CONDITIONAL_VENUES", "bybit")  # default (gateio) is not enabled here
     monkeypatch.setenv("BYBIT_API_KEY", "k")
     monkeypatch.setenv("BYBIT_API_SECRET", "s")
     settings = ScannerRoleSettings.load()
@@ -345,3 +346,60 @@ def test_tax_assets_must_be_unique_and_window_must_cover_persistence(
     monkeypatch.setenv("QUARANTINE_WINDOW_H", "1")
     with pytest.raises(ValueError, match="QUARANTINE_PERSIST_MIN"):
         QuarantineSettings()
+
+
+# --------------------------------------------------------------- conditional venues (B14)
+
+
+def test_conditional_default_and_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    from nexus.config import ConditionalVenuesSettings
+
+    assert ConditionalVenuesSettings().venues == ("bybit", "gateio")
+    monkeypatch.setenv("CONDITIONAL_VENUES", "okx")
+    assert ConditionalVenuesSettings().venues == ("okx",)
+    monkeypatch.setenv("CONDITIONAL_VENUES", '["Bybit"," KuCoin "]')
+    assert ConditionalVenuesSettings().venues == ("bybit", "kucoin")  # lowercase, trimmed
+
+
+def test_conditional_empty_env_falls_back_but_empty_list_is_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from nexus.config import ConditionalVenuesSettings
+
+    monkeypatch.setenv("CONDITIONAL_VENUES", "")  # compose passes unset as ""
+    assert ConditionalVenuesSettings().venues == ("bybit", "gateio")
+    monkeypatch.setenv("CONDITIONAL_VENUES", "[]")
+    assert ConditionalVenuesSettings().venues == ()
+
+
+@pytest.mark.parametrize("value", ["bybit,bybit", "by-bit", "1bybit"])
+def test_conditional_rejects_invalid(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    from nexus.config import ConditionalVenuesSettings
+
+    monkeypatch.setenv("CONDITIONAL_VENUES", value)
+    with pytest.raises(ValidationError):
+        ConditionalVenuesSettings()
+
+
+def test_scanner_rejects_conditional_venue_not_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POSTGRES_PASSWORD", DB_PASSWORD)
+    monkeypatch.setenv("EXCHANGES_ENABLED", "binance,okx")
+    monkeypatch.setenv("CONDITIONAL_VENUES", "okx,bybit")
+    with pytest.raises(ValidationError, match="bybit"):
+        ScannerRoleSettings.load()
+    monkeypatch.setenv("CONDITIONAL_VENUES", "okx")
+    assert ScannerRoleSettings.load().conditional.venues == ("okx",)
+
+
+def test_alerts_worker_loads_conditional(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POSTGRES_PASSWORD", DB_PASSWORD)
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", VALID_TOKEN)
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "42")
+    assert AlertsWorkerSettings.load().conditional.venues == ("bybit", "gateio")
+
+
+def test_env_example_conditional_matches_default() -> None:
+    line = next(
+        ln for ln in ENV_EXAMPLE.read_text().splitlines() if ln.startswith("CONDITIONAL_VENUES=")
+    )
+    assert tuple(json.loads(line.split("=", 1)[1])) == ("bybit", "gateio")

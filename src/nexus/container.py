@@ -22,6 +22,7 @@ from nexus.engine.candidates import CandidateFilter, CandidateFinder
 from nexus.engine.estimator import EstimatorConfig, NetSpreadEstimator
 from nexus.infra.redis_store import RedisCooldownStore, RedisHeartbeat, RedisQuarantineStore
 from nexus.interfaces.market_data import BaseExchangeAdapter
+from nexus.notifications.formatting import OpportunityFormatter
 from nexus.notifications.telegram import TelegramNotifier
 from nexus.persistence.db import create_engine, create_session_factory
 from nexus.persistence.repositories import (
@@ -210,6 +211,7 @@ async def alert_service_scope(settings: AlertsWorkerSettings) -> AsyncIterator[A
             clock=SystemClock(),
             max_age_s=settings.telegram.alert_max_age_s,
             event_max_age_s=settings.telegram.event_max_age_s,
+            opportunity_formatter=OpportunityFormatter(settings.conditional.venues),
         )
     finally:
         await notifier.close()
@@ -223,7 +225,11 @@ async def digest_scope(settings: AlertsWorkerSettings) -> AsyncIterator[DigestSe
     notifier = TelegramNotifier(settings.telegram)
     try:
         yield DigestService(
-            DigestRepository(create_session_factory(engine)), notifier, SystemClock()
+            DigestRepository(
+                create_session_factory(engine), conditional_venues=settings.conditional.venues
+            ),
+            notifier,
+            SystemClock(),
         )
     finally:
         await notifier.close()

@@ -6,7 +6,7 @@
 - reviewers: tech-lead (diff), quant-analyst (totals semantics, later quant reports)
 - complexity: medium (cross-cutting read-side change; config validation across groups; no scanner/DB logic change)
 - depends_on: B1 (done)
-- status: todo
+- status: implemented, awaiting review (not committed). 646 unit tests; see Implementation notes
 
 ## Goal
 Every aggregate shows which venues are "conditional" (data collected, but possibly not tradable for
@@ -76,3 +76,11 @@ generator itself (it must call the helper once it exists); DB migrations; exchan
 `src/nexus/notifications/digest.py`, `src/nexus/notifications/formatting.py`, `src/nexus/services/digest.py`,
 `src/nexus/scanner/paper.py` / `simulation/portfolio.py` (read-side only), `.env.example`,
 `docker-compose.local.yml`, `tests/unit/...`, `todo.md`.
+
+## Implementation notes (backend-lead)
+- No migration needed: paper trades/rebalances/episodes store both legs; excl totals come from SQL filters.
+- Config: `ConditionalVenuesSettings` (`CONDITIONAL_VENUES`); subset check on `ScannerRoleSettings`; alerts worker loads the list (no `EXCHANGES_ENABLED` there, so no subset check).
+- Excl P&L = hedged only (arbitrage minus transfers); equity/MTM not split. SQL paths of `_paper` are covered only by integration tests (not run here).
+- Logs: `digest_sent` carries `conditional_venues`, `total_all`, `total_excl_conditional` (dicts: episodes, paper_hedged_pnl_usd). Scanner-side paper logs unchanged.
+- Telegram HTML uses `P&amp;L`. Alert marker is a suffix on the title line only.
+- Operational: a custom `EXCHANGES_ENABLED` without gateio/bybit now requires `CONDITIONAL_VENUES` to match.

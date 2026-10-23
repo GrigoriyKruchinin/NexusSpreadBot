@@ -46,6 +46,9 @@ x-digest-env: &digest-env
   DIGEST_TIME: ${DIGEST_TIME:-}
   DIGEST_TZ: ${DIGEST_TZ:-}
 
+x-conditional-env: &conditional-env
+  CONDITIONAL_VENUES: ${CONDITIONAL_VENUES:-}
+
 x-scanner-env: &scanner-env
   REDIS_URL: redis://redis:6379/0
   EXCHANGES_ENABLED: ${EXCHANGES_ENABLED:-}
@@ -160,7 +163,7 @@ services:
     restart: on-failure:5
     stop_grace_period: 30s
     environment:
-      <<: [*db-env, *celery-env, *log-env, *scanner-env]
+      <<: [*db-env, *celery-env, *log-env, *conditional-env, *scanner-env]
     depends_on:
       migrator: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
@@ -177,7 +180,7 @@ services:
     command: ["celery", "-A", "nexus.workers.app:celery_app", "worker", "-Q", "alerts",
               "-n", "alerts@%h", "--concurrency", "2", "--loglevel", "INFO"]
     environment:
-      <<: [*db-env, *celery-env, *log-env, *telegram-env]
+      <<: [*db-env, *celery-env, *log-env, *conditional-env, *telegram-env]
       NEXUS_WORKER_ROLE: alerts
     depends_on:
       migrator: {condition: service_completed_successfully}

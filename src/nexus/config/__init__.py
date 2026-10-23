@@ -3,6 +3,7 @@
 from nexus.config.groups import (
     CORE_EXCHANGES,
     CelerySettings,
+    ConditionalVenuesSettings,
     DatabaseSettings,
     ExchangeCredentials,
     ExchangesSettings,
@@ -25,6 +26,7 @@ __all__ = [
     "CORE_EXCHANGES",
     "AlertsWorkerSettings",
     "CelerySettings",
+    "ConditionalVenuesSettings",
     "DatabaseSettings",
     "ExchangeCredentials",
     "ExchangesSettings",

@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from nexus.config.groups import (
     AlertPolicySettings,
     CelerySettings,
+    ConditionalVenuesSettings,
     DatabaseSettings,
     DigestSettings,
     EpisodeSettings,
@@ -73,6 +74,7 @@ class ScannerRoleSettings(_RoleSettings):
     redis: RedisSettings
     celery: CelerySettings
     exchanges: ExchangesSettings
+    conditional: ConditionalVenuesSettings = Field(default_factory=ConditionalVenuesSettings)
     credentials: dict[str, ExchangeCredentials]
     key_policy: KeyPolicySettings = Field(default_factory=KeyPolicySettings)
     scanner: ScannerSettings
@@ -92,6 +94,14 @@ class ScannerRoleSettings(_RoleSettings):
             raise ValueError(msg)
         return self
 
+    @model_validator(mode="after")
+    def _conditional_subset_of_enabled(self) -> Self:
+        unknown = sorted(set(self.conditional.venues) - set(self.exchanges.enabled))
+        if unknown:
+            msg = f"CONDITIONAL_VENUES not in EXCHANGES_ENABLED: {', '.join(unknown)}"
+            raise ValueError(msg)
+        return self
+
     @classmethod
     def load(cls) -> Self:
         """Load from the process environment."""
@@ -101,6 +111,7 @@ class ScannerRoleSettings(_RoleSettings):
             redis=RedisSettings(),
             celery=CelerySettings(),
             exchanges=exchanges,
+            conditional=ConditionalVenuesSettings(),
             credentials={n: ExchangeCredentials.for_exchange(n) for n in exchanges.enabled},
             key_policy=KeyPolicySettings(),
             scanner=ScannerSettings(),
@@ -119,6 +130,7 @@ class AlertsWorkerSettings(_RoleSettings):
     database: DatabaseSettings
     celery: CelerySettings
     telegram: TelegramSettings
+    conditional: ConditionalVenuesSettings = Field(default_factory=ConditionalVenuesSettings)
     logging: LoggingSettings
 
     @classmethod
@@ -128,6 +140,7 @@ class AlertsWorkerSettings(_RoleSettings):
             database=DatabaseSettings(),
             celery=CelerySettings(),
             telegram=TelegramSettings(),
+            conditional=ConditionalVenuesSettings(),
             logging=LoggingSettings(),
         )
 

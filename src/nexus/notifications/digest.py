@@ -47,6 +47,7 @@ class DigestFormatter:
         lines = [
             "📊 <b>Ежедневный дайджест</b>",
             f"<i>{local(data.window_start_ms)} → {local(data.window_end_ms)} ({esc(tz)})</i>",
+            *self._conditional(data),
             SEPARATOR,
             *self._episodes(data.episodes),
             SEPARATOR,
@@ -59,6 +60,33 @@ class DigestFormatter:
             f"{data.unverified_evaluations}</blockquote>",
         ]
         return truncate("\n".join(lines))
+
+    @staticmethod
+    def _conditional(data: DigestData) -> list[str]:
+        """Conditional-venue note and the two combined totals (all / excluding conditional)."""
+        paper = data.paper
+        if not data.conditional_venues:
+            return [
+                "Условные биржи: нет",
+                SEPARATOR,
+                f"Эпизоды:   все {data.episodes.total}",
+                "Бумажный P&amp;L (hedged): "
+                + (f"все {fmt_usd(paper.hedged_pnl_usd, signed=True)}" if paper else "н/д"),
+            ]
+        names = ", ".join(esc(exchange_name(v)) for v in data.conditional_venues)
+        return [
+            f"⚠️ Условные биржи (данные собираются, торговать пока нельзя): {names}",
+            SEPARATOR,
+            f"Эпизоды:   все {data.episodes.total} | без условных "
+            f"{data.episodes.total_excl_conditional}",
+            "Бумажный P&amp;L (hedged): "
+            + (
+                f"все {fmt_usd(paper.hedged_pnl_usd, signed=True)}"
+                f" | без условных {fmt_usd(paper.hedged_pnl_excl_conditional_usd, signed=True)}"
+                if paper
+                else "н/д"
+            ),
+        ]
 
     @staticmethod
     def _episodes(stats: EpisodeStats) -> list[str]:

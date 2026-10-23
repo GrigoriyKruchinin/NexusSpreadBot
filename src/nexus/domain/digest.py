@@ -36,6 +36,8 @@ class EpisodeStats:
     median_duration_s: int | None = None
     max_duration_s: int | None = None
     top: tuple[EpisodeSummary, ...] = ()
+    total_excl_conditional: int = 0
+    """Episodes whose route touches no conditional venue (equals ``total`` if none configured)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +56,9 @@ class PaperStats:
     equity_usd: Decimal = ZERO
     realized_total_usd: Decimal = ZERO
     rebalance_total_usd: Decimal = ZERO
+    realized_total_excl_conditional_usd: Decimal = ZERO
+    """Since start, trades and transfers not touching a conditional venue (no equity/MTM)."""
+    rebalance_total_excl_conditional_usd: Decimal = ZERO
 
     @property
     def total_pnl_usd(self) -> Decimal:
@@ -69,6 +74,11 @@ class PaperStats:
     def hedged_pnl_usd(self) -> Decimal:
         """Since start, as if inventory price risk were hedged: arbitrage minus transfers."""
         return self.realized_total_usd - self.rebalance_total_usd
+
+    @property
+    def hedged_pnl_excl_conditional_usd(self) -> Decimal:
+        """Hedged P&L recomputed from rows not touching any conditional venue."""
+        return self.realized_total_excl_conditional_usd - self.rebalance_total_excl_conditional_usd
 
     @property
     def hedged_roc_pct(self) -> Decimal | None:
@@ -109,5 +119,7 @@ class DigestData:
     """Share of successful exchange calls in the window (``None`` = no calls recorded)."""
     coverage_pct: dict[str, int | None]
     """Latest transfer-status coverage per exchange."""
+    conditional_venues: tuple[str, ...] = ()
+    """Configured conditional venues (lowercase ids)."""
     unverified_evaluations: int = 0
     """Qualifying evaluations that were not alerted for lack of a verified transfer path."""

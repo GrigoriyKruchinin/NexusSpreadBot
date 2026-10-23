@@ -55,6 +55,10 @@ def test_digest_snapshot() -> None:
     assert DigestFormatter().render(_data(), "Europe/Moscow") == (
         "📊 <b>Ежедневный дайджест</b>\n"
         "<i>18 Oct 09:00 → 19 Oct 09:00 (Europe/Moscow)</i>\n"
+        "Условные биржи: нет\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "Эпизоды:   все 9\n"
+        "Бумажный P&amp;L (hedged): все +$25.00\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "🔀 <b>Эпизодов возможностей: 9</b>\n"
         "✅ подтверждённых 5 · ⚠️ неподтверждённых 3 · 🚫 в карантине 1\n"
@@ -123,3 +127,78 @@ async def test_digest_service_sends_last_24h() -> None:
     assert windows == [(T0, T0 + DAY)]
     assert notifier.sent[0].text.startswith("📊 <b>Ежедневный дайджест</b>")
     assert not notifier.sent[0].silent
+
+
+def _cond_data(conditional: tuple[str, ...]) -> DigestData:
+    base = _data()
+    return DigestData(
+        window_start_ms=base.window_start_ms,
+        window_end_ms=base.window_end_ms,
+        episodes=EpisodeStats(total=24, total_excl_conditional=6),
+        paper=PaperStats(
+            realized_total_usd=D("50.20"),
+            rebalance_total_usd=D("9"),
+            realized_total_excl_conditional_usd=D("12.75"),
+            rebalance_total_excl_conditional_usd=D("3"),
+        ),
+        quarantines=(),
+        active_quarantines=0,
+        uptime_pct={},
+        coverage_pct={},
+        conditional_venues=conditional,
+    )
+
+
+def test_digest_conditional_block_golden() -> None:
+    text = DigestFormatter().render(_cond_data(("bybit", "gateio")), "UTC")
+    assert text.split("\n")[2:7] == [
+        "⚠️ Условные биржи (данные собираются, торговать пока нельзя): Bybit, Gate.io",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "Эпизоды:   все 24 | без условных 6",
+        "Бумажный P&amp;L (hedged): все +$41.20 | без условных +$9.75",
+        "━━━━━━━━━━━━━━━━━━━━",
+    ]
+    assert len(text) < 4096
+
+
+def test_digest_conditional_block_empty_list() -> None:
+    text = DigestFormatter().render(_cond_data(()), "UTC")
+    assert text.split("\n")[2:6] == [
+        "Условные биржи: нет",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "Эпизоды:   все 24",
+        "Бумажный P&amp;L (hedged): все +$41.20",
+    ]
+    assert "без условных" not in text
+
+
+def test_digest_conditional_names_are_escaped() -> None:
+    text = DigestFormatter().render(_cond_data(("<b>x",)), "UTC")
+    assert "&lt;b&gt;x" in text
+    assert "<b>x" not in text.replace("<b>", "")
+
+
+def test_paper_hedged_excl_equals_all_when_no_conditional_rows() -> None:
+    p = PaperStats(realized_total_usd=D(5), rebalance_total_usd=D(1))
+    assert p.hedged_pnl_usd == D(4)
+    assert p.hedged_pnl_excl_conditional_usd == D(0)  # filled in by the repository
+
+
+async def test_digest_log_has_conditional_fields() -> None:
+    import structlog
+    from structlog.testing import capture_logs
+
+    from nexus.services.digest import DigestService
+    from tests.fakes import ManualClock, RecordingNotifier
+
+    class _Repo:
+        async def collect(self, since_ms: int, until_ms: int) -> DigestData:
+            return _cond_data(("bybit", "gateio"))
+
+    structlog.reset_defaults()
+    with capture_logs() as logs:
+        await DigestService(_Repo(), RecordingNotifier(), ManualClock(T0)).send("UTC")  # type: ignore[arg-type]
+    [record] = [r for r in logs if r["event"] == "digest_sent"]
+    assert record["conditional_venues"] == ["bybit", "gateio"]
+    assert record["total_all"] == {"episodes": 24, "paper_hedged_pnl_usd": "41.20"}
+    assert record["total_excl_conditional"] == {"episodes": 6, "paper_hedged_pnl_usd": "9.75"}

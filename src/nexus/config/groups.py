@@ -146,6 +146,35 @@ class ExchangesSettings(NexusBaseSettings):
         return normalized
 
 
+#: Venues whose data is collected but where the user may not be able to trade now (vision GO-HOLD).
+DEFAULT_CONDITIONAL_VENUES: tuple[str, ...] = ("bybit", "gateio")
+
+
+class ConditionalVenuesSettings(NexusBaseSettings):
+    """Conditional venues reported separately in every aggregate (``CONDITIONAL_VENUES``).
+
+    The subset-of-enabled check lives on the scanner role settings, the only place that knows
+    ``EXCHANGES_ENABLED``. An empty list (``[]``) means "no conditional venues".
+    """
+
+    model_config = SettingsConfigDict(env_prefix="CONDITIONAL_")
+
+    venues: StrTuple = DEFAULT_CONDITIONAL_VENUES
+
+    @field_validator("venues")
+    @classmethod
+    def _validate_venues(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        normalized = tuple(name.strip().lower() for name in value)
+        for name in normalized:
+            if not _EXCHANGE_NAME_RE.fullmatch(name):
+                msg = f"invalid conditional venue name: {name!r}"
+                raise ValueError(msg)
+        if len(set(normalized)) != len(normalized):
+            msg = "CONDITIONAL_VENUES contains duplicates"
+            raise ValueError(msg)
+        return normalized
+
+
 class ExchangeCredentials(NexusBaseSettings):
     """Read-only API credentials of a single exchange (``<NAME>_API_*``).
 

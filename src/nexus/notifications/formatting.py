@@ -7,10 +7,12 @@ Every dynamic value passes through :func:`esc` (``html.escape``): exchange-provi
 from __future__ import annotations
 
 import html
+from collections.abc import Collection
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Final
 
+from nexus.domain.conditional import conditional_legs
 from nexus.domain.events import (
     AlertContext,
     EpisodeClosed,
@@ -122,6 +124,9 @@ def truncate(text: str) -> str:
 class OpportunityFormatter:
     """Renders a profitable :class:`SpreadEvaluation` as a Telegram HTML alert."""
 
+    def __init__(self, conditional_venues: Collection[str] = ()) -> None:
+        self._conditional = tuple(conditional_venues)
+
     def render(self, evaluation: SpreadEvaluation, context: AlertContext | None = None) -> str:
         """Render the alert; requires a cost breakdown."""
         bd = evaluation.breakdown
@@ -146,8 +151,15 @@ class OpportunityFormatter:
         title = "Арбитражная возможность"
         if context.realert:
             title = f"Повтор №{context.realert}: спред растёт"
+        legs = conditional_legs(
+            evaluation.buy_exchange, evaluation.sell_exchange, self._conditional
+        )
+        marker = ""
+        if legs:
+            label = "условная биржа" if len(legs) == 1 else "условные биржи"
+            marker = f"  ⚠️ {label} ({esc(', '.join(exchange_name(v) for v in legs))})"
         lines = [
-            f"💹 <b>{esc(title)}</b> · <code>{esc(evaluation.symbol)}</code>",
+            f"💹 <b>{esc(title)}</b> · <code>{esc(evaluation.symbol)}</code>{marker}",
             *(
                 [
                     f"🔁 В прошлом алерте чистая прибыль была "

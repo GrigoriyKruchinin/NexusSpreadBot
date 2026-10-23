@@ -9,6 +9,7 @@ _PREFIXES = (
     "TELEGRAM_",
     "LOG_",
     "EXCHANGES_",
+    "CONDITIONAL_",
     "SCANNER_",
     "SPREAD_",
     "MAINTENANCE_",

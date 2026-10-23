@@ -231,3 +231,18 @@ def test_chain_tax_is_shown_without_a_verified_network() -> None:
     assert base.breakdown is not None
     taxed = replace(base, breakdown=replace(base.breakdown, transfer_fee_usd=D("15.13")))
     assert "Перевод           $15.13 налог + н/д" in OpportunityFormatter().render(taxed)
+
+
+def test_alert_marker_only_for_conditional_routes() -> None:
+    from nexus.notifications.formatting import OpportunityFormatter
+    from tests.support import make_evaluation
+
+    fmt = OpportunityFormatter(("bybit", "gateio"))
+    plain = fmt.render(make_evaluation(buy_exchange="binance", sell_exchange="okx"))
+    assert "условн" not in plain
+    one = fmt.render(make_evaluation(buy_exchange="binance", sell_exchange="bybit"))
+    assert "⚠️ условная биржа (Bybit)" in one.split("\n")[0]
+    both = fmt.render(make_evaluation(buy_exchange="bybit", sell_exchange="gateio"))
+    assert "⚠️ условные биржи (Bybit, Gate.io)" in both.split("\n")[0]
+    assert "условн" not in OpportunityFormatter().render(make_evaluation(sell_exchange="bybit"))
+    assert len(both) < 4096

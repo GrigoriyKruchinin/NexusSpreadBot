@@ -5,6 +5,7 @@ from pathlib import Path
 
 from nexus.config import (
     CelerySettings,
+    ConditionalVenuesSettings,
     DatabaseSettings,
     ExchangesSettings,
     LoggingSettings,
@@ -36,6 +37,7 @@ _GROUPS: tuple[type[NexusBaseSettings], ...] = (
     TelegramSettings,
     LoggingSettings,
     ExchangesSettings,
+    ConditionalVenuesSettings,
     ScannerSettings,
     SpreadSettings,
     MaintenanceSettings,

@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import statistics
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from nexus.domain.conditional import touches_conditional
 from nexus.domain.digest import (
     DigestData,
     EpisodeStats,
@@ -660,11 +661,15 @@ _QUARANTINES_LISTED = 10
 class DigestRepository(_Repository, IDigestRepository):
     """Read-only aggregates for the daily digest."""
 
+    def __init__(self, sessions: Sessions, conditional_venues: Collection[str] = ()) -> None:
+        super().__init__(sessions)
+        self._conditional = tuple(conditional_venues)
+
     async def collect(self, since_ms: int, until_ms: int) -> DigestData:
         """Aggregate the window ``[since_ms, until_ms)``."""
         since, until = ms_to_datetime(since_ms), ms_to_datetime(until_ms)
         async with self._sessions() as session:
-            episodes = await self._episodes(session, since, until)
+            episodes = await self._episodes(session, since, until, self._conditional)
             unverified = await session.scalar(
                 select(func.count()).where(
                     SpreadEvaluationRow.evaluated_at >= since,
@@ -672,7 +677,7 @@ class DigestRepository(_Repository, IDigestRepository):
                     SpreadEvaluationRow.status == EvaluationStatus.TRANSFER_UNVERIFIED.value,
                 )
             )
-            paper = await self._paper(session, since, until)
+            paper = await self._paper(session, since, until, self._conditional)
             quarantines, active = await self._quarantines(session, since, until)
             uptime = await self._uptime(session, since, until)
             coverage = await self._coverage(session, until)
@@ -685,11 +690,14 @@ class DigestRepository(_Repository, IDigestRepository):
             active_quarantines=active,
             uptime_pct=uptime,
             coverage_pct=coverage,
+            conditional_venues=self._conditional,
             unverified_evaluations=int(unverified or 0),
         )
 
     @staticmethod
-    async def _episodes(session: AsyncSession, since: datetime, until: datetime) -> EpisodeStats:
+    async def _episodes(
+        session: AsyncSession, since: datetime, until: datetime, conditional: Collection[str]
+    ) -> EpisodeStats:
         rows = (
             await session.scalars(
                 select(OpportunityEpisodeRow).where(
@@ -707,6 +715,11 @@ class DigestRepository(_Repository, IDigestRepository):
         top = sorted(rows, key=lambda r: r.peak_net_usd, reverse=True)[:_TOP_EPISODES]
         return EpisodeStats(
             total=len(rows),
+            total_excl_conditional=sum(
+                1
+                for r in rows
+                if not touches_conditional(r.buy_exchange, r.sell_exchange, conditional)
+            ),
             verified=verified,
             unverified=len(rest) - verified,
             quarantined=len(quarantined),
@@ -729,7 +742,9 @@ class DigestRepository(_Repository, IDigestRepository):
         )
 
     @staticmethod
-    async def _paper(session: AsyncSession, since: datetime, until: datetime) -> PaperStats | None:
+    async def _paper(
+        session: AsyncSession, since: datetime, until: datetime, conditional: Collection[str]
+    ) -> PaperStats | None:
         latest = await session.scalar(
             select(func.max(PaperBalanceSnapshotRow.captured_at)).where(
                 PaperBalanceSnapshotRow.captured_at < until
@@ -810,6 +825,26 @@ class DigestRepository(_Repository, IDigestRepository):
         rebalance_total = await session.scalar(
             select(func.coalesce(func.sum(PaperRebalanceRow.fee_usd), 0)).where(moved)
         )
+        # Hedged P&L without conditional venues: trades and transfers where neither leg
+        # (buy/sell, from/to) is a conditional venue. Equity/mark-to-market is not split.
+        trade_free = ~or_(
+            PaperTradeRow.buy_exchange.in_(conditional),
+            PaperTradeRow.sell_exchange.in_(conditional),
+        )
+        rebalance_free = ~or_(
+            PaperRebalanceRow.from_exchange.in_(conditional),
+            PaperRebalanceRow.to_exchange.in_(conditional),
+        )
+        realized_excl = await session.scalar(
+            select(func.coalesce(func.sum(PaperTradeRow.net_usd), 0)).where(
+                PaperTradeRow.executed.is_(True), trade_free
+            )
+        )
+        rebalance_excl = await session.scalar(
+            select(func.coalesce(func.sum(PaperRebalanceRow.fee_usd), 0)).where(
+                moved, rebalance_free
+            )
+        )
         return PaperStats(
             trades=int(trades or 0),
             skipped=skipped,
@@ -821,6 +856,8 @@ class DigestRepository(_Repository, IDigestRepository):
             equity_usd=equity,
             realized_total_usd=Decimal(realized_total or 0),
             rebalance_total_usd=Decimal(rebalance_total or 0),
+            realized_total_excl_conditional_usd=Decimal(realized_excl or 0),
+            rebalance_total_excl_conditional_usd=Decimal(rebalance_excl or 0),
         )
 
     @staticmethod
