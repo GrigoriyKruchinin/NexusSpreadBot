@@ -1,0 +1,9 @@
+........................................................................ [ 89%]
+.................................................                        [100%]
+============================= slowest 5 durations ==============================
+2.01s call     tests/unit/adapters/test_ccxt_adapters.py::test_timeout_maps_to_unavailable
+0.33s call     tests/unit/adapters/test_binance_public.py::test_real_binance_adapter_wires_public_fallback
+0.29s call     tests/unit/adapters/test_ccxt_adapters.py::test_registry_builds_real_clients_without_network[binance]
+0.28s call     tests/unit/test_safety.py::test_new_exchange_ws_client_has_no_post_allowlist[mexc]
+0.28s call     tests/unit/test_safety.py::test_runtime_guard_blocks_non_get[binance]
+481 passed, 12 deselected in 14.28s
