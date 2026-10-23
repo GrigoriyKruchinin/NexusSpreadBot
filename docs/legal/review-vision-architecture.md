@@ -81,6 +81,7 @@ check each before Stage 2.
     2026-07-01 (source 12).
   - okx: product restrictions for Russia-verified users (2023), no general ban found (source 1).
   - kucoin, gate: no Russia ban found; only P2P bank restrictions (sources 4-5).
+    **Superseded for gate by Addendum A** (Gate lists Argentina and Russia as Restricted Locations).
   - Russian nationality is a KYC risk factor; enhanced due diligence and sudden policy changes
     are likely. This is the single largest legal-operational risk for capital at GO.
 - **Argentina registration of venues:** binance and bybit appear in the CNV PSAV register per
@@ -142,3 +143,24 @@ check each before Stage 2.
 15. ARCA, criptoactivos — impuesto a las ganancias: https://arca.gob.ar/economia-digital/criptoactivos/impuesto-a-las-ganancias.asp
 16. private.law wiki, Russian currency residency reporting (secondary): https://wiki.private.law/en/russia-foreign-account-reporting
 17. EU Reg. 833/2014 art. 5b(2)-(3) text as quoted by Luxembourg Ministry of Finance and Skadden FAQ: https://www.skadden.com/-/media/files/publications/2022/04/us-uk-and-eu-impose-new-sanctions-and-export-controls/faqssanctionsrussiacryptoassets_en.pdf (consolidated EUR-Lex text not checked — *unverified current wording*)
+
+## Addendum A — 2026-10-23: per-venue account status (preliminary, not legal advice)
+
+Trigger: new user facts (citizenship, KYC location, declared residence, Bybit hold). Facts and
+item statuses live in [`go-gates-checklist.md`](go-gates-checklist.md) (F5-F10, G1.1-G1.9,
+G4.2); sources L1-L12 are listed there (accessed 2026-10-23).
+
+**Correction to section 4:** "kucoin, gate: no Russia ban found" is **no longer accurate for
+gate**. Gate User Agreement (last updated 2026-07-22) cl. 2.5 lists both **Argentina and Russia**
+among Restricted Locations (L5, *automated extraction — human re-read required*). Consequences:
+gateio is likely outside service scope for an Argentina resident -> G1.2 `blocked` pending a
+written answer from Gate; propose excluding gateio from the GO set (same rule as Bybit, G1.7).
+Open point for the orchestrator/architect: `CORE_EXCHANGES` (ADR 0002) includes gateio; Stage 1
+public data calls from Argentina may also count as access from a restricted location (G2.2).
+
+| Venue | Assessment | Recommendation |
+|---|---|---|
+| binance | Russia-resident accounts remain under the 2022 sanctions regime (EUR 10,000 cap, withdrawal-only above; Binance said in 2023 limits apply in full; CommEX closed 2024 and Binance kept existing Russian users) — *2026 status unverified* (L2, L3). Declared residence Russia is stale since the user lives in Argentina. Binance provides an in-account residence change with proof of address, possibly a KYC reset (L1). One verified account per person (L4, secondary). | **Update residence on the existing account**; do not open a second one. New account only after the old one is closed with Binance's written consent. Not usable for Nexus until updated. |
+| bybit | Hold of one transfer pending compliance is within Bybit's ToS discretion (typical source-of-funds review, L12 anecdotal). Russia, Argentina, Montenegro, Georgia, Armenia are not on Bybit's excluded list (L10). A non-Argentine declared residence matters for G1: data must be current and truthful, so G1.5 cannot be `done` until residence = Argentina (or Bybit explains it cannot be changed). | Stay in the single ticket; answer truthfully with source-of-funds material; ask for reason category, timeline, residence-update path. No new KYC, no new account (L11). Escalation beyond support: Q4a for a human lawyer. |
+| kucoin | No Russia/Argentina restriction found (L7, secondary; official terms not readable). | Confirm residence field = Argentina. |
+| okx | Neither Russia nor Argentina restricted (L8); Russia only for fiat payments; product limits for Russia-verified users; ToS duty to update data, no multi-accounts (L9). | Confirm residence field = Argentina; list restricted products. |
