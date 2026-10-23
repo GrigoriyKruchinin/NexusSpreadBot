@@ -16,3 +16,8 @@ tests
 docs
 todo.md
 CLAUDE.md
+backups
+nexus-backups
+*.dump
+*.dump.partial
+*.age

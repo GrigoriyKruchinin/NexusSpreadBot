@@ -6,7 +6,7 @@
 - reviewers: security, tech-lead
 - complexity: medium (credentials handling, retention, restore verification)
 - depends_on: A1 (done); A5c for the `nexus_ro` and `nexus_test_owner` roles (may bootstrap minimal versions of both if A5c is not yet done, same grants as target.md §10.1)
-- status: todo
+- status: in progress (2026-10-23): scripts, tests, guide done; dump + drill NOT run, blocked on roles (NEEDS_USER)
 - **U4 gate: touches the live DB and Docker. User OK is required before execution (backups read the `nexus` DB, restore drill creates/overwrites `nexus_test`). Never restore into `nexus`.**
 
 ## Goal

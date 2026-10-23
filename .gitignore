@@ -226,3 +226,10 @@ __marimo__/
 
 # Claude Code local overrides
 .claude/settings.local.json
+
+# Backups / dumps (A5a): default dir is ~/nexus-backups, outside the repo
+backups/
+nexus-backups/
+*.dump
+*.dump.partial
+*.age
