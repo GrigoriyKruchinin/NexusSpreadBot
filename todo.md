@@ -9,7 +9,8 @@ Ticks only after verification and commit.
 - [x] U1 team approved (14 agents)
 - [x] Claude files, conventions, STATE, context plan, guide
 - [x] Phase 5: vision (`docs/product/vision.md`), target architecture + migration plan, ADR 0003-0005 accepted
-- [ ] Phase 5 tail: lawyer/security review of vision+architecture; user confirms 3 vision proposals (Rework rule, portfolio pivot, manual rebalancing)
+- [x] User confirmed vision proposals (portfolio default pivot, manual rebalancing; Rework extended to up to 5 iterations, ADR 0007)
+- [ ] Phase 5 tail: lawyer/security review of vision+architecture
 - [x] U2 decisions: DEX seam only (ADR 0006), risk-manager added; roadmap = `docs/architecture/migration-plan.md` (project-manager cuts cards)
 
 ## Track 0 — Base (M1/M2 start)
@@ -41,6 +42,8 @@ Ticks only after verification and commit.
 - [ ] Dashboards as code (observability-engineer; ADR on stack)
 - [ ] `docs/reports/go-no-go.md`
 
-## M4 — Fork (UF): GO / Rework / NO-GO (portfolio packaging only on explicit confirmation)
+## M4 — Fork (UF): GO / Rework / NO-GO
+- [ ] Iteration loop: up to 5 iterations of hypothesis search (vision + analyzer + quant + crypto), reports in `docs/reports/iterations/`, no separate code copies (ADR 0007)
+- [ ] After 5 failed iterations: NO-GO -> portfolio packaging (only on explicit confirmation)
 
 ## Stage 2 / 3 (only after GO) — see `docs/pipeline/nexus-appendix.md` P7

@@ -1,6 +1,6 @@
 # Nexus — Product vision
 
-Date: 2026-10-23. Author: creative-ceo. Status: proposal for U2/UF; the user decides.
+Date: 2026-10-23. Author: creative-ceo. Status: accepted by the user 2026-10-23 (three proposals confirmed; Rework rule extended, see section 5 and ADR 0007).
 Inputs: `CLAUDE.md`, `docs/pipeline/intake.md`, `docs/pipeline/nexus-appendix.md`,
 `docs/product/stage1-history.md`, ADR 0001, 0002, 0006, `docs/architecture/target.md`.
 
@@ -65,10 +65,29 @@ The verdict comes from `quant-analyst` (`viability-verdict`) plus `lawyer`; the 
 | Outcome | Evidence needed | What happens next |
 |---|---|---|
 | **GO** | All three GO conditions hold; positive after rebalancing and mark-to-market; result stable across at least two separate periods and not dependent on 1-2 routes or coins (the soak showed 24 of 30 episodes from one route, LUNC) | Stage 2: executor behind ADR 0001 revision, risk-manager limits, kill switch, trade-only keys (no withdrawal, IP whitelist), start with minimal size and a paper-vs-live comparison for weeks. Live money only on explicit user confirmation. |
-| **Rework** | Money is close (say 0.8-2 % net) or positive only in some regimes, and a *named* lever exists that is testable with existing data: different symbol filters, size caps, one-directional strategy without transfers (pre-funded both sides), a longer or different period | One bounded iteration (time-boxed, with a stated success test written before the run). A second Rework on the same hypothesis is treated as NO-GO. No scope growth in the meantime (no DEX "to fix it"). |
+| **Rework** (iteration 1-5) | Net return is below the threshold, but money may exist elsewhere. The goal is to **find a way to earn on spreads**, not to prove the current hypothesis. | A search loop of up to **5 iterations** (see below). |
 | **NO-GO** | Net below threshold out-of-sample, or only positive via unverifiable assumptions, or a blocking legal verdict | Stop spending on trading. Keep the repo as a finished, honest analysis (the NO-GO is itself the deliverable), then choose a pivot below. |
 
-### Honest pivots after NO-GO (or a weak Rework)
+### Iteration loop (user decision 2026-10-23, ADR 0007)
+
+The project exists to earn money on spreads; it does not exist to make one hypothesis work.
+If the current approach shows no viable net return, the team must propose and test other
+approaches, up to **5 iterations**:
+
+1. Per iteration, `creative-ceo` (vision) + `analyzer` + `quant-analyst` (math) + `crypto-specialist`
+   (venues, networks, fees) jointly propose 1-3 named, testable hypotheses (e.g. other symbol or
+   venue sets, pre-funded two-sided inventory without transfers, different size caps, other spread
+   types, other time windows).
+2. The success test and time box are written **before** the run; `quant-analyst` runs it honestly
+   (out-of-sample, after all costs) and writes the verdict.
+3. Iterations live as reports and parameter sets in `docs/reports/iterations/NN-*.md` and git
+   tags, **not** as separate code copies (no codebase bloat). Only code that serves the
+   core engine is merged.
+4. Scope guard stays: no DEX build and no new money-touching code during iterations; the user
+   confirms at each UF point.
+5. GO at any iteration -> Stage 2. After iteration 5 without GO -> NO-GO and the portfolio pivot.
+
+### Honest pivots after NO-GO (after 5 failed iterations)
 
 1. **Portfolio project (default).** Tidy README, architecture docs, ADRs, audit trail, a short
    write-up "what 5 CEX spreads actually look like after costs". Cheap, real value for a
