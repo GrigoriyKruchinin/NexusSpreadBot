@@ -1,3 +1,4 @@
+from dataclasses import replace
 from decimal import Decimal as D
 
 from nexus.domain.digest import (
@@ -155,7 +156,7 @@ def test_digest_conditional_block_golden() -> None:
         "⚠️ Условные биржи (данные собираются, торговать пока нельзя): Bybit, Gate.io",
         "━━━━━━━━━━━━━━━━━━━━",
         "Эпизоды:   все 24 | без условных 6",
-        "Бумажный P&amp;L (hedged): все +$41.20 | без условных +$9.75",
+        "Бумажный P&amp;L (hedged): все +$41.20 | без условных ≈ +$9.75 (оценка)",
         "━━━━━━━━━━━━━━━━━━━━",
     ]
     assert len(text) < 4096
@@ -174,14 +175,48 @@ def test_digest_conditional_block_empty_list() -> None:
 
 def test_digest_conditional_names_are_escaped() -> None:
     text = DigestFormatter().render(_cond_data(("<b>x",)), "UTC")
-    assert "&lt;b&gt;x" in text
-    assert "<b>x" not in text.replace("<b>", "")
+    assert text.split("\n")[2] == (
+        "⚠️ Условные биржи (данные собираются, торговать пока нельзя): &lt;b&gt;x"
+    )
+    assert "<b>x" not in text
 
 
-def test_paper_hedged_excl_equals_all_when_no_conditional_rows() -> None:
+def test_paper_hedged_excl_is_unknown_until_computed() -> None:
     p = PaperStats(realized_total_usd=D(5), rebalance_total_usd=D(1))
     assert p.hedged_pnl_usd == D(4)
-    assert p.hedged_pnl_excl_conditional_usd == D(0)  # filled in by the repository
+    assert p.hedged_pnl_excl_conditional_usd is None  # never a silent +$0.00
+    done = PaperStats(
+        realized_total_excl_conditional_usd=D(5), rebalance_total_excl_conditional_usd=D(1)
+    )
+    assert done.hedged_pnl_excl_conditional_usd == D(4)
+
+
+def test_digest_shows_na_when_excl_values_are_missing() -> None:
+    base = _cond_data(("bybit", "gateio"))
+    data = replace(
+        base,
+        episodes=EpisodeStats(total=24),
+        paper=PaperStats(realized_total_usd=D("50.20"), rebalance_total_usd=D("9")),
+    )
+    lines = DigestFormatter().render(data, "UTC").split("\n")
+    assert lines[4] == "Эпизоды:   все 24 | без условных н/д"
+    assert lines[5] == "Бумажный P&amp;L (hedged): все +$41.20 | без условных н/д"
+    no_paper = DigestFormatter().render(replace(base, paper=None), "UTC").split("\n")
+    assert no_paper[5] == "Бумажный P&amp;L (hedged): н/д"
+
+
+async def test_digest_log_na_when_excl_missing() -> None:
+    from nexus.services.digest import summary_totals
+
+    data = replace(
+        _cond_data(("bybit",)),
+        episodes=EpisodeStats(total=3),
+        paper=PaperStats(realized_total_usd=D(2)),
+    )
+    assert summary_totals(data, excl_conditional=True) == {
+        "episodes": None,
+        "paper_hedged_pnl_usd": None,
+    }
 
 
 async def test_digest_log_has_conditional_fields() -> None:

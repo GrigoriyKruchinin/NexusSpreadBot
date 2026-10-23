@@ -403,3 +403,63 @@ def test_env_example_conditional_matches_default() -> None:
         ln for ln in ENV_EXAMPLE.read_text().splitlines() if ln.startswith("CONDITIONAL_VENUES=")
     )
     assert tuple(json.loads(line.split("=", 1)[1])) == ("bybit", "gateio")
+
+
+def _scanner_env(monkeypatch: pytest.MonkeyPatch, enabled: str) -> None:
+    monkeypatch.setenv("POSTGRES_PASSWORD", DB_PASSWORD)
+    monkeypatch.setenv("EXCHANGES_ENABLED", enabled)
+
+
+def test_scanner_unset_conditional_follows_narrowed_enabled_with_warning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from structlog.testing import capture_logs
+
+    _scanner_env(monkeypatch, "binance,bybit,okx")  # gateio not enabled, CONDITIONAL_VENUES unset
+    with capture_logs() as logs:
+        settings = ScannerRoleSettings.load()
+    assert settings.conditional.venues == ("bybit",)
+    [record] = [r for r in logs if r["event"] == "conditional_venues_defaulted"]
+    assert record["log_level"] == "warning"
+    assert record["default"] == ["bybit", "gateio"]
+    assert record["effective"] == ["bybit"]
+
+
+def test_scanner_unset_conditional_no_warning_when_all_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from structlog.testing import capture_logs
+
+    _scanner_env(monkeypatch, "binance,bybit,gateio")
+    with capture_logs() as logs:
+        assert ScannerRoleSettings.load().conditional.venues == ("bybit", "gateio")
+    assert not [r for r in logs if r["event"] == "conditional_venues_defaulted"]
+
+
+def test_scanner_empty_conditional_env_is_treated_as_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _scanner_env(monkeypatch, "binance,okx")
+    monkeypatch.setenv("CONDITIONAL_VENUES", "")  # compose passes unset as ""
+    assert ScannerRoleSettings.load().conditional.venues == ()
+
+
+def test_scanner_explicit_conditional_unknown_venue_fails_fast(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from structlog.testing import capture_logs
+
+    _scanner_env(monkeypatch, "binance,bybit,gateio")
+    monkeypatch.setenv("CONDITIONAL_VENUES", "gate")  # typo of gateio
+    with capture_logs() as logs, pytest.raises(ValidationError, match="gate"):
+        ScannerRoleSettings.load()
+    assert not [r for r in logs if r["event"] == "conditional_venues_defaulted"]
+    monkeypatch.setenv("CONDITIONAL_VENUES", "bybit,okx")  # okx is not enabled
+    with pytest.raises(ValidationError, match="okx"):
+        ScannerRoleSettings.load()
+
+
+def test_scanner_explicit_empty_list_means_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    _scanner_env(monkeypatch, "binance,okx")
+    monkeypatch.setenv("CONDITIONAL_VENUES", "[]")
+    assert ScannerRoleSettings.load().conditional.venues == ()

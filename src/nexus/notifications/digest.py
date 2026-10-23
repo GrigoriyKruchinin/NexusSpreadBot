@@ -73,16 +73,18 @@ class DigestFormatter:
                 "Бумажный P&amp;L (hedged): "
                 + (f"все {fmt_usd(paper.hedged_pnl_usd, signed=True)}" if paper else "н/д"),
             ]
+        excl = paper.hedged_pnl_excl_conditional_usd if paper else None
+        excl_text = "н/д" if excl is None else f"≈ {fmt_usd(excl, signed=True)} (оценка)"
+        ep_excl = data.episodes.total_excl_conditional
         names = ", ".join(esc(exchange_name(v)) for v in data.conditional_venues)
         return [
             f"⚠️ Условные биржи (данные собираются, торговать пока нельзя): {names}",
             SEPARATOR,
             f"Эпизоды:   все {data.episodes.total} | без условных "
-            f"{data.episodes.total_excl_conditional}",
+            f"{'н/д' if ep_excl is None else ep_excl}",
             "Бумажный P&amp;L (hedged): "
             + (
-                f"все {fmt_usd(paper.hedged_pnl_usd, signed=True)}"
-                f" | без условных {fmt_usd(paper.hedged_pnl_excl_conditional_usd, signed=True)}"
+                f"все {fmt_usd(paper.hedged_pnl_usd, signed=True)} | без условных {excl_text}"
                 if paper
                 else "н/д"
             ),

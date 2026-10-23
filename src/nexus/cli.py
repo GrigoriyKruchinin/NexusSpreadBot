@@ -33,6 +33,7 @@ async def _run_scanner() -> None:
     log.info(
         "scanner_starting",
         exchanges=list(settings.exchanges.enabled),
+        conditional_venues=list(settings.conditional.venues),
         require_verified_transfer=settings.spread.require_verified_transfer,
     )
     async with scanner_scope(settings) as scanner:

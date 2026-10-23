@@ -6,7 +6,7 @@
 - reviewers: tech-lead (diff), quant-analyst (totals semantics, later quant reports)
 - complexity: medium (cross-cutting read-side change; config validation across groups; no scanner/DB logic change)
 - depends_on: B1 (done)
-- status: implemented, awaiting review (not committed). 646 unit tests; see Implementation notes
+- status: review (round 2 fixes applied, not committed). 656 unit tests; see Implementation notes
 
 ## Goal
 Every aggregate shows which venues are "conditional" (data collected, but possibly not tradable for
@@ -83,4 +83,6 @@ generator itself (it must call the helper once it exists); DB migrations; exchan
 - Excl P&L = hedged only (arbitrage minus transfers); equity/MTM not split. SQL paths of `_paper` are covered only by integration tests (not run here).
 - Logs: `digest_sent` carries `conditional_venues`, `total_all`, `total_excl_conditional` (dicts: episodes, paper_hedged_pnl_usd). Scanner-side paper logs unchanged.
 - Telegram HTML uses `P&amp;L`. Alert marker is a suffix on the title line only.
-- Operational: a custom `EXCHANGES_ENABLED` without gateio/bybit now requires `CONDITIONAL_VENUES` to match.
+- Operational (round 2): explicit `CONDITIONAL_VENUES` must be a subset of `EXCHANGES_ENABLED` (fail-fast, typo guard). Unset/empty: default list is intersected with `EXCHANGES_ENABLED`, warning `conditional_venues_defaulted`. The alerts worker has no `EXCHANGES_ENABLED`, so it keeps the full default (harmless: a non-enabled venue never matches).
+- Round 2 (tech-lead points 1-3, 5): WHERE clauses extracted to `trade_free_clause` / `rebalance_free_clause` and compiled in a unit test; excl fields are `None` (shown `н/д`, never silent +$0.00); digest labels excl P&L `≈ ... (оценка)`; startup logs `scanner_starting.conditional_venues` and `alerts_worker_starting.conditional_venues`.
+- Known semantics (tech-lead point 4, quant review): excl rebalance cost includes transfers between free venues triggered by conditional-venue trades (conservative); equity/MTM not split; excl P&L is a filter estimate, not GO evidence (see docs/quant/b14-conditional-totals-review.md). Point 6 (validate names against adapter registry) deferred to a later card.

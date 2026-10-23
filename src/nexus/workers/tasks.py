@@ -17,7 +17,7 @@ from celery import Task
 from celery.signals import worker_init, worker_process_init
 from sqlalchemy.exc import SQLAlchemyError
 
-from nexus.config.groups import LoggingSettings
+from nexus.config.groups import ConditionalVenuesSettings, LoggingSettings
 from nexus.config.roles import AlertsWorkerSettings, MaintenanceWorkerSettings
 from nexus.domain.errors import NotificationError, NotificationRejectedError
 from nexus.domain.events import AlertContext
@@ -61,6 +61,10 @@ def _validate_role_settings(**_: Any) -> None:
 def _init_logging(**_: Any) -> None:
     role = os.environ.get(WORKER_ROLE_ENV, "worker")
     configure_logging(LoggingSettings(), service=f"worker-{role}")
+    if role == "alerts":
+        log.info(
+            "alerts_worker_starting", conditional_venues=list(ConditionalVenuesSettings().venues)
+        )
 
 
 @cache

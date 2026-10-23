@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import ColumnElement, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -658,6 +658,20 @@ _TOP_EPISODES = 5
 _QUARANTINES_LISTED = 10
 
 
+def trade_free_clause(conditional: Collection[str]) -> ColumnElement[bool]:
+    """WHERE: paper trade touching no conditional venue (either leg excludes it)."""
+    names = tuple(conditional)
+    return ~or_(PaperTradeRow.buy_exchange.in_(names), PaperTradeRow.sell_exchange.in_(names))
+
+
+def rebalance_free_clause(conditional: Collection[str]) -> ColumnElement[bool]:
+    """WHERE: paper transfer whose from/to venues are both non-conditional."""
+    names = tuple(conditional)
+    return ~or_(
+        PaperRebalanceRow.from_exchange.in_(names), PaperRebalanceRow.to_exchange.in_(names)
+    )
+
+
 class DigestRepository(_Repository, IDigestRepository):
     """Read-only aggregates for the daily digest."""
 
@@ -827,22 +841,14 @@ class DigestRepository(_Repository, IDigestRepository):
         )
         # Hedged P&L without conditional venues: trades and transfers where neither leg
         # (buy/sell, from/to) is a conditional venue. Equity/mark-to-market is not split.
-        trade_free = ~or_(
-            PaperTradeRow.buy_exchange.in_(conditional),
-            PaperTradeRow.sell_exchange.in_(conditional),
-        )
-        rebalance_free = ~or_(
-            PaperRebalanceRow.from_exchange.in_(conditional),
-            PaperRebalanceRow.to_exchange.in_(conditional),
-        )
         realized_excl = await session.scalar(
             select(func.coalesce(func.sum(PaperTradeRow.net_usd), 0)).where(
-                PaperTradeRow.executed.is_(True), trade_free
+                PaperTradeRow.executed.is_(True), trade_free_clause(conditional)
             )
         )
         rebalance_excl = await session.scalar(
             select(func.coalesce(func.sum(PaperRebalanceRow.fee_usd), 0)).where(
-                moved, rebalance_free
+                moved, rebalance_free_clause(conditional)
             )
         )
         return PaperStats(

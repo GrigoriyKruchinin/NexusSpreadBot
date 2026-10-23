@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Self
 
+import structlog
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nexus.config.groups import (
@@ -30,6 +31,8 @@ from nexus.config.groups import (
     SpreadSettings,
     TelegramSettings,
 )
+
+log = structlog.get_logger(__name__)
 
 
 class _RoleSettings(BaseModel):
@@ -96,6 +99,7 @@ class ScannerRoleSettings(_RoleSettings):
 
     @model_validator(mode="after")
     def _conditional_subset_of_enabled(self) -> Self:
+        """Fail fast on an explicit list that names a venue that is not enabled (typo guard)."""
         unknown = sorted(set(self.conditional.venues) - set(self.exchanges.enabled))
         if unknown:
             msg = f"CONDITIONAL_VENUES not in EXCHANGES_ENABLED: {', '.join(unknown)}"
@@ -106,12 +110,25 @@ class ScannerRoleSettings(_RoleSettings):
     def load(cls) -> Self:
         """Load from the process environment."""
         exchanges = ExchangesSettings()
+        conditional = ConditionalVenuesSettings()
+        if "venues" not in conditional.model_fields_set:
+            # Default list: follow a narrowed EXCHANGES_ENABLED instead of crashing on a
+            # variable the operator never set. An explicit list is validated strictly.
+            kept = tuple(v for v in conditional.venues if v in exchanges.enabled)
+            if kept != conditional.venues:
+                log.warning(
+                    "conditional_venues_defaulted",
+                    default=list(conditional.venues),
+                    effective=list(kept),
+                    exchanges=list(exchanges.enabled),
+                )
+                conditional = ConditionalVenuesSettings(venues=kept)
         return cls(
             database=DatabaseSettings(),
             redis=RedisSettings(),
             celery=CelerySettings(),
             exchanges=exchanges,
-            conditional=ConditionalVenuesSettings(),
+            conditional=conditional,
             credentials={n: ExchangeCredentials.for_exchange(n) for n in exchanges.enabled},
             key_policy=KeyPolicySettings(),
             scanner=ScannerSettings(),

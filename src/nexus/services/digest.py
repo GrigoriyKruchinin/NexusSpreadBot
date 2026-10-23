@@ -21,9 +21,8 @@ def summary_totals(data: DigestData, *, excl_conditional: bool) -> dict[str, int
     paper = data.paper
     pnl: str | None = None
     if paper is not None:
-        pnl = str(
-            paper.hedged_pnl_excl_conditional_usd if excl_conditional else paper.hedged_pnl_usd
-        )
+        value = paper.hedged_pnl_excl_conditional_usd if excl_conditional else paper.hedged_pnl_usd
+        pnl = None if value is None else str(value)
     return {"episodes": episodes, "paper_hedged_pnl_usd": pnl}
 
 

@@ -36,8 +36,8 @@ class EpisodeStats:
     median_duration_s: int | None = None
     max_duration_s: int | None = None
     top: tuple[EpisodeSummary, ...] = ()
-    total_excl_conditional: int = 0
-    """Episodes whose route touches no conditional venue (equals ``total`` if none configured)."""
+    total_excl_conditional: int | None = None
+    """Episodes on routes touching no conditional venue (``None`` = not computed)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,9 +56,9 @@ class PaperStats:
     equity_usd: Decimal = ZERO
     realized_total_usd: Decimal = ZERO
     rebalance_total_usd: Decimal = ZERO
-    realized_total_excl_conditional_usd: Decimal = ZERO
-    """Since start, trades and transfers not touching a conditional venue (no equity/MTM)."""
-    rebalance_total_excl_conditional_usd: Decimal = ZERO
+    realized_total_excl_conditional_usd: Decimal | None = None
+    """Since start, trades not touching a conditional venue (no equity/MTM); ``None`` = unknown."""
+    rebalance_total_excl_conditional_usd: Decimal | None = None
 
     @property
     def total_pnl_usd(self) -> Decimal:
@@ -76,9 +76,13 @@ class PaperStats:
         return self.realized_total_usd - self.rebalance_total_usd
 
     @property
-    def hedged_pnl_excl_conditional_usd(self) -> Decimal:
-        """Hedged P&L recomputed from rows not touching any conditional venue."""
-        return self.realized_total_excl_conditional_usd - self.rebalance_total_excl_conditional_usd
+    def hedged_pnl_excl_conditional_usd(self) -> Decimal | None:
+        """Hedged P&L from rows not touching any conditional venue; ``None`` if not computed."""
+        realized = self.realized_total_excl_conditional_usd
+        rebalance = self.rebalance_total_excl_conditional_usd
+        if realized is None or rebalance is None:
+            return None
+        return realized - rebalance
 
     @property
     def hedged_roc_pct(self) -> Decimal | None:
