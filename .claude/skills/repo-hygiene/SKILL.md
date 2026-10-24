@@ -15,8 +15,8 @@ what stays matches reality.
 - `analyzer` writes the list `docs/audit/hygiene-<stage>.md`: each file -> KEEP / UPDATE (what is wrong) /
   DELETE (why; what replaces it). Checks: references to removed code, commands, agents or files; facts that
   contradict STATE.md/code; duplicates; one-off files whose content already lives elsewhere.
-- `scribe` applies UPDATE and DELETE (`git rm`), fixes links that pointed to deleted files, one commit
-  `chore(docs): stage <X> hygiene`.
+- `scribe` applies UPDATE items and fixes links that pointed to files marked DELETE (scribe has no shell).
+- `orchestrator` runs `git rm` for DELETE items and makes one commit `chore(docs): stage <X> hygiene`.
 - Agent/skill files: update by `orchestrator` or `scribe`; a skill no agent references and no workflow uses -> DELETE.
 
 ## Rules (what goes)
