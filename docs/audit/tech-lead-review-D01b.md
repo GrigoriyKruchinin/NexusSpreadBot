@@ -65,3 +65,51 @@ anyway and require a deliberate restart. Also note it in `docs/guides/` where se
 - Exit 127 mechanism itself not confirmed; the design removes the dependency and adds a generic recovery path.
 - After `wsl --shutdown` the Task Scheduler keep-alive is gone until next logon; Ubuntu stays up via Docker Desktop's
   integration. "PC off / not logged in" is only covered by the optional external heartbeat (user decision).
+
+---
+
+# Round 2 (2026-10-24)
+
+Scope: `0074278..4bcdacd` (98f511a compose long-syntax bind, 8a170ef watchdog fixes + tests, 4bcdacd guide/handoff).
+
+## Verdict: ACCEPT (code + tests). Deploy command list: ACCEPT with 2 required doc corrections (D-1, D-2 below),
+to be applied verbatim before running; no further review round needed for them.
+
+Checks: `make check` green (1129 unit passed, +7 vs round 1; ruff 0, mypy --strict 0; ratchet not worse). No docker
+state changes, no integration tests, watchdog not run.
+
+## Round 1 points
+| # | Status | Evidence |
+|---|---|---|
+| 1 empty bind | closed | long syntax, `read_only: true`, `bind.create_host_path: false`; `test_maintenance_worker_mounts_backup_status_read_only` pins all four fields; bind detection handles dict entries; guide step 3 updated |
+| 2 start timeout | closed | `dc_start` with `WATCHDOG_START_TIMEOUT_S=240`; fake `timeout` asserts `20,60,240,20,60` |
+| 3 deploy steps | closed (see D-1/D-2) | clean-tree check on `config/ src/ Dockerfile`; BEFORE/AFTER run-id grep |
+| 4 two messages | closed | `recovery_sent` set only on successful send; failed send falls back to "healthy again"; test |
+| 5 tests | closed | failed start (no message, `fails=1`), lock held via `fcntl.flock` (exit 0, no calls) |
+| 6 parked scanner | closed | guide: pause before stopping the scanner, resume after |
+
+## Security points
+| # | Status | Note |
+|---|---|---|
+| F-1 | closed | reminder after 12 h, once per 12 h, stamp written only on successful send; pause check now after the lock (fine) |
+| F-2 | closed | script `chmod 700` state dir always; guide `mkdir -m 700` + `chmod 700`; test from 0755 |
+| F-3 | closed | rotate to `.1` above 1 MiB, both files 600; the running cron fd keeps writing to `.1` for that run (harmless) |
+| F-6 | closed | header warning + `set +x` |
+
+## Deploy command list (handoff) - safety
+Order is right: pause -> pull -> clean-tree check -> BEFORE ids -> `make up-local` -> checks -> unpause. Nothing expands
+`.env` (`logs`, `ps`, `git status` only; `check-env-settings` already accepted in round 1). Required corrections:
+- **D-1 `docker compose ... exec worker-maintenance ls /backups` is denied** in `.claude/settings.json` (`exec:*`), so the
+  orchestrator cannot run it, and it is not needed: with `create_host_path: false` a *running* worker-maintenance proves
+  the bind succeeded, so the host dir is what the container sees. Replace with a host-side check BEFORE `make up-local`:
+  `test -s ~/nexus-backup-status/last_backup.json && echo OK` (must print OK). After deploy rely on `ps` (worker-maintenance
+  `Up (healthy)`) plus `docker compose -f docker-compose.local.yml logs --since 15m worker-maintenance 2>&1 | grep -E 'watchdog_alert|watchdog_check_failed'` (must be empty).
+  The user guide (step 3) may keep `exec ... ls /backups` (user-run, does not print env), but the host-side check is simpler.
+- **D-2 `mkdir -p ~/nexus-backup-status` defeats point 1**: on a missing dir it creates an empty one and the container
+  starts blind again. Drop the `mkdir`; if the D-1 check fails, STOP (run `scripts/backup.sh` first or ask the user).
+- Should (not blocking): AFTER grep use `logs --since <deploy start>` instead of `--tail 50` (startup logs can push
+  `paper_resumed` out of 50 lines); compare `run_id` values of `paper_resumed`, and any `paper_run_started`/
+  `paper_run_restarted` after deploy = NO-GO signal (stop and report). Remove the pause file only if all checks pass.
+
+With D-1/D-2 applied the deploy is safe for the running soak (user OK still required; ~1-2 min data gap, all 5 app
+services recreated, postgres/redis untouched, same run resumed since `settings_hash()` content is unchanged).
