@@ -17,6 +17,10 @@
   bind mount `./config/nexus.toml` from the Ubuntu distro was not available when Docker Desktop restarted them.
 - 15:11Z orchestrator ran `docker compose start` (no recreate): all healthy, migrator exit 0, key policy pass, 4x
   `paper_resumed` (same runs, no reset). Soak data gap ~15:08:32Z-15:11:50Z (~3.5 min). No Telegram alert (workers down too).
+- D-01b (devops, 2026-10-24): root cause confirmed from Docker Desktop logs (WSL bind mount not ready when the engine restarts
+  containers). Fix committed: config baked into image, no bind mounts except backup-status, `scripts/host_watchdog.sh` (cron,
+  `docker compose start` + Telegram + optional external heartbeat). NOT deployed (needs rebuild + recreate of all app containers,
+  user OK). Handoff `docs/handoffs/D01b-auto-recovery.md`, user guide `docs/guides/soak-auto-recovery.md`.
 - Risk for the soak: a Windows reboot/update leaves the stack down SILENTLY. Fix needed (devops): e.g. bake config into
   the image or start the stack from WSL boot, plus an external dead-man alert. Awaiting user choice.
 
