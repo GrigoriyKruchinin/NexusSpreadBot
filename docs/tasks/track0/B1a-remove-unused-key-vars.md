@@ -18,7 +18,9 @@ Core-only deployments do not pass or advertise API keys for extension venues (me
 1. No `MEXC_*` / `BITGET_*` variables in the scanner service env in `docker-compose.local.yml`.
 2. No `MEXC_*` / `BITGET_*` entries in `.env.example`.
 3. Extension-run docs (README or `docs/guides/`) state how to add these vars back for extension runs.
-4. `docker compose -f docker-compose.local.yml config` still valid (do not start the stack; `.env` not read).
+4. Compose file still valid, checked by YAML-parsing unit test (`tests/unit/test_compose.py`). Note 2026-10-23:
+   the original wording here (`docker compose ... config`) was wrong — that command DOES expand `.env` and
+   printed live keys in an incident; it is now denied in `.claude/settings.json`.
 5. `make check` not worse than baseline.
 
 ## Out of scope

@@ -27,7 +27,8 @@ the broker cannot silently evict data.
 4. Credential-bearing URLs are scrubbed in logs: unit test exists (shared with A4 criterion 3);
    a startup log line printing the broker URL shows `***`.
 5. `maxmemory` set with `maxmemory-policy noeviction`; Redis port is not published to the host
-   (verified in compose config).
+   (verified by parsing the YAML file as in `tests/unit/test_compose.py`; never run `docker compose config`,
+   it expands `.env` and prints secrets — incident 2026-10-23).
 6. Unauthenticated `PING` is rejected (`NOAUTH`), authenticated `PING` passes; recorded in card.
 7. `make check` not worse than baseline.
 

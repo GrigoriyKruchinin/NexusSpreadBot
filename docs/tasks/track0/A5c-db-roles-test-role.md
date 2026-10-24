@@ -27,7 +27,8 @@ role that physically cannot reach live data.
 3. SQL/integration check (run on `nexus_test` only): as `nexus_app`, `TRUNCATE`, `DROP TABLE`,
    `CREATE TABLE` in `public` all fail with permission errors; DML on app tables works.
 4. Check that the bootstrap superuser variables are absent from the env of scanner, worker-alerts,
-   worker-maintenance (compose config test or script).
+   worker-maintenance (YAML-parsing unit test as in `tests/unit/test_compose.py`; never `docker compose config`,
+   it expands `.env` and prints secrets — incident 2026-10-23).
 5. Check that `nexus_test_owner` cannot connect to `nexus` (connection refused by privilege) and can
    fully use `nexus_test`; integration tests and CI switch to this role; R-01 name guard stays.
 6. `statement_timeout` / `lock_timeout` set per role via `ALTER ROLE ... SET` (server half of B5).
