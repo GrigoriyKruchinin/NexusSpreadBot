@@ -267,6 +267,7 @@ class IRetentionRepository(ABC):
     ) -> dict[str, int]:
         """Delete rows past their retention window; returns counts per table.
 
-        Paper trades and transfers are kept (portfolio totals are summed from them), and the
-        latest paper balance snapshot set always survives.
+        Paper trades and transfers are kept (portfolio totals are summed from them). Paper
+        balance snapshot sets older than the window are thinned to the last set of each UTC
+        day per portfolio (daily equity curve for the GO report); the latest set always survives.
         """

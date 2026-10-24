@@ -1160,13 +1160,19 @@ class RetentionRepository(_Repository, IRetentionRepository):
     ) -> dict[str, int]:
         """Delete rows past their retention window (see the interface for what is kept)."""
         async with self._sessions.begin() as session:
-            # The latest snapshot set of EVERY portfolio survives (each has its own timeline).
+            # Old snapshot sets are thinned to the LAST set of each UTC day per portfolio (the
+            # GO report needs a daily equity curve over the whole run, B15 spec B3/B5); the
+            # latest set of every portfolio always survives (each has its own timeline).
             newer = aliased(PaperBalanceSnapshotRow)
             has_newer = (
                 select(newer.id)
                 .where(
                     newer.portfolio_id == PaperBalanceSnapshotRow.portfolio_id,
                     newer.captured_at > PaperBalanceSnapshotRow.captured_at,
+                    func.date_trunc("day", func.timezone("UTC", newer.captured_at))
+                    == func.date_trunc(
+                        "day", func.timezone("UTC", PaperBalanceSnapshotRow.captured_at)
+                    ),
                 )
                 .exists()
             )

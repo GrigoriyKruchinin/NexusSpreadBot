@@ -121,10 +121,17 @@ async def test_since_survives_snapshot_retention(sessions: Sessions) -> None:
     started_ms = int((now - timedelta(days=20)).timestamp() * 1000)
     repo = PaperRepository(sessions)
     await repo.ensure_run("all", _definition(), started_ms)
-    for days_ago in (19, 12, 1):
+    midnight = (now - timedelta(days=19)).replace(hour=0, minute=0, second=0, microsecond=0)
+    # two sets on one old UTC day (the earlier one is thinned) + one set on another old day
+    for at in (
+        midnight + timedelta(hours=2),
+        midnight + timedelta(hours=5),
+        now - timedelta(days=12),
+        now - timedelta(days=1),
+    ):
         await repo.commit(
             portfolio_id="all",
-            at_ms=int((now - timedelta(days=days_ago)).timestamp() * 1000),
+            at_ms=int(at.timestamp() * 1000),
             trades=[],
             rebalances=[],
             holdings=[PaperHolding("binance", "USDT", D(100), None, D(1))],
@@ -134,7 +141,7 @@ async def test_since_survives_snapshot_retention(sessions: Sessions) -> None:
         evaluations_before=now - timedelta(days=30),
         episodes_before=now - timedelta(days=90),
     )
-    assert purged["paper_balance_snapshots"] == 2  # the 19- and 12-day-old sets are gone
+    assert purged["paper_balance_snapshots"] == 1  # only the earlier set of the old day is gone
     data = await DigestRepository(sessions).collect(
         int((now - timedelta(days=1)).timestamp() * 1000), int(now.timestamp() * 1000)
     )
