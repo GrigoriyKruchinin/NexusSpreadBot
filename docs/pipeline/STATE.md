@@ -21,11 +21,8 @@
 
 ## Next (in order) — resume here
 1. Stage end for S0 can run now (code side): tester regression -> delta audit -> repo-hygiene.
-2. User steps before the fresh stack (U3/U4): rotate all 4 exchange keys and put them in `.env` himself;
-   run `make check-env-settings` and move non-default values from `.env` to `config/nexus.toml`;
-   disable Windows sleep; delete the leaked agent log
-   `~/.claude/projects/-home-grisha-projects-NexusSpreadBot/8ed7c197-a2ee-44ec-acbe-b9f593b81aa7/subagents/agent-a08740f7208ef3c03.jsonl`
-   (harness blocked the agent from deleting it).
+2. User steps before the fresh stack: DONE 2026-10-24 (4 keys rotated by user into `.env`; `make check-env-settings`
+   prints nothing = no setting lines left in `.env`; Windows sleep disabled; leaked subagent .jsonl already gone).
 3. Fresh stack (explicit U4 at each data step): `make backup-archive` of old DB -> new empty DB volume
    (no `down -v`; keep old volume) -> migrator from zero -> stack up -> soak starts -> first nightly dump +
    restore drill on new DB (D-03) -> 24 h soak checkpoint (card B15: union/cap p95 > 1.3, sweep duration

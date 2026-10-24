@@ -167,3 +167,17 @@ def test_send_digest_task(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(tasks, "_alerts_settings", lambda: object())
     assert tasks.send_digest.apply(args=("UTC",)).get() == "sent"
     assert calls == ["UTC"]
+
+
+def test_liveness_watchdog_task_runs_one_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Dog:
+        async def run_once(self) -> dict[str, str]:
+            return {"scanner": "ok", "backup": "ok"}
+
+    @asynccontextmanager
+    async def scope(_: object) -> Any:
+        yield _Dog()
+
+    monkeypatch.setattr("nexus.container.watchdog_scope", scope)
+    monkeypatch.setattr(tasks, "_maintenance_settings", lambda: object())
+    assert tasks.liveness_watchdog.apply().get() == {"scanner": "ok", "backup": "ok"}

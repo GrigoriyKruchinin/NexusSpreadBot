@@ -291,3 +291,16 @@ async def test_escalation_realerts_once_but_downgrade_does_not() -> None:
     assert reasons == ["backup_not_copied", "backup_failed"]
     rig.healthy()
     assert (await rig.dog.run_once())["backup"] == "recovered"
+
+
+async def test_alert_failure_while_check_is_broken_is_swallowed() -> None:
+    rig = Rig()
+    rig.activity.error = RuntimeError("db down")
+
+    async def broken_save(check: str, state: WatchdogState) -> None:
+        raise OSError("redis down")
+
+    rig.state.save = broken_save  # type: ignore[method-assign]
+    actions = await rig.dog.run_once()
+    assert actions["scanner"] == "error"
+    assert rig.dispatcher.events == []
