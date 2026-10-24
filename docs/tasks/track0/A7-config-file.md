@@ -6,7 +6,7 @@
 - reviewers: security (split + startup guard), tech-lead (diff)
 - complexity: medium
 - depends_on: B15 part 1 accepted (it touches the same config modules and `.env.example`)
-- status: todo
+- status: review (implemented; see docs/handoffs/A7-to-review.md)
 
 ## Goal
 User decision 2026-10-23: `.env` keeps only secrets (exchange keys, Telegram, DB/Redis credentials).

@@ -1,47 +1,27 @@
-"""Guard: every settings field must be documented in .env.example."""
+"""Guard: .env.example documents SECRET and ENV-ONLY variables only (A7).
+
+Every tunable lives in config/nexus.toml; a setting in .env.example would silently override the
+versioned file for anyone who copies the template.
+"""
 
 import re
 from pathlib import Path
 
-from nexus.config import (
-    CelerySettings,
-    ConditionalVenuesSettings,
-    DatabaseSettings,
-    ExchangesSettings,
-    LoggingSettings,
-    MaintenanceSettings,
-    RedisSettings,
-    ScannerSettings,
-    SpreadSettings,
-    TelegramSettings,
-)
-from nexus.config.base import NexusBaseSettings
+from nexus.config.file import TOML_ALLOWED
+from nexus.config.groups import ExchangesSettings
 
 ENV_EXAMPLE = Path(__file__).resolve().parents[3] / ".env.example"
 
-# Fields intentionally not exposed in .env.example (tuning knobs with safe defaults).
-_UNDOCUMENTED = {
-    "POSTGRES_POOL_SIZE",
-    "POSTGRES_MAX_OVERFLOW",
-    "POSTGRES_ECHO",
-    "REDIS_SOCKET_TIMEOUT_S",
-    "CELERY_RESULT_BACKEND",
-    "TELEGRAM_API_BASE_URL",
-    "TELEGRAM_REQUEST_TIMEOUT_S",
+EXPECTED_SECRET_AND_ENV_ONLY = {
+    "TELEGRAM_BOT_TOKEN",
+    "TELEGRAM_CHAT_ID",
+    "POSTGRES_PASSWORD",
+    "REDIS_URL",
+    "CELERY_BROKER_URL",
+    "KEY_POLICY_KUCOIN_IP_ATTESTED",
+    "KEY_POLICY_GATEIO_PERMISSIONS_ATTESTED",
 }
-
-_GROUPS: tuple[type[NexusBaseSettings], ...] = (
-    DatabaseSettings,
-    RedisSettings,
-    CelerySettings,
-    TelegramSettings,
-    LoggingSettings,
-    ExchangesSettings,
-    ConditionalVenuesSettings,
-    ScannerSettings,
-    SpreadSettings,
-    MaintenanceSettings,
-)
+_API_SUFFIXES = ("_API_KEY", "_API_SECRET", "_API_PASSPHRASE")
 
 
 def _documented_keys() -> set[str]:
@@ -49,16 +29,13 @@ def _documented_keys() -> set[str]:
     return set(re.findall(r"^([A-Z][A-Z0-9_]*)=", text, flags=re.MULTILINE))
 
 
-def test_all_settings_fields_documented() -> None:
-    documented = _documented_keys()
-    missing = set()
-    for group in _GROUPS:
-        prefix = str(group.model_config.get("env_prefix", ""))
-        for field in group.model_fields:
-            key = f"{prefix}{field}".upper()
-            if key not in documented and key not in _UNDOCUMENTED:
-                missing.add(key)
-    assert not missing, f".env.example is missing: {sorted(missing)}"
+def test_no_setting_in_env_example() -> None:
+    assert not _documented_keys() & TOML_ALLOWED
+
+
+def test_only_secret_and_env_only_documented() -> None:
+    other = {k for k in _documented_keys() if not k.endswith(_API_SUFFIXES)}
+    assert other == EXPECTED_SECRET_AND_ENV_ONLY
 
 
 def test_credentials_documented_for_default_exchanges() -> None:

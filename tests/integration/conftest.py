@@ -31,6 +31,8 @@ def db_settings() -> DatabaseSettings:
         settings = DatabaseSettings()
     except Exception as exc:
         pytest.skip(f"database not configured: {type(exc).__name__}")
+    # `settings` is the MERGED result (env > config/nexus.toml > default): the committed file says
+    # db = "nexus", so a run without POSTGRES_DB=nexus_test is refused here (A7, risk R2).
     try:
         assert_test_database(settings.db)
     except UnsafeDatabaseError as exc:

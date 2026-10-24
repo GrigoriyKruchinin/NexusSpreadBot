@@ -7,6 +7,8 @@ from typing import Any
 import pytest
 import yaml
 
+from nexus.config.file import TOML_ALLOWED
+
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_FILES = ["docker-compose.local.yml"]
 APP_SERVICES = {"migrator", "scanner", "worker-alerts", "worker-maintenance", "beat"}
@@ -54,7 +56,7 @@ def test_every_documented_variable_reaches_a_service(compose: str) -> None:
     services = _load(compose)["services"]
     passed = {key for svc in services.values() for key in (svc.get("environment") or {})}
     # Host-side connection defaults are replaced by compose service names.
-    missing = documented - passed - {"POSTGRES_HOST", "POSTGRES_PORT"}
+    missing = documented - passed
     assert not missing, f"not wired into {compose}: {sorted(missing)}"
 
 
@@ -100,3 +102,31 @@ def test_extension_venue_keys_not_wired_by_default(compose: str) -> None:
     assert not [
         ln for ln in example if pattern.match(ln.lstrip("# ").strip()) and not ln.startswith("#")
     ], "extension keys present in .env.example"
+
+
+@pytest.mark.parametrize("compose", COMPOSE_FILES)
+def test_settings_are_not_wired_through_compose(compose: str) -> None:
+    """A7: tunables come from config/nexus.toml; only the host differs inside the stack."""
+    services = _load(compose)["services"]
+    wired = {key for svc in services.values() for key in (svc.get("environment") or {})}
+    assert wired & TOML_ALLOWED == {"POSTGRES_HOST", "POSTGRES_DB", "POSTGRES_USER"}
+    for name in APP_SERVICES:
+        env = services[name].get("environment", {})
+        assert not ({"POSTGRES_DB", "POSTGRES_USER"} & set(env)), name
+
+
+@pytest.mark.parametrize("compose", COMPOSE_FILES)
+def test_config_file_mounted_read_only_into_app_services(compose: str) -> None:
+    services = _load(compose)["services"]
+    for name in APP_SERVICES:
+        assert "./config/nexus.toml:/app/config/nexus.toml:ro" in services[name]["volumes"], name
+
+
+@pytest.mark.parametrize("compose", COMPOSE_FILES)
+def test_postgres_container_matches_toml_db_and_user(compose: str) -> None:
+    import tomllib
+
+    toml = tomllib.loads((ROOT / "config" / "nexus.toml").read_text())
+    env = _load(compose)["services"]["postgres"]["environment"]
+    assert env["POSTGRES_DB"] == toml["postgres"]["db"]
+    assert env["POSTGRES_USER"] == toml["postgres"]["user"]

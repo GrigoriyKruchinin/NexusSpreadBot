@@ -1,4 +1,4 @@
-import json
+import tomllib
 from decimal import Decimal
 from pathlib import Path
 
@@ -18,7 +18,7 @@ from nexus.config import (
     TelegramSettings,
 )
 
-ENV_EXAMPLE = Path(__file__).resolve().parents[3] / ".env.example"
+CONFIG_FILE = Path(__file__).resolve().parents[3] / "config" / "nexus.toml"
 VALID_TOKEN = "123456789:AAHabcdefghijklmnopqrstuvwxyz012345"
 DB_PASSWORD = "correct-horse-battery-staple"
 
@@ -59,11 +59,9 @@ def test_exchanges_extension_venues_loadable_when_explicit(monkeypatch: pytest.M
     assert ExchangesSettings().enabled == ("binance", "bybit", "mexc", "bitget")
 
 
-def test_env_example_exchanges_in_sync_with_core() -> None:
-    line = next(
-        ln for ln in ENV_EXAMPLE.read_text().splitlines() if ln.startswith("EXCHANGES_ENABLED=")
-    )
-    assert tuple(json.loads(line.split("=", 1)[1])) == CORE_EXCHANGES
+def test_config_file_exchanges_in_sync_with_core() -> None:
+    data = tomllib.loads(CONFIG_FILE.read_text())
+    assert tuple(data["exchanges"]["enabled"]) == CORE_EXCHANGES
 
 
 @pytest.mark.parametrize("value", ["bybit", "bybit,bybit", "by-bit,okx"])
@@ -400,11 +398,9 @@ def test_alerts_worker_loads_conditional(monkeypatch: pytest.MonkeyPatch) -> Non
     assert AlertsWorkerSettings.load().conditional.venues == ("bybit", "gateio")
 
 
-def test_env_example_conditional_matches_default() -> None:
-    line = next(
-        ln for ln in ENV_EXAMPLE.read_text().splitlines() if ln.startswith("CONDITIONAL_VENUES=")
-    )
-    assert tuple(json.loads(line.split("=", 1)[1])) == ("bybit", "gateio")
+def test_config_file_conditional_matches_default() -> None:
+    data = tomllib.loads(CONFIG_FILE.read_text())
+    assert tuple(data["conditional"]["venues"]) == ("bybit", "gateio")
 
 
 def _scanner_env(monkeypatch: pytest.MonkeyPatch, enabled: str) -> None:

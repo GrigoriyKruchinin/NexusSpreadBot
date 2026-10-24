@@ -1,7 +1,8 @@
 # Nexus Spread Scanner — local (Version 1, read-only) stack.
 #   cp .env.example .env  &&  make up-local
 #
-# Every service receives ONLY the variables of its own domain (see x-*-env anchors).
+# Every service receives ONLY the secrets of its own domain (see x-*-env anchors). All other
+# settings come from config/nexus.toml, mounted read-only into every app container (A7).
 # Optional variables use ${VAR:-} -> empty means "use the default" (env_ignore_empty).
 
 name: nexus-local
@@ -16,43 +17,21 @@ x-image: &image
   read_only: true
   tmpfs: [/tmp]
   security_opt: ["no-new-privileges:true"]
+  volumes:
+    - ./config/nexus.toml:/app/config/nexus.toml:ro  # no secrets in it (guarded at startup)
   logging:
     driver: json-file
     options: {max-size: "10m", max-file: "5"}
 
 x-db-env: &db-env
   POSTGRES_HOST: postgres
-  POSTGRES_PORT: "5432"
-  POSTGRES_DB: ${POSTGRES_DB:-nexus}
-  POSTGRES_USER: ${POSTGRES_USER:-nexus}
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
 
 x-celery-env: &celery-env
   CELERY_BROKER_URL: redis://redis:6379/1
-  CELERY_TIMEZONE: ${CELERY_TIMEZONE:-}
-
-x-log-env: &log-env
-  LOG_LEVEL: ${LOG_LEVEL:-}
-  LOG_JSON_FORMAT: ${LOG_JSON_FORMAT:-}
-
-x-maintenance-env: &maintenance-env
-  MAINTENANCE_SNAPSHOT_RETENTION_DAYS: ${MAINTENANCE_SNAPSHOT_RETENTION_DAYS:-}
-  MAINTENANCE_EVALUATION_RETENTION_DAYS: ${MAINTENANCE_EVALUATION_RETENTION_DAYS:-}
-  MAINTENANCE_EPISODE_RETENTION_DAYS: ${MAINTENANCE_EPISODE_RETENTION_DAYS:-}
-  MAINTENANCE_CLEANUP_INTERVAL_S: ${MAINTENANCE_CLEANUP_INTERVAL_S:-}
-
-x-digest-env: &digest-env
-  DIGEST_ENABLED: ${DIGEST_ENABLED:-}
-  DIGEST_TIME: ${DIGEST_TIME:-}
-  DIGEST_TZ: ${DIGEST_TZ:-}
-
-x-conditional-env: &conditional-env
-  CONDITIONAL_VENUES: ${CONDITIONAL_VENUES:-}
 
 x-scanner-env: &scanner-env
   REDIS_URL: redis://redis:6379/0
-  EXCHANGES_ENABLED: ${EXCHANGES_ENABLED:-}
-  EXCHANGES_REQUEST_TIMEOUT_MS: ${EXCHANGES_REQUEST_TIMEOUT_MS:-}
   BYBIT_API_KEY: ${BYBIT_API_KEY:-}
   BYBIT_API_SECRET: ${BYBIT_API_SECRET:-}
   BINANCE_API_KEY: ${BINANCE_API_KEY:-}
@@ -67,66 +46,19 @@ x-scanner-env: &scanner-env
   KUCOIN_API_PASSPHRASE: ${KUCOIN_API_PASSPHRASE:-}
   KEY_POLICY_KUCOIN_IP_ATTESTED: ${KEY_POLICY_KUCOIN_IP_ATTESTED:-}
   KEY_POLICY_GATEIO_PERMISSIONS_ATTESTED: ${KEY_POLICY_GATEIO_PERMISSIONS_ATTESTED:-}
-  SCANNER_QUOTE_ASSETS: ${SCANNER_QUOTE_ASSETS:-}
-  SCANNER_SYMBOLS_WHITELIST: ${SCANNER_SYMBOLS_WHITELIST:-}
-  SCANNER_SYMBOLS_BLACKLIST: ${SCANNER_SYMBOLS_BLACKLIST:-}
-  SCANNER_MIN_QUOTE_VOLUME_USD: ${SCANNER_MIN_QUOTE_VOLUME_USD:-}
-  SCANNER_TICKER_INTERVAL_S: ${SCANNER_TICKER_INTERVAL_S:-}
-  SCANNER_METADATA_REFRESH_S: ${SCANNER_METADATA_REFRESH_S:-}
-  SCANNER_ORDERBOOK_DEPTH: ${SCANNER_ORDERBOOK_DEPTH:-}
-  SCANNER_MAX_CANDIDATES_PER_SWEEP: ${SCANNER_MAX_CANDIDATES_PER_SWEEP:-}
-  SCANNER_MAX_CONCURRENT_REQUESTS_PER_EXCHANGE: ${SCANNER_MAX_CONCURRENT_REQUESTS_PER_EXCHANGE:-}
-  SCANNER_SNAPSHOT_TOP_K: ${SCANNER_SNAPSHOT_TOP_K:-}
-  SCANNER_HEARTBEAT_TTL_S: ${SCANNER_HEARTBEAT_TTL_S:-}
-  SCANNER_EXCHANGE_DOWN_AFTER_FAILURES: ${SCANNER_EXCHANGE_DOWN_AFTER_FAILURES:-}
-  SCANNER_RATE_LIMIT_BACKOFF_S: ${SCANNER_RATE_LIMIT_BACKOFF_S:-}
-  SCANNER_WS_ENABLED: ${SCANNER_WS_ENABLED:-}
-  SCANNER_WS_MAX_STREAMS: ${SCANNER_WS_MAX_STREAMS:-}
-  SCANNER_WS_HOT_TTL_S: ${SCANNER_WS_HOT_TTL_S:-}
-  SPREAD_MIN_NET_PROFIT_PCT: ${SPREAD_MIN_NET_PROFIT_PCT:-}
-  SPREAD_MIN_NET_PROFIT_USD: ${SPREAD_MIN_NET_PROFIT_USD:-}
-  SPREAD_REFERENCE_NOTIONAL_USD: ${SPREAD_REFERENCE_NOTIONAL_USD:-}
-  SPREAD_MAX_ORDERBOOK_AGE_MS: ${SPREAD_MAX_ORDERBOOK_AGE_MS:-}
-  SPREAD_MAX_BOOK_SKEW_MS: ${SPREAD_MAX_BOOK_SKEW_MS:-}
-  SPREAD_MAX_GROSS_SPREAD_PCT: ${SPREAD_MAX_GROSS_SPREAD_PCT:-}
-  SPREAD_MAX_UNVERIFIED_GROSS_SPREAD_PCT: ${SPREAD_MAX_UNVERIFIED_GROSS_SPREAD_PCT:-}
-  SPREAD_DEFAULT_TAKER_FEE_PCT: ${SPREAD_DEFAULT_TAKER_FEE_PCT:-}
-  SPREAD_INCLUDE_TRANSFER_COST: ${SPREAD_INCLUDE_TRANSFER_COST:-}
-  SPREAD_TRANSFER_TAX_PCT: ${SPREAD_TRANSFER_TAX_PCT:-}
-  SPREAD_REQUIRE_VERIFIED_TRANSFER: ${SPREAD_REQUIRE_VERIFIED_TRANSFER:-}
-  SPREAD_ALERT_COOLDOWN_S: ${SPREAD_ALERT_COOLDOWN_S:-}
-  ALERT_REALERT_GROWTH_PCT: ${ALERT_REALERT_GROWTH_PCT:-}
-  EPISODE_CLOSE_GAP_S: ${EPISODE_CLOSE_GAP_S:-}
-  QUARANTINE_PERSIST_MIN: ${QUARANTINE_PERSIST_MIN:-}
-  QUARANTINE_TTL_H: ${QUARANTINE_TTL_H:-}
-  QUARANTINE_WINDOW_H: ${QUARANTINE_WINDOW_H:-}
-  QUARANTINE_MAX_EPISODES: ${QUARANTINE_MAX_EPISODES:-}
-  PAPER_ENABLED: ${PAPER_ENABLED:-}
-  PAPER_VENUE_SETS: ${PAPER_VENUE_SETS:-}
-  PAPER_CAPITAL_USD: ${PAPER_CAPITAL_USD:-}
-  PAPER_USDT_SHARE_PCT: ${PAPER_USDT_SHARE_PCT:-}
-  PAPER_COIN_PER_ROUTE_USD: ${PAPER_COIN_PER_ROUTE_USD:-}
-  PAPER_COIN_IDLE_RELEASE_H: ${PAPER_COIN_IDLE_RELEASE_H:-}
-  PAPER_CONVERSION_COST_PCT: ${PAPER_CONVERSION_COST_PCT:-}
-  PAPER_TRADE_NOTIONAL_USD: ${PAPER_TRADE_NOTIONAL_USD:-}
-  PAPER_LATENCY_MS: ${PAPER_LATENCY_MS:-}
-  PAPER_REBALANCE_THRESHOLD_PCT: ${PAPER_REBALANCE_THRESHOLD_PCT:-}
-  PAPER_REBALANCE_DELAY_MIN: ${PAPER_REBALANCE_DELAY_MIN:-}
 
 x-telegram-env: &telegram-env
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN must be set in .env}
   TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:?TELEGRAM_CHAT_ID must be set in .env}
-  TELEGRAM_DISABLE_NOTIFICATION: ${TELEGRAM_DISABLE_NOTIFICATION:-}
-  TELEGRAM_ALERT_MAX_AGE_S: ${TELEGRAM_ALERT_MAX_AGE_S:-}
-  TELEGRAM_EVENT_MAX_AGE_S: ${TELEGRAM_EVENT_MAX_AGE_S:-}
 
 services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-nexus}
-      POSTGRES_USER: ${POSTGRES_USER:-nexus}
+      # Must equal [postgres] db / user in config/nexus.toml (checked by tests/unit/test_compose.py).
+      POSTGRES_DB: nexus
+      POSTGRES_USER: nexus
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -155,7 +87,7 @@ services:
     restart: "no"
     command: ["alembic", "upgrade", "head"]
     environment:
-      <<: [*db-env, *log-env]
+      <<: [*db-env]
     depends_on:
       postgres: {condition: service_healthy}
 
@@ -167,7 +99,7 @@ services:
     restart: on-failure:5
     stop_grace_period: 30s
     environment:
-      <<: [*db-env, *celery-env, *log-env, *conditional-env, *scanner-env]
+      <<: [*db-env, *celery-env, *scanner-env]
     depends_on:
       migrator: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
@@ -184,7 +116,7 @@ services:
     command: ["celery", "-A", "nexus.workers.app:celery_app", "worker", "-Q", "alerts",
               "-n", "alerts@%h", "--concurrency", "2", "--loglevel", "INFO"]
     environment:
-      <<: [*db-env, *celery-env, *log-env, *conditional-env, *telegram-env]
+      <<: [*db-env, *celery-env, *telegram-env]
       NEXUS_WORKER_ROLE: alerts
     depends_on:
       migrator: {condition: service_completed_successfully}
@@ -201,7 +133,7 @@ services:
     command: ["celery", "-A", "nexus.workers.app:celery_app", "worker", "-Q", "maintenance",
               "-n", "maintenance@%h", "--concurrency", "1", "--loglevel", "INFO"]
     environment:
-      <<: [*db-env, *celery-env, *log-env, *maintenance-env]
+      <<: [*db-env, *celery-env]
       NEXUS_WORKER_ROLE: maintenance
     depends_on:
       migrator: {condition: service_completed_successfully}
@@ -218,7 +150,7 @@ services:
     command: ["celery", "-A", "nexus.workers.app:celery_app", "beat", "--loglevel", "INFO",
               "--schedule", "/tmp/celerybeat-schedule", "--pidfile", "/tmp/celerybeat.pid"]
     environment:
-      <<: [*celery-env, *log-env, *maintenance-env, *digest-env]
+      <<: [*celery-env]
     depends_on:
       redis: {condition: service_healthy}
       worker-maintenance: {condition: service_healthy}

@@ -115,7 +115,7 @@ unless both the transfer path and the token contract are verified (ticker collis
 Setup guide (Russian): [docs/guides/stage-1-local-setup.md](docs/guides/stage-1-local-setup.md).
 
 ```bash
-cp .env.example .env && chmod 600 .env   # Telegram token/chat id, DB password, optional keys
+cp .env.example .env && chmod 600 .env   # secrets only; tunables live in config/nexus.toml
 make up-local                            # build and start the stack
 make ps-local                            # all services should be healthy
 make logs s=scanner
@@ -125,7 +125,7 @@ make logs s=scanner
 
 Extension venues run in **public-data mode only (no API keys)**. The key policy check (A6) has no
 policy for MEXC and Bitget, so a configured MEXC/Bitget key is refused at startup (exit code 3)
-until policies exist. For an extension run, add `"mexc","bitget"` to `EXCHANGES_ENABLED` and leave
+until policies exist. For an extension run, add `"mexc","bitget"` to `[exchanges] enabled` in `config/nexus.toml` and leave
 all `MEXC_*` / `BITGET_*` variables unset (ADR 0002).
 
 ## Development
