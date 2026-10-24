@@ -93,10 +93,27 @@ services:
 
   scanner:
     <<: *image
-    command: ["nexus", "scanner"]
-    # on-failure:5 (not unless-stopped): a refused key policy exits with code 3 and must not
-    # loop forever re-calling the signed key-introspection endpoints (A6 review).
-    restart: on-failure:5
+    # D-01: key-policy refusal (exit 3) must NOT restart-loop (it would re-call the signed key
+    # introspection endpoints forever), every other failure must restart without a limit.
+    # Docker cannot filter by exit code, so the wrapper maps exit 3 -> exit 0, and `on-failure`
+    # (unlimited, built-in exponential backoff, reset after 10 s of uptime) restarts only non-zero
+    # exits. SIGTERM/SIGINT are forwarded to the scanner so the graceful shutdown still works.
+    # A clean stop (exit 0) is also not restarted, which is the wanted behaviour for `compose stop`.
+    command:
+      - sh
+      - -c
+      - |
+        nexus scanner &
+        pid=$$!
+        trap 'kill -TERM "$$pid" 2>/dev/null' TERM INT
+        wait "$$pid"; rc=$$?
+        while kill -0 "$$pid" 2>/dev/null; do wait "$$pid"; rc=$$?; done
+        if [ "$$rc" -eq 3 ]; then
+          echo "scanner refused the key policy (exit 3): not restarting; fix the keys and start it manually" >&2
+          exit 0
+        fi
+        exit "$$rc"
+    restart: on-failure
     stop_grace_period: 30s
     environment:
       <<: [*db-env, *celery-env, *scanner-env]
@@ -135,6 +152,11 @@ services:
     environment:
       <<: [*db-env, *celery-env]
       NEXUS_WORKER_ROLE: maintenance
+    volumes:
+      # Backup status for the liveness watchdog (S0b), read-only. NOT the 0700 dump dir (the container
+      # uid cannot enter it and must not see dumps): backup.sh mirrors last_backup.json here.
+      - ./config/nexus.toml:/app/config/nexus.toml:ro
+      - ${BACKUP_STATUS_DIR:-${HOME}/nexus-backup-status}:/backups:ro
     depends_on:
       migrator: {condition: service_completed_successfully}
       redis: {condition: service_healthy}

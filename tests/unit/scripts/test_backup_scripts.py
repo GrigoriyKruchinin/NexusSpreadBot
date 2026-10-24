@@ -8,6 +8,8 @@ never touch a daemon or the network. A stub refuses to run without the sandbox v
 
 from __future__ import annotations
 
+import json
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -58,6 +60,9 @@ class Sandbox:
             "HOME": str(self.home),
             "BACKUP_DIR": str(self.backups),
             "COMPOSE_FILE": str(self.root / "no-such-compose.yml"),
+            # Never the real /mnt/c or ~/nexus-backup-status: both live inside the sandbox.
+            "BACKUP_COPY_DIR": str(self.root / "copy"),
+            "BACKUP_STATUS_DIR": str(self.root / "status"),
             "FAKE_LOG": str(self.log),
             "FAKE_SRC": str(self.root / "src.counts"),
             "FAKE_DST": str(self.root / "dst.counts"),
@@ -343,6 +348,103 @@ def test_backup_failure_leaves_no_partial(sb: Sandbox) -> None:
     assert result.returncode != 0
     assert not list(sb.backups.glob("nexus-*"))
     assert sb.backups.is_dir()
+
+
+# ---------------------------------------------------------------- off-machine copy + status (S0a)
+def _status(directory: Path) -> dict[str, object]:
+    data: dict[str, object] = json.loads((directory / "last_backup.json").read_text())
+    return data
+
+
+def test_backup_copies_dump_and_counts_and_writes_status(sb: Sandbox) -> None:
+    result = sb.run([str(SCRIPTS / "backup.sh")])
+    assert result.returncode == 0, result.stderr
+    dump = next(sb.backups.glob("nexus-*.dump"))
+    copy = sb.root / "copy"
+    assert (copy / dump.name).read_bytes() == dump.read_bytes()
+    assert (copy / dump.with_suffix(".counts").name).exists()
+    assert not list(copy.glob(".*partial"))
+    for directory, mode in ((sb.backups, 0o600), (sb.root / "status", 0o644)):
+        status = _status(directory)
+        assert set(status) == {"finished_at", "ok", "dump", "copied"}
+        assert status["ok"] is True
+        assert status["copied"] is True
+        assert status["dump"] == dump.name
+        assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", str(status["finished_at"]))
+        assert (directory / "last_backup.json").stat().st_mode & 0o777 == mode
+        assert not list(directory.glob(".last_backup.*"))
+
+
+def test_backup_copy_unavailable_warns_and_succeeds(sb: Sandbox) -> None:
+    # Parent of the copy dir does not exist -> "drive not mounted".
+    result = sb.run([str(SCRIPTS / "backup.sh")], BACKUP_COPY_DIR=str(sb.root / "nodrive" / "x"))
+    assert result.returncode == 0, result.stderr
+    assert "WARNING" in result.stderr
+    assert not (sb.root / "nodrive").exists()
+    status = _status(sb.backups)
+    assert status["ok"] is True
+    assert status["copied"] is False
+    assert len(list(sb.backups.glob("nexus-*.dump"))) == 1
+
+
+@pytest.mark.parametrize("value", ["", "relative/dir", "/var/../x"])
+def test_backup_copy_disabled_or_invalid_value(sb: Sandbox, value: str) -> None:
+    result = sb.run([str(SCRIPTS / "backup.sh")], BACKUP_COPY_DIR=value)
+    assert result.returncode == 0, result.stderr
+    assert _status(sb.backups)["copied"] is False
+
+
+def test_backup_copy_dir_equal_to_backup_dir_is_refused(sb: Sandbox) -> None:
+    result = sb.run([str(SCRIPTS / "backup.sh")], BACKUP_COPY_DIR=str(sb.backups))
+    assert result.returncode == 0
+    assert _status(sb.backups)["copied"] is False
+
+
+def test_backup_copy_checksum_mismatch_is_not_copied(sb: Sandbox) -> None:
+    cp = sb.fake_bin / "cp"
+    cp.write_text('#!/bin/sh\n[ "$1" = "--" ] && shift\nprintf corrupted > "$2"\n')
+    cp.chmod(0o755)
+    result = sb.run([str(SCRIPTS / "backup.sh")])
+    assert result.returncode == 0
+    assert "checksum mismatch" in result.stderr
+    assert not list((sb.root / "copy").glob("nexus-*"))
+    assert not list((sb.root / "copy").glob(".*partial"))
+    assert _status(sb.backups)["copied"] is False
+
+
+def test_backup_prunes_the_copy_with_same_retention(sb: Sandbox) -> None:
+    copy = sb.root / "copy"
+    copy.mkdir()
+    for d in range(1, 21):
+        (copy / f"nexus-202609{d:02d}T030000Z.dump").write_text("x")
+        (copy / f"nexus-202609{d:02d}T030000Z.counts").write_text("t|1|1\n")
+    assert sb.run([str(SCRIPTS / "backup.sh")]).returncode == 0
+    new = next(sb.backups.glob("nexus-*.dump")).name
+    dumps = {p.name for p in copy.glob("nexus-*.dump")}
+    assert new in dumps
+    assert len(dumps) <= 7 + 4  # 21 files before; same KEEP_DAILY/KEEP_WEEKLY as local
+    assert {p.name for p in copy.glob("nexus-*.counts")} == {n[:-5] + ".counts" for n in dumps}
+    assert (
+        len(list(sb.backups.glob("nexus-*.dump"))) == 1
+    )  # the local dir was not touched by copy prune
+
+
+def test_backup_failure_writes_status_not_ok(sb: Sandbox) -> None:
+    result = sb.run([str(SCRIPTS / "backup.sh")], FAKE_DOCKER_EXIT="1")
+    assert result.returncode != 0
+    status = _status(sb.backups)
+    assert status["ok"] is False
+    assert status["copied"] is False
+    assert status["dump"] == ""
+    assert _status(sb.root / "status")["ok"] is False
+    assert not (sb.root / "copy").exists()
+
+
+def test_backup_refused_dir_writes_no_status(sb: Sandbox) -> None:
+    result = sb.run([str(SCRIPTS / "backup.sh")], BACKUP_DIR=str(ROOT / "bk"))
+    assert result.returncode != 0
+    assert not (ROOT / "bk").exists()
+    assert not (sb.root / "status").exists()
 
 
 def _hb_file(sb: Sandbox, mode: int, content: str = "https://hc.example/ping/abc-123\n") -> Path:

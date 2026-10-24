@@ -43,6 +43,7 @@ check-env-settings: ## Print NAMES of setting lines left in .env (values never s
 	@uv run python -m nexus.config.provenance
 
 up-local: check-env-settings ## Build and start the local stack
+	@mkdir -p -m 755 "$${BACKUP_STATUS_DIR:-$$HOME/nexus-backup-status}"
 	$(COMPOSE_LOCAL) up -d --build
 
 down-local: ## Stop the local stack (volumes are kept)

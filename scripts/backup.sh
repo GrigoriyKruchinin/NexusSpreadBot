@@ -2,6 +2,10 @@
 # Daily logical backup of the live DB (read-only: pg_dump as the SELECT-only role nexus_ro).
 # Output (outside the repo, mode 0600):
 #   $BACKUP_DIR/nexus-<UTC timestamp>.dump    custom-format dump
+#   $BACKUP_DIR/last_backup.json              status {finished_at, ok, dump, copied}, atomic; a public copy
+#                                             goes to $BACKUP_STATUS_DIR (default ~/nexus-backup-status)
+#   $BACKUP_COPY_DIR                          copy of dump + .counts (default /mnt/c/nexus-backups; skipped
+#                                             with a WARNING if not mounted; empty value disables)
 #   $BACKUP_DIR/nexus-<UTC timestamp>.counts  "table|rows_before|rows_after" (row counts taken just
 #                                             before and just after the dump; used by the restore drill)
 # Optional heartbeat: HEARTBEAT_URL_FILE (file, owned by you, mode 0600, holding the ping URL) or
@@ -17,7 +21,16 @@ final="$BACKUP_DIR/nexus-$stamp.dump"
 partial="$final.partial"
 counts_final="$BACKUP_DIR/nexus-$stamp.counts"
 counts_partial="$counts_final.partial"
-trap 'rm -f -- "$partial" "$counts_partial"' EXIT
+dump_name=""
+copied=false
+on_exit() {
+  local rc=$?
+  rm -f -- "$partial" "$counts_partial"
+  # Status for the liveness watchdog (S0b): written on success AND on failure; never changes the exit code.
+  if [ "$rc" -eq 0 ]; then write_status true "$dump_name" "$copied"; else write_status false "$dump_name" false; fi
+  exit "$rc"
+}
+trap on_exit EXIT
 
 log "dumping $SOURCE_DB as $BACKUP_USER"
 before="$(table_counts "$BACKUP_USER" "$SOURCE_DB")"
@@ -37,6 +50,10 @@ mv -- "$counts_partial" "$counts_final"
 log "wrote $(basename "$final") ($(stat -c %s "$final") bytes)"
 
 "$(dirname "${BASH_SOURCE[0]}")/backup_prune.sh" "$BACKUP_DIR"
+dump_name="$(basename "$final")"
+
+# Off-machine copy (D-02): a problem here is a WARNING, never a failed backup; the status file records it.
+if copy_offsite "$final"; then copied=true; else log "WARNING: off-machine copy NOT made (status copied=false)"; fi
 
 # Heartbeat: only after a verified dump. Problems are logged (never the URL) but do not fail the backup;
 # a missed ping is what raises the alert on the external service.

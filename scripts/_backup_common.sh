@@ -64,3 +64,66 @@ table_counts() {
   sql="select tablename, (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', schemaname, tablename), false, true, '')))[1]::text from pg_tables where schemaname='public' order by 1"
   pg_run psql -U "$1" -d "$2" -At -c "$sql" | tr -d '\r'
 }
+
+# ---------------------------------------------------------------- off-machine copy + status (S0a)
+# Copy location (D-02). Default is the Windows side of WSL, outside OneDrive. Empty value disables the copy.
+BACKUP_COPY_DIR="${BACKUP_COPY_DIR-/mnt/c/nexus-backups}"
+# World-readable status dir (file names only, no secrets): BACKUP_DIR is 0700 and the container user
+# (uid 10001) could not traverse it, so the maintenance worker gets this directory read-only at /backups.
+BACKUP_STATUS_DIR="${BACKUP_STATUS_DIR:-$HOME/nexus-backup-status}"
+
+# Write the status JSON atomically (same-dir temp file + rename) to $1 with mode $2.
+# Fields: finished_at (UTC ISO), ok, dump (file name or ""), copied. $3=ok(true/false) $4=dump name $5=copied.
+write_status_file() {
+  local target="$1" mode="$2" tmp
+  tmp="$(mktemp -- "$(dirname "$target")/.last_backup.XXXXXX")" || return 1
+  printf '{"finished_at": "%s", "ok": %s, "dump": "%s", "copied": %s}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$3" "$4" "$5" > "$tmp" || { rm -f -- "$tmp"; return 1; }
+  chmod "$mode" "$tmp" && mv -f -- "$tmp" "$target" || { rm -f -- "$tmp"; return 1; }
+}
+
+# Never fails the caller: a status problem is only logged.
+write_status() {
+  write_status_file "$BACKUP_DIR/last_backup.json" 600 "$1" "$2" "$3" || log "WARNING: could not write status file"
+  if [ ! -d "$BACKUP_STATUS_DIR" ]; then
+    mkdir -m 755 -p -- "$BACKUP_STATUS_DIR" 2>/dev/null || { log "WARNING: cannot create status dir"; return 0; }
+  fi
+  write_status_file "$BACKUP_STATUS_DIR/last_backup.json" 644 "$1" "$2" "$3" || log "WARNING: could not write public status file"
+  return 0
+}
+
+# Copy dump $1 and its .counts sidecar to BACKUP_COPY_DIR, verify sha256, prune with the same retention.
+# Returns 0 only if both files were copied and verified. Never dies: callers treat failure as a WARNING.
+copy_offsite() {
+  local dump="$1" counts="${1%.dump}.counts" dest parent real_src real_dst f name tmp
+  dest="$BACKUP_COPY_DIR"
+  if [ -z "$dest" ]; then log "WARNING: BACKUP_COPY_DIR is empty; off-machine copy disabled"; return 1; fi
+  case "$dest" in /*) ;; *) log "WARNING: BACKUP_COPY_DIR must be an absolute path; copy skipped"; return 1 ;; esac
+  case "/$dest/" in */../*) log "WARNING: BACKUP_COPY_DIR must not contain '..'; copy skipped"; return 1 ;; esac
+  if [ ! -d "$dest" ]; then
+    parent="$(dirname "$dest")"
+    if [ ! -d "$parent" ]; then
+      log "WARNING: $parent does not exist (drive not mounted?); off-machine copy skipped"; return 1
+    fi
+    case "$parent" in /mnt/?) mountpoint -q -- "$parent" || {
+      log "WARNING: $parent is not mounted; off-machine copy skipped"; return 1; } ;; esac
+    mkdir -p -- "$dest" 2>/dev/null || { log "WARNING: cannot create copy dir; copy skipped"; return 1; }
+  fi
+  real_dst="$(cd "$dest" && pwd -P)" || return 1
+  real_src="$(cd "$(dirname "$dump")" && pwd -P)" || return 1
+  if [ "$real_dst" = "$real_src" ]; then log "WARNING: BACKUP_COPY_DIR equals BACKUP_DIR; copy skipped"; return 1; fi
+  case "$real_dst/" in "$REPO_ROOT"/*) log "WARNING: BACKUP_COPY_DIR is inside the repository; copy skipped"; return 1 ;; esac
+  for f in "$dump" "$counts"; do
+    name="$(basename "$f")"
+    tmp="$real_dst/.$name.partial"
+    if ! cp -- "$f" "$tmp" 2>/dev/null; then rm -f -- "$tmp"; log "WARNING: copy of $name failed"; return 1; fi
+    if [ "$(sha256sum < "$f")" != "$(sha256sum < "$tmp")" ]; then
+      rm -f -- "$tmp"; log "WARNING: checksum mismatch after copying $name"; return 1
+    fi
+    chmod 600 -- "$tmp" 2>/dev/null || true   # best effort: NTFS mounts ignore modes
+    mv -f -- "$tmp" "$real_dst/$name" || { rm -f -- "$tmp"; log "WARNING: cannot finalize copy of $name"; return 1; }
+  done
+  log "copied $(basename "$dump") and sidecar to the off-machine dir (checksums verified)"
+  "$(dirname "${BASH_SOURCE[0]}")/backup_prune.sh" "$real_dst" || log "WARNING: pruning the copy dir failed"
+  return 0
+}

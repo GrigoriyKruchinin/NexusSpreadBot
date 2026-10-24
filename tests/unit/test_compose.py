@@ -130,3 +130,26 @@ def test_postgres_container_matches_toml_db_and_user(compose: str) -> None:
     env = _load(compose)["services"]["postgres"]["environment"]
     assert env["POSTGRES_DB"] == toml["postgres"]["db"]
     assert env["POSTGRES_USER"] == toml["postgres"]["user"]
+
+
+@pytest.mark.parametrize("compose", COMPOSE_FILES)
+def test_scanner_restart_policy_and_exit_3_handling(compose: str) -> None:
+    """D-01: unlimited restarts on failure, but a key-policy refusal (exit 3) must not loop."""
+    scanner = _load(compose)["services"]["scanner"]
+    assert scanner["restart"] == "on-failure"  # no ':N' cap, and exit 0 is never restarted
+    script = " ".join(scanner["command"])
+    assert "nexus scanner" in script
+    assert re.search(r'"\$\$rc" -eq 3 \]; then.*?exit 0', script, re.S), "exit 3 must map to exit 0"
+    assert re.search(r'exit "\$\$rc"', script), "other codes must propagate"
+    assert "trap" in script  # SIGTERM still reaches the scanner
+
+
+@pytest.mark.parametrize("compose", COMPOSE_FILES)
+def test_maintenance_worker_mounts_backup_status_read_only(compose: str) -> None:
+    services = _load(compose)["services"]
+    mounts = [v for v in services["worker-maintenance"]["volumes"] if v.endswith(":/backups:ro")]
+    assert len(mounts) == 1
+    assert "nexus-backup-status" in mounts[0]  # status dir, never the 0700 dump dir
+    for name, svc in services.items():
+        if name != "worker-maintenance":
+            assert not any(":/backups" in v for v in svc.get("volumes", [])), name
