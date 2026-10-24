@@ -28,7 +28,9 @@
    73a9a5f; CI green on 73a9a5f incl. integration. Follow-ups before UF: card section "Part 2 follow-ups (before UF)".
    Retention fix safe to deploy (TL r2). NOTE: retention runs in `worker-maintenance` (celery task nexus.maintenance.purge),
    NOT in the scanner; scanner code unchanged since soak start -> deploy = rebuild image + recreate worker-maintenance only.
-   Awaiting user OK for that variant (user approved a 'scanner' restart). D-01 stays open until a real Docker/WSL restart.
+   DEPLOYED 2026-10-24 14:55Z (user OK: worker-maintenance only): image rebuilt at 4d9bfe5, worker-maintenance recreated,
+   healthy, task nexus.maintenance.purge registered; scanner NOT restarted (no soak data gap). D-01 stays open until a real
+   Docker/WSL restart. Other containers (beat, worker-alerts, scanner) still run the pre-change image; behaviour identical.
    Then: scanner rebuild/restart (user OK given, deadline 2026-10-31 14:05Z) + D-01 check. Original item: B15 part 2 GO report generator (`docs/quant/b15-review-and-report-spec.md`, incl. F2 fee
    disclosure). Quant pre-soak condition C1 (strategy params in run hash) is DONE in 8ffb9c3 (tech-lead B15 r3).
 6. Then: B16 public probe, A5b Redis auth, A5c DB roles, A6/A7 follow-ups, A5d at VPS.
