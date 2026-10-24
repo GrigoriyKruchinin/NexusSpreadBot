@@ -11,6 +11,15 @@
   commented it out; Gate support question stays in go-gates-checklist). D-03 first dump + restore drill PASSED
   14:06Z. Pending: D-01 live restart check (restart Docker/WSL once), first digest check (D-08), 24 h checkpoint.
 
+## D-01 live restart check 2026-10-24: FAILED (auto-recovery), stack recovered manually
+- User ran `wsl --shutdown` ~15:09Z; Docker Desktop reconnected. postgres/redis came back; scanner, beat, worker-alerts,
+  worker-maintenance Exited (127) at start with no app log output. Hypothesis (unconfirmed; `docker inspect` is denied):
+  bind mount `./config/nexus.toml` from the Ubuntu distro was not available when Docker Desktop restarted them.
+- 15:11Z orchestrator ran `docker compose start` (no recreate): all healthy, migrator exit 0, key policy pass, 4x
+  `paper_resumed` (same runs, no reset). Soak data gap ~15:08:32Z-15:11:50Z (~3.5 min). No Telegram alert (workers down too).
+- Risk for the soak: a Windows reboot/update leaves the stack down SILENTLY. Fix needed (devops): e.g. bake config into
+  the image or start the stack from WSL boot, plus an external dead-man alert. Awaiting user choice.
+
 ## Stage S0 (pre-soak gates) closed
 - Accepted: B15 part 1 (TL r3), A7 (security r1, TL r2), S0 (TL r2 `343df63`, security r2 `1fb8d60`), tester regression,
   D-08 per-set watchdog (`fba9dd4` + r1 fixes `4d1a990`; tech-lead r2 ACCEPT, `docs/audit/tech-lead-review-D08.md`).
@@ -31,7 +40,7 @@
    DEPLOYED 2026-10-24 14:55Z (user OK: worker-maintenance only): image rebuilt at 4d9bfe5, worker-maintenance recreated,
    healthy, task nexus.maintenance.purge registered; scanner NOT restarted (no soak data gap). D-01 stays open until a real
    Docker/WSL restart. Other containers (beat, worker-alerts, scanner) still run the pre-change image; behaviour identical.
-   Then: scanner rebuild/restart (user OK given, deadline 2026-10-31 14:05Z) + D-01 check. Original item: B15 part 2 GO report generator (`docs/quant/b15-review-and-report-spec.md`, incl. F2 fee
+   Original item: B15 part 2 GO report generator (`docs/quant/b15-review-and-report-spec.md`, incl. F2 fee
    disclosure). Quant pre-soak condition C1 (strategy params in run hash) is DONE in 8ffb9c3 (tech-lead B15 r3).
 6. Then: B16 public probe, A5b Redis auth, A5c DB roles, A6/A7 follow-ups, A5d at VPS.
 7. Stage summary to the user for S0 (`docs/reports/stage-S0-summary.md`) if not yet written.
