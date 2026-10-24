@@ -1,8 +1,8 @@
 # B15 part 1 review (simulation semantics) + part 2 spec (GO report)
 
 - reviewer: quant-analyst, 2026-10-23
-- subject: commit f9ac581 (B15 part 1), `docs/handoffs/B15-part1-to-review.md`,
-  `docs/tasks/m2/B15-shadow-paper-portfolios.md`; baseline `docs/quant/b14-conditional-totals-review.md`
+- subject: commit f9ac581 (B15 part 1; later fixes c61b060, 2854904, 8ffb9c3), card
+  `docs/tasks/m2/B15-shadow-paper-portfolios.md` (the handoff file was removed in S0 hygiene; history in git); baseline `docs/quant/b14-conditional-totals-review.md`
 - read: `src/nexus/simulation/portfolio.py`, `src/nexus/scanner/paper.py`, `src/nexus/engine/candidates.py`,
   `src/nexus/scanner/service.py` (sweep/alert path), `src/nexus/container.py`, `src/nexus/config/{groups,roles,venue_sets}.py`,
   `.env.example`. No data used (no soak yet); effects described and bounded, not measured.
@@ -93,8 +93,8 @@ Fix: per sweep and set, count `eligible` (routes passing `select`'s filters insi
   trades" (no cap). Should not happen for alerts from the current sweep; count it (log
   `paper_membership_missing`) rather than silently trading.
 - **N7. Soak config:** run four sets, not two (B14 review section 5.2):
-  `PAPER_VENUE_SETS=all;excl_conditional;excl_bybit=-bybit;excl_gateio=-gateio`. Measured latency for
-  4 sets is fine (+2 ms).
+  `PAPER_VENUE_SETS=all;excl_conditional;excl_bybit=-bybit;excl_gateio=-gateio` (now `[paper] venue_sets`
+  in `config/nexus.toml`; env `PAPER_VENUE_SETS` overrides). Measured latency for 4 sets is fine (+2 ms).
 - **N8. B14 episode totals after B15** evaluate the union, so `all` episode counts are not comparable
   with pre-B15 history (more routes evaluated). Data was wiped 2026-10-23, so practically moot; the
   report starts at the run `since` anyway.
@@ -107,7 +107,7 @@ Owner: quant-analyst (semantics) + backend-lead (code). Read-only DB role (`nexu
 ### B1. Inputs and windows
 
 - **Sets (user decision 2026-10-23): the soak runs 4 sets**
-  `PAPER_VENUE_SETS=all;excl_conditional;excl_bybit=-bybit;excl_gateio=-gateio`. The report renders all
+  `PAPER_VENUE_SETS=all;excl_conditional;excl_bybit=-bybit;excl_gateio=-gateio` (`[paper] venue_sets` in `config/nexus.toml`). The report renders all
   four; the GO set is the one matching gate status at UF (B2), the other three are context
   (venue-access value of bybit / gateio / conditional venues = difference to `all` on the common window).
 
@@ -213,7 +213,7 @@ recompute, INSUFFICIENT DATA path, GO vs GO-HOLD branch from a gate fixture.
 
 - read: diff c61b060 for `simulation/portfolio.py`, `scanner/paper.py`, `scanner/capstats.py`,
   `engine/candidates.py`, `scanner/service.py`, `persistence/{models,repositories}.py`, migration
-  b15a7c3e91d2, `config/groups.py`; handoff `docs/handoffs/B15-part1-to-review.md` section "Round 2".
+  b15a7c3e91d2, `config/groups.py`; fix commit c61b060 (round 2; handoff file removed in S0 hygiene).
   No data (no soak yet).
 
 ### Verdict: **ACCEPT** (R1-R3 closed), with one pre-soak condition C1 (not a new review round)

@@ -16,6 +16,11 @@ Audit date: 2026-10-23, branch `chore/agent-pipeline-adoption`. Raw outputs: `do
 
 Nothing failed. `make check` = lint + typecheck + test, all three green.
 
+**Note (2026-10-24):** the `docker compose ... config` row above is no longer a valid method. Since
+2026-10-23 this command is denied (it expands `.env`; key-leak incident, CLAUDE.md rule 4). Do not re-run it;
+compose is checked by YAML parsing (`tests/unit/test_compose.py`). The evidence file is kept as it was.
+The integration hazard above was closed: integration tests run only against `nexus_test` (R-01, CI).
+
 ## WARNING: integration run was destructive to the live local DB
 
 `tests/integration/conftest.py` (`sessions` fixture) runs `TRUNCATE ... RESTART IDENTITY CASCADE`

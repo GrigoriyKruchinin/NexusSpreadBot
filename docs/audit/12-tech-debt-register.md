@@ -36,6 +36,21 @@ Scale: severity L/M/H; fix cost S (<0.5 d), M (1-3 d), L (>3 d).
 
 Confidence: High for TD-01..04, 08, 10, 11, 13, 14, 26 (direct evidence); Medium for TD-05, 07, 15, 24 (inferred from size/grep, not reviewed line by line).
 
+## Status 2026-10-24 (the table above is the 2026-10-23 snapshot)
+
+| ID | Status 2026-10-24 |
+|---|---|
+| TD-01 | Closed: CI with 7 jobs (A2), green on HEAD |
+| TD-02 | Reduced: backups, restore drill, copy to C:, status file and watchdog (A5a, S0a, S0b); external heartbeat deferred to VPS |
+| TD-05 | Open: `scanner/service.py` is 1169 lines |
+| TD-07 | Open: 35 `except Exception` in `src/`, 20 of them in `scanner/service.py` |
+| TD-15 | Partly: `unless-stopped` + park on key-policy exit 3 (S0a); no resource limits |
+| TD-18 | Closed: CI integration job runs on `nexus_test` only |
+| TD-21 | Closed for secrets: gitleaks pre-commit hook (A2a) |
+| TD-26 | Closed: the file is gone from the repo root |
+
+Still open and relevant for the soak: TD-14 (Redis auth, A5b), TD-03 (DB roles, A5c), TD-04, TD-13, TD-23.
+
 ## Suggested sequencing
 1. TD-01 + TD-18 + TD-21 (CI with integration services and secret scan).
 2. TD-02, TD-14, TD-15 before any unattended multi-day soak.

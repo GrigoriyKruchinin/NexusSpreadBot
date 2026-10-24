@@ -6,7 +6,7 @@
 - reviewers: tech-lead (diff review), tester (failing-first test check)
 - complexity: low (one constant, one default, config sync; no logic change)
 - depends_on: none
-- status: done (uncommitted, awaiting tech-lead review)
+- status: done (2862593; accepted)
 
 ## Goal
 Make the default `EXCHANGES_ENABLED` equal to the five core venues so no soak/analytics run mixes

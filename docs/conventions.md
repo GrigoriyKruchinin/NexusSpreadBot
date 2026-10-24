@@ -8,7 +8,9 @@
 - Logging: `structlog`; never log secrets, tokens, signatures, URLs containing tokens.
 - SOLID: new exchange = new adapter + registry entry; narrow interfaces; concrete classes wired only
   in `container.py`.
-- Config: pydantic-settings, each container loads only its own subset; `.env.example` in sync.
+- Config: settings live in committed `config/nexus.toml` (env overrides; startup guard rejects secrets and
+  unknown keys); `.env` / `.env.example` hold only secrets and ENV-ONLY variables (A7). Each container loads
+  only its own subset.
 - Telegram: HTML parse mode, escape dynamic values, templates in `notifications/`.
 - Tests: hand-computed expectations for spread math, never mock the math; adapters tested on
   recorded fixtures; integration tests marked `integration`, test DB only.

@@ -6,7 +6,7 @@
 - reviewers: tech-lead (diff), quant-analyst (totals semantics, later quant reports)
 - complexity: medium (cross-cutting read-side change; config validation across groups; no scanner/DB logic change)
 - depends_on: B1 (done)
-- status: review (round 2 fixes applied, not committed). 656 unit tests; see Implementation notes
+- status: done (5ba4f07 + e23024d; TL round 2 ACCEPT). See Implementation notes
 
 ## Goal
 Every aggregate shows which venues are "conditional" (data collected, but possibly not tradable for

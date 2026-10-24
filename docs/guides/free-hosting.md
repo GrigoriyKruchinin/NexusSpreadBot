@@ -96,12 +96,14 @@ cd NexusSpreadBot
 Если репозиторий приватный — используйте deploy key (GitHub → Settings → Deploy keys,
 только чтение) или `gh auth login`.
 
-Файл `.env` **не коммитится и не вставляется в чат**. Перенесите его со своего компьютера:
+Файл `.env` **не коммитится и не вставляется в чат**. Перенесите его со своего компьютера
+(в нём только секреты: ключи, токен бота, пароли):
 ```bash
 # выполняется на ВАШЕМ компьютере (WSL), не на сервере
 scp ~/projects/NexusSpreadBot/.env ubuntu@<публичный-IP>:~/NexusSpreadBot/.env
 ssh ubuntu@<публичный-IP> 'chmod 600 ~/NexusSpreadBot/.env'
 ```
+Файл `config/nexus.toml` (все остальные настройки) приходит вместе с репозиторием через git, его копировать не нужно.
 
 ### 1.5 Запуск
 **Сначала остановите локальный стек** (`make down-local` на ноутбуке) и убедитесь, что в Docker
@@ -144,7 +146,7 @@ docker compose -f docker-compose.local.yml start scanner
 **us-west1, us-central1, us-east1**.
 
 Минусы для нас:
-- **IP из США → Binance вернёт `451`.** Придётся убрать `binance` из `EXCHANGES_ENABLED`
+- **IP из США → Binance вернёт `451`.** Придётся убрать `binance` из `[exchanges] enabled` в `config/nexus.toml`
   (теряем самую ликвидную биржу и большую часть маршрутов). Для проверки идеи это
   нежелательно.
 - 1 ГБ RAM: нужен swap, запас по памяти минимален.

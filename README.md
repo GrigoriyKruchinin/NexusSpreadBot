@@ -109,6 +109,10 @@ unless both the transfer path and the token contract are verified (ticker collis
   Nothing is ever traded or transferred.
 - **Daily digest:** episodes, survived latency, top routes, paper P&L (realized, transfer
   costs, mark-to-market, capital, ROC), quarantines, exchange uptime and transfer coverage.
+- **Shadow paper portfolios per venue set:** `[paper] venue_sets` in `config/nexus.toml`; each set has
+  fixed capital and its own P&L, so GO numbers are reported per set (with and without conditional venues).
+- **Liveness watchdog (maintenance worker):** Telegram alert on stale scanner data, paper sets that stop
+  writing, and missing/failed/uncopied backup. See [docs/guides/backups.md](docs/guides/backups.md).
 
 ## Quickstart (local, Version 1)
 
@@ -133,8 +137,12 @@ all `MEXC_*` / `BITGET_*` variables unset (ADR 0002).
 ```bash
 uv sync
 make check              # ruff + mypy --strict + unit tests
-make test-integration   # repositories against PostgreSQL (POSTGRES_* env)
+make test-integration   # repositories against PostgreSQL, only against the `nexus_test` DB (refuses otherwise); normally runs in CI
 make revision m="..."   # new Alembic migration
+make backup             # DB dump (ask first on the live stack; see docs/guides/backups.md)
+make backup-archive     # one-off archive dump, never auto-deleted (ask first)
+make restore-drill      # restore the last dump into `nexus_test` only (ask first)
+make check-env-settings # prints nothing when `.env` holds secrets only
 uv run pre-commit install   # once per clone: ruff, mypy, gitleaks (v8.30.1, .gitleaks.toml) on commit
 ```
 

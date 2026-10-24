@@ -39,11 +39,11 @@ Ticks only after verification and commit.
 - [x] Resolve scope drift: bitget/mexc adapters kept as extension only (ADR 0002)
 
 ## M2 — Code quality (under characterization tests)
-- [ ] R-02 Isolate exchange failures in sweep (`gather(return_exceptions=True)`), per-route error counters
-- [ ] R-03 Fee currency per exchange; no profit when transfer UNKNOWN; stablecoin peg guard (`docs/reports/math-review.md`)
+- [x] R-02 Isolate exchange failures in sweep (`gather(return_exceptions=True)`) — done in S0b (`110fb91` + r2 `cb1c1af`, `gather_isolated`); per-route counters remain in B3
+- [ ] R-03 Fee currency per exchange; no profit when transfer UNKNOWN; stablecoin peg guard (formula review: future `docs/quant/formula-review.md`, M3 quant item; the old `docs/reports/math-review.md` never existed in git)
 - [ ] R-04 DB timeouts, purge indexes, batched purges, measure real row growth (+ A5a N4: drill [min,max] count check gives false MISMATCH once purges run alongside inserts; adjust drill when B7/purges land)
 - [ ] R-08 Clock-drift guard; fix `_until_stopped` cancellation
-- [ ] Split `scanner/service.py` (1048 lines); review 25 `except Exception`
+- [ ] Split `scanner/service.py` (1169 lines; 20 `except Exception` in it, 35 in `src/`, 2026-10-24)
 - [ ] Coverage gaps: repositories (integration), container, tasks, cli
 
 ## Migration-plan backlog (cards not cut yet; see `docs/architecture/migration-plan.md`)
@@ -52,7 +52,7 @@ Ticks only after verification and commit.
 - [ ] B12 reaper for stale `SENDING` alert rows + payload version `v` (backend-lead, L)
 - [ ] B13 WS fixes: `_give_up` unwatches, stream errors feed health tracker (backend-lead, L)
 - [x] B14 (5ba4f07 + e23024d; tech-lead round 2: accepted) `CONDITIONAL_VENUES` (default bybit,gateio): every aggregate shows the list and combined totals ALL vs EXCLUDING conditional venues; marker on alerts (backend-lead + observability-engineer; medium) — card `docs/tasks/m2/B14-conditional-venues-reporting.md`
-- [ ] B15 shadow paper portfolios (part 1 config/sim/persistence/migration DONE: architect r2, quant r2, tech-lead r3 ACCEPT + F1/F3; part 2 GO report generator per `docs/quant/b15-review-and-report-spec.md` incl. F2 fee disclosure: todo) per venue set (config `PAPER_VENUE_SETS`, default `all` + `excl_conditional`, own inventory/rebalancing/top-N cap, same fixed capital; migration `portfolio_id` needs A5a restore drill + user OK U4; data accrues from the moment a set is added; quant GO report reads per-set results; backend-lead + quant-analyst; high) — card `docs/tasks/m2/B15-shadow-paper-portfolios.md`
+- [ ] B15 shadow paper portfolios (part 1 config/sim/persistence/migration DONE: architect r2, quant r2, tech-lead r3 ACCEPT + F1/F3; part 2 GO report generator per `docs/quant/b15-review-and-report-spec.md` incl. F2 fee disclosure: todo) per venue set (`[paper] venue_sets` in `config/nexus.toml`, env `PAPER_VENUE_SETS` overrides; soak runs 4 sets: all, excl_conditional, excl_bybit, excl_gateio; own inventory/rebalancing/top-N cap, same fixed capital; migration `portfolio_id` needs A5a restore drill + user OK U4; data accrues from the moment a set is added; quant GO report reads per-set results; backend-lead + quant-analyst; high) — card `docs/tasks/m2/B15-shadow-paper-portfolios.md`
 - [ ] B16 public-only probe of expansion batch 1 (BingX, XT, Toobit, Bitfinex, Phemex; no keys, conditional by default, per-venue lawyer ToS gate, report in `docs/reports/`; backend-lead + crypto-specialist; medium) — card `docs/tasks/m2/B16-public-probe-expansion-batch1.md`
 - [ ] C0 characterization pack for `Scanner.sweep`/`run` before the split (tester, L-M; after R-02/B3/B4)
 - [ ] Backlog, no card (user idea G2): optional per-exchange proxy setting in adapters (ccxt proxy), off by default, proxy URL is a secret; gated by lawyer ToS check per core exchange on proxy/VPN use; design with the user when a server is discussed
@@ -61,7 +61,7 @@ Ticks only after verification and commit.
 - [ ] Agree GO/NO-GO numbers (threshold 2 %/month; see `docs/pipeline/nexus-appendix.md` P6)
 - [x] S0 pre-soak gates: D-01 restart policy, D-02 backup copy to C:\nexus-backups + status file, R-02 sweep isolation, liveness watchdog to Telegram, gap accounting (devops + backend-lead; medium) — card `docs/tasks/m3/S0-pre-soak-gates.md`
 - [x] S0 follow-up D-08: watchdog check for per-set paper data freshness (newest `paper_cap_stats` hour per set older than N h -> alert; disabled/failing set must not go silent) (backend-lead; small; before or early in the soak) — delta audit `docs/audit/delta-02-S0.md`
-- [ ] Multi-day keyed soak (>= 7-14 days) with backups running (depends on B15: shadow portfolios must be running before the soak starts, else no valid "without" GO numbers; also A5a). Pre-soak gates from delta audit: D-01 scanner restart policy `on-failure:5` + no alert (fix or daily alive check), D-02 verified cron backup + off-machine copy decision, D-03 drill re-run on a `.counts` dump, R-02
+- [ ] Multi-day keyed soak (>= 7-14 days) with backups running. Remaining before/at soak start: fresh stack (U4 at each data step; guide `docs/guides/soak-fresh-stack.md`), D-03 restore drill on the first dump of the new DB, D-10 migrator exit 0 + `alembic current` = head, D-01 live restart check (security S-8). D-08 per-set freshness is its own line above (done). B15 part 1 done; part 2 report runs in parallel.
 - [ ] Quant: formula review, cost model, latency vs spread lifetime, two execution modes, honest backtest, verdict
 - [ ] Lawyer: `docs/legal/nexus-risk-assessment.md` verified with sources
 - [ ] Dashboards as code (observability-engineer; ADR on stack)

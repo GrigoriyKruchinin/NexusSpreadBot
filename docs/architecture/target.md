@@ -77,7 +77,7 @@ flowchart LR
 
 ## 3. Module boundaries inside the scanner (split of `scanner/service.py`)
 
-Today `Scanner` (1048 lines, ~40 methods) owns everything. Rule (ADR 0003): extract only what
+Today `Scanner` (1169 lines as of 2026-10-24, ~40 methods) owns everything. Rule (ADR 0003): extract only what
 owns state or forms a clear stage; reuse the existing sibling modules; stop when every module is
 < ~300 lines and unit-testable alone. `Scanner` keeps its name as the thin pipeline.
 
@@ -171,7 +171,7 @@ Every new or moved component must satisfy these; tech-lead reviews against this 
 ## 6. Source plug-in contract and DEX readiness (ADR 0004, ADR 0006)
 
 - **Core list.** `CORE_EXCHANGES` (config constant) = the five core venues and the default of
-  `EXCHANGES_ENABLED` (step B1). Enabling an extension venue is a config change only; the
+  `[exchanges] enabled` in `config/nexus.toml` (A7; formerly `EXCHANGES_ENABLED`, step B1). Enabling an extension venue is a config change only; the
   "core" policy lives in config, not in adapter code.
 - **Capabilities resolved at composition.** `container.py` turns each enabled adapter into a
   frozen `VenueHandle` with typed optional ports: `books` (required), `ws_books`,

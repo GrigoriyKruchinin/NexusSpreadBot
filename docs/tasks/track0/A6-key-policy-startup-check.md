@@ -6,7 +6,7 @@
 - reviewers: security, tech-lead
 - complexity: high (fail-closed security gate on every authenticated client; five venues with different response shapes)
 - depends_on: B1 (done). Blocks U3: no real keys before this is merged.
-- status: review (round 1 fixes applied: tech-lead 1-4, 6, 8, 9, 10, 12; security F2-F6); awaiting re-review. Code: `src/nexus/adapters/key_policy.py`, tests: `tests/unit/adapters/test_key_policy.py`
+- status: done (6766bfd + ee38592; TL round 2 + security ACCEPT). Follow-ups F-1..F-5 in todo. Code: `src/nexus/adapters/key_policy.py`, tests: `tests/unit/adapters/test_key_policy.py`
 
 ## Goal
 At scanner startup a per-venue `KeyPolicyCheck` refuses to start if the configured key can trade, withdraw or transfer, or is not IP-bound.
@@ -14,7 +14,7 @@ At scanner startup a per-venue `KeyPolicyCheck` refuses to start if the configur
 ## Context docs
 `docs/reports/exchange-key-permissions.md` (endpoints, refuse rules, [U] items),
 `docs/audit/security-review-architecture.md` (S-08, G4), `docs/architecture/target.md` §10.4,
-`docs/adr/0001*` (no withdrawal/trading code), `src/nexus/config/groups.py` (`CORE_EXCHANGES`).
+`docs/decisions/0001-no-withdrawal-in-code.md` (no withdrawal/trading code), `src/nexus/config/groups.py` (`CORE_EXCHANGES`).
 
 ## Acceptance criteria
 1. One `KeyPolicyCheck` per core venue (binance `GET /sapi/v1/account/apiRestrictions`, bybit

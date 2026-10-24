@@ -2,7 +2,7 @@
 
 Date: 2026-10-23. Author: architect. Status: accepted (U2, ADR 0006). Target: `target.md`.
 Each row is a task-card candidate (`docs/pipeline/task-format.md`). Every step: behaviour-preserving
-unless stated, `make check` not worse than baseline (481 tests, 89 % branch, ruff 0, mypy 0),
+unless stated, `make check` not worse than the CLAUDE.md quality ratchet (currently 1009 tests, 91.4 % branch, ruff 0, mypy 0; baseline was 481 / 89 %),
 one commit, no big bang.
 
 Revised 2026-10-23 after critical review: B1 first on the critical path; split C reduced to
