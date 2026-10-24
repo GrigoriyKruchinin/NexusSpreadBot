@@ -1,4 +1,4 @@
-"""Read-only query layer of the GO report (SELECTs only; use the ``nexus_ro`` role).
+"""Read-only query layer of the GO report (SELECTs only; the engine sets a read-only session).
 
 Builds the plain :class:`~nexus.reports.go_math.SetData` rows the pure math consumes. Nothing is
 written; no query touches a table outside the paper/registry/evaluation read paths.

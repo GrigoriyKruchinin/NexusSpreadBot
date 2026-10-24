@@ -1,7 +1,7 @@
 # B15 part 2 (GO report generator) -> quant-analyst + tech-lead review
 
 Spec: `docs/quant/b15-review-and-report-spec.md` Part B + Round 2. Card: `docs/tasks/m2/B15-shadow-paper-portfolios.md`.
-Run: `make go-report` (read-only role `nexus_ro`, SELECTs only). Sample: `docs/quant/samples/go-report-sample.md` (synthetic, from `tests/go_fixture.py`).
+Run: `make go-report` (app DB role from `POSTGRES_*`; the session is read-only by server setting `default_transaction_read_only=on` plus statement/lock timeouts; `nexus_ro` cannot be used from the host). Sample: `docs/quant/samples/go-report-sample.md` (synthetic, from `tests/go_fixture.py`).
 
 ## Spec point -> code
 - Query layer (latest run per set, in-run rows only, hourly-thinned snapshots, F2 fee observations): `src/nexus/reports/go_repository.py`

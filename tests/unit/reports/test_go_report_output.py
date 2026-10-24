@@ -179,7 +179,42 @@ def test_cli_arguments_and_helpers() -> None:
     )
     assert ops["a"] == OpsInputs(D("1.5"), 2, ("x", "y"))
     assert ops["b"] == OpsInputs()
-    assert go_report.parse_ops("[]") == {}
+    for bad in ("[]", '{"sets": []}', '{"sets": {"a": 5}}'):
+        with pytest.raises(ValueError, match="ops file"):
+            go_report.parse_ops(bad)
+    assert go_report.parse_ops("{}") == {}
+    with pytest.raises(SystemExit):  # bad --until is a usage error, not a traceback
+        go_report.parse_args(["--until", "12/05/2026"])
+
+
+def test_read_only_engine_sets_server_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    from nexus.config.groups import DatabaseSettings
+    from nexus.persistence import db
+
+    monkeypatch.setenv("POSTGRES_PASSWORD", "x" * 24)
+    seen: list[dict[str, object]] = []
+    monkeypatch.setattr(db, "create_async_engine", lambda _url, **kw: seen.append(kw))
+    db.create_engine(DatabaseSettings(), pooled=False, read_only=True)
+    db.create_engine(DatabaseSettings(), read_only=True)
+    db.create_engine(DatabaseSettings(), pooled=False)
+    for kw in seen[:2]:
+        settings = kw["connect_args"]["server_settings"]  # type: ignore[index]
+        assert settings["default_transaction_read_only"] == "on"
+        assert int(settings["statement_timeout"]) > 0
+        assert int(settings["lock_timeout"]) > 0
+    assert seen[2]["connect_args"] == {}
+
+
+def test_main_rejects_bad_ops_file_and_missing_go_set(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    patch_db(monkeypatch)
+    bad = tmp_path / "ops.json"
+    bad.write_text("[]")
+    assert go_report.main(["--ops-file", str(bad), "--stdout"]) == 2
+    assert "ops file" in capsys.readouterr().err
+    assert go_report.main(["--until", "2026-12-05", "--go-set", "nope", "--stdout"]) == 2
+    assert "no run found" in capsys.readouterr().err
 
 
 def test_write_outputs_creates_markdown_and_json(tmp_path: Path) -> None:

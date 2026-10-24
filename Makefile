@@ -38,7 +38,7 @@ test-integration: ## Run integration tests (requires `make up-local`)
 check: lint typecheck test ## Lint + typecheck + unit tests
 
 .PHONY: go-report
-go-report: ## GO report (Markdown+JSON) from the paper portfolios; read-only DB role; ARGS="--go-set excl_conditional --until 2026-11-14"
+go-report: ## GO report (Markdown+JSON) from the paper portfolios; read-only DB session (server setting); ARGS="--go-set excl_conditional --until 2026-11-14"
 	uv run python -m nexus.reports.go_report $(ARGS)
 
 # ---------------------------------------------------------------- docker (local)
