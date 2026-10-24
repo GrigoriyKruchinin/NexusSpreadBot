@@ -106,6 +106,11 @@ Owner: quant-analyst (semantics) + backend-lead (code). Read-only DB role (`nexu
 
 ### B1. Inputs and windows
 
+- **Sets (user decision 2026-10-23): the soak runs 4 sets**
+  `PAPER_VENUE_SETS=all;excl_conditional;excl_bybit=-bybit;excl_gateio=-gateio`. The report renders all
+  four; the GO set is the one matching gate status at UF (B2), the other three are context
+  (venue-access value of bybit / gateio / conditional venues = difference to `all` on the common window).
+
 - Per set `s`: latest run (R2) -> `since_s` = run `started_at`. Report window per set
   `[since_s, until]`. **Comparisons between sets use the common window**
   `[max(since_s over compared sets), until]` only; per-set full windows shown separately.
@@ -177,6 +182,10 @@ From DB rows of the run, within W:
   **without the top-2 routes** and separately **without the top-2 coins** (drop their realized and
   attributed rebal; MTM of those coins dropped too). Both must stay >= 2.0 %. Label: this is a filter
   inside one set (B14-style approximation, likely conservative); stated in the report.
+- **User decision 2026-10-23: the rule is STRICT.** GO requires >= 2.0 %/month **after 35 % tax** on the
+  holdout **both** ex-top-2 routes **and**, separately, ex-top-2 coins. Failing either one is a fail of
+  the concentration gate (B7 step 1), not a confidence flag. Top-2 is ranked on the holdout positive
+  realized net of the GO set (no ranking on tuning data, no re-ranking per period).
 
 ### B7. Verdict logic (per GO set; ADR 0008)
 
@@ -199,3 +208,63 @@ AC 6 is met by a report rendered from the integration fixture (2 sets, two runs 
 `since`), every field of B4 present for each set, both tax rates, verdict line. Unit tests for: tax on a
 loss window (no refund), monthly scaling, common-window cut, holdout split boundaries, k periods, ex-top-2
 recompute, INSUFFICIENT DATA path, GO vs GO-HOLD branch from a gate fixture.
+
+## Round 2 (re-review of fix commit c61b060), 2026-10-23
+
+- read: diff c61b060 for `simulation/portfolio.py`, `scanner/paper.py`, `scanner/capstats.py`,
+  `engine/candidates.py`, `scanner/service.py`, `persistence/{models,repositories}.py`, migration
+  b15a7c3e91d2, `config/groups.py`; handoff `docs/handoffs/B15-part1-to-review.md` section "Round 2".
+  No data (no soak yet).
+
+### Verdict: **ACCEPT** (R1-R3 closed), with one pre-soak condition C1 (not a new review round)
+
+| Point | Implementation | Semantics check | Status |
+|---|---|---|---|
+| R1 coin slots | `ensure_seeded` -> `_release_idle` when budget short: slots of the sell venue idle >= `coin_idle_release_ms` (default 24 h), not in flight, priced, oldest-used first, until the needed budget is freed. `_convert_to_usdt`: balance x shared median price minus `conversion_cost_pct` (0.3 %) -> USDT; slot's **seed value** moved to the venue's USDT seed; cost added to `rebalance_costs` and stored as a `COMPLETED` rebalance with `network='conversion'`; drained into the same commit (snapshot written). `COIN_BUDGET_EXHAUSTED` when the coin slot was never seeded. | Capital stays fixed (seed value only moves asset class). Price drift of the converted coin stays in MTM, the cost in rebal: `mtm_W = total_W - realized_W + rebal_W` still holds. Restore sums conversion rows into costs (status != blocked). LRU release uses only the past: no look-ahead. Exhausted vs insufficient is now separable. | **Closed** |
+| R2 run registry | `paper_portfolios` (venues, capital, `config_hash` SHA-256 of venues + all sizing/rebalance/idle/conversion params, `started_at`); latest row per name; hash mismatch (incl. backfilled `legacy`) -> fresh run with full capital; `load_state` reads only rows `>= started_at`; digest `since` from the registry. | Never restores across definitions; legacy `all` cannot leak into the new `all`. Every run starts at `(usdt + budget) x n = PAPER_CAPITAL_USD` (Decimal division, error < 1e-20). Runs of one name are sequential, so time ranges identify a run's rows without a `run_id` column (acceptable). | **Closed** |
+| R3 cap stats | `select_per_set` -> `SetSweepStats(eligible, selected)` per set and sweep -> `CapStatsBuffer` -> hourly additive upsert `paper_cap_stats(sweeps, sweeps_cap_bound, dropped_routes, alerts_cap_excluded)`; `alerts_cap_excluded` = alert route has both legs in the set but is not in its top-N; flush every 5 min, forced on shutdown, failures re-buffered. | `eligible` uses the same filters as the cap (`_qualifying`), so `dropped = eligible - selected` is exactly the cap effect. `alerts_cap_excluded` counts the first alert of an episode a set could not trade, which is exactly the N1 case (later entry into top-N in the same episode fires no new alert): it bounds N1. Crash loses <= 5 min of counters: negligible. | **Closed** |
+| N6 membership | fails closed (`paper_membership_missing` warning, trades nowhere). | Correct direction (no uncapped trading). | Closed |
+
+### Pre-soak condition (must land before the soak `since`; tech-lead can verify, no quant round needed)
+
+**C1. Strategy parameters are not in the run hash.** The hash covers portfolio sizing only. Spread
+thresholds (`SPREAD_*`), latency, `SCANNER_MAX_CANDIDATES_PER_SWEEP`, fee config, alert cooldown and
+`PAPER_VENUE_SETS` order/specs beyond venues change *which trades happen*, yet a change keeps the same
+run and the same `since`. Spec B1 requires "hash, or a config log the report can read"; neither exists,
+and part 2 comes after the soak starts, so a change in the first weeks would be invisible to the report
+(silent in-sample tuning inside the holdout). Cheapest fix: add a `strategy` sub-dict of those
+parameters to the hashed payload (a change then starts a fresh run for every set = holdout restarts,
+which is the intended rule). Alternative: write a `config_snapshot` row (hash + JSON, no secrets) at
+every start. Without C1 the report must refuse windows that cross a process restart it cannot attest.
+
+### New observations (non-blocking; disclose in the report)
+
+- **N9. Idle clock resets on restart.** `last_used_ms` is not persisted; after a restart every slot
+  gets a fresh 24 h window. With deploys more often than daily, slots never free and
+  `coin_budget_exhausted` grows (conservative: downward bias on all sets, caught by the B7 > 5 % block).
+  Optional fix: rebuild `last_used_ms` on restore from the last executed trade per `(sell_exchange, base)`.
+- **N10. Stranded unseeded coin.** Conversion sells only the sell-venue slot. Coin bought on the buy
+  venue of that route (unseeded holding) is no longer a rebalance target once the slot is gone, so it
+  stays as open alt exposure until some other route uses it. Effect: more MTM noise and liquidation cost,
+  no realized bias. Report: show `unseeded_coin_value_usd` per set at window end; it is already inside
+  `liq_W` (subtracted), so the headline stays conservative.
+- **N11. Conversion cost is a flat 0.3 % at the shared median**, not taker fee + half the venue's own
+  spread. For thin alts the true half-spread can exceed 0.2 %. Report: count conversions and their
+  cost share; if conversion cost > 10 % of `rebal_W`, add a sensitivity line at 2x conversion cost.
+- **N12. Disabled set on resume failure** leaves a gap in that set only; the registry `since` does not
+  move. Report: use `paper_cap_stats.sweeps` per set and hour as the **per-set heartbeat** (B1 gap rule
+  applied per set, not only to the scanner).
+- **N13. Rolling deploy edge.** An old writer still running after a new run's `started_at` would write
+  rows that fall into the new run's time range. One-off; report checks there are no rows of the set in
+  the 10 min before each `started_at` overlap, else drops the first 10 min of the run.
+
+### Part 2 spec amendments (in addition to the two user decisions applied above in B1 and B6)
+
+- B1: runs and `since` from `paper_portfolios` (latest run per set); `capital_fixed` = registry
+  `capital_usd`; per-set gaps from `paper_cap_stats.sweeps` (N12); a run hash change inside the holdout
+  is a blocking flag (B7.4, already listed), C1 makes it catch strategy changes too.
+- B4: `rebal_costs` split by `network = 'conversion'` vs transfers; add `conversions_count`,
+  `unseeded_coin_value_usd` (N10), `cap_bound_sweeps_pct = sum(sweeps_cap_bound) / sum(sweeps)`,
+  `dropped_routes` and `alerts_cap_excluded` from `paper_cap_stats`; `membership_missing` from logs
+  (or a metric) until it is persisted.
+- B7.4: `coin_budget_exhausted` share = exhausted / (executed + all skips) per set on the holdout.
