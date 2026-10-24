@@ -98,3 +98,91 @@ of every portfolio. R2-1 fixed with a test. No secrets, no order/transfer/withdr
 ## Next
 backend-lead fixes 1, 2, 3, 5-8 (round 2); quant-analyst decides point 4; architect signs off
 schema separately. Round 2 re-review focuses on the restore/reset path and `since` semantics.
+
+---
+
+# Round 2 — commit `c61b060` (mapping: handoff section "Round 2")
+
+- Checks run: `make check` -> ruff 0, mypy --strict 0, 794 unit passed (baseline >= 721; ratchet ok).
+  Integration tests not run locally (CI green per handoff); no DB touched.
+
+## Verdict: RETURN (1 High, 1 Medium, 3 Low) — round 1 points closed, new defects in the fix code
+
+## Round 1 points
+| # | Status | Evidence |
+|---|---|---|
+| 1 High (legacy capital) | Closed | run registry `paper_portfolios` + `config_hash`; legacy `all` -> fresh run. `test_legacy_all_state_starts_a_fresh_run_with_equal_capital`, `test_changed_definition_*`, `test_definition_hash_covers_every_sizing_parameter` |
+| 2 Medium (`since` pruned) | Closed | `since` = run `started_at`; integration `test_since_survives_snapshot_retention`, `test_load_state_ignores_rows_of_earlier_runs` |
+| 3 Medium (sets x cap) | Accepted with soak condition (below) | `sweep_done` now logs `candidates` (union), `candidates_cap`, `candidates_by_set`; hourly `paper_cap_stats` |
+| 4 Medium (coin lock-in) | Mechanism closed, but see new point R2-1 | idle release + `COIN_BUDGET_EXHAUSTED`; `test_idle_slot_*`, `test_budget_exhausted_*` |
+| 5 Low (fail-open membership) | Closed | `_membership` -> `frozenset()`; `test_missing_membership_fails_closed_with_per_set_caps` |
+| 6 Low (lost skip rows) | Closed | legs passed explicitly; `test_skip_rows_survive_missing_markets` |
+| 7 Low (BaseException) | Closed | non-`Exception` re-raised, `exc_info`; `test_non_exception_errors_are_not_swallowed`, `test_cancellation_still_propagates` |
+| 8 Low (digest tz) | Code closed, test weak (R2-4) | `local(p.since_ms)` |
+| 9 Low (docs / resume) | Closed | `.env.example`; per-set resume isolation `test_set_that_cannot_resume_*`, `test_book_start_fails_only_when_no_set_can_start` |
+
+Point 3 decision: the bound plus the new per-sweep log fields is acceptable **before** the soak; a
+pre-soak measurement is not possible without production data. Condition (add to the soak checklist /
+card): at the 24 h soak checkpoint compute p50/p95 of `candidates / candidates_cap` and sweep
+duration from `sweep_done`, and count exchange 429 / rate-limit errors. If p95 > 1.3x, or sweep
+duration p95 regresses > 25 % vs the pre-B15 baseline, or any rate-limit ban appears -> `NEEDS_USER`
+(raise limits / lower cap / fewer sets). Prometheus metric for the union stays a follow-up.
+
+## New points
+
+R2-1. **[High] Coin-slot recycle inflates the "fixed" capital.** `_convert_to_usdt`
+   (`simulation/portfolio.py`, `_release_idle` path) moves the freed slot's seed value into the
+   venue's USDT seed, and `ensure_seeded` then seeds the new coin with *fresh* capital via
+   `_seed` (the budget check `_coin_seed_usd` only counts coin seeds). Net effect: capital grows by
+   one slot (250 USD at defaults) on every recycle. The unit test even asserts it:
+   `test_idle_slot_is_converted_back_to_usdt_and_reused` -> `capital == capital_before + 250`.
+   Over a multi-week soak with a 24 h idle window the capital of each set drifts upward by a
+   different amount per set, breaking AC2 (equal fixed capital) and the GO denominator
+   (return on allocated capital). `test_total_seeded_capital_never_exceeds_the_fixed_budget` does
+   not catch it (it passes no `now_ms`, so release is disabled).
+   Fix: the new coin seed in a freed slot must be funded from the venue's USDT (virtual buy: move
+   `usd` from the USDT seed to the coin seed and debit the USDT balance, optionally with the same
+   `conversion_cost_pct`), so `sum(seeds)` stays equal to the configured capital. Tests: capital
+   invariant after N recycle cycles across venues (== `PAPER_CAPITAL_USD`), and the existing
+   capital-cap test with release enabled.
+
+R2-2. **[Medium] Main digest paper block for `all` is not run-scoped.** `DigestRepository._paper`
+   (`persistence/repositories.py` ~l.893-990) still reads every `all` row: legacy `IN_FLIGHT`
+   rebalances (never restored by the new run, so they stay `IN_FLIGHT` forever) are added to
+   equity permanently; `realized_total`, `rebalance_total`, `realized_excl`, `rebalance_excl` sum
+   legacy + current run; capital/equity come from the legacy snapshot until the new run writes its
+   first one. The same happens on any later redefinition of `all`. Fix: bound every query of
+   `_paper` by the current run's `started_at` from `paper_portfolios` (same as `_portfolios`).
+   Integration test: legacy run with an `IN_FLIGHT` rebalance and trades + new run -> digest totals
+   and equity only from the new run.
+
+R2-3. **[Low] Global settings in the run hash silently reset every set.** `definition()` hashes
+   `transfer_tax_pct`, `rebalance_delay_ms`, `coin_idle_release_ms`, `conversion_cost_pct`, etc.
+   Correct semantics, but one env tweak mid-soak restarts all sets at full capital and discards the
+   accrued window (only an `info` log). Log `paper_run_started` at `warning` when a previous run
+   existed (include old hash) and add one line to `.env.example`/guide: "changing any PAPER_* /
+   transfer tax setting starts a new soak run".
+
+R2-4. **[Low] Digest tz fix is not proven.** `test_digest_portfolio_lines_and_accrual_footer`
+   renders with `"UTC"` only; add a non-UTC `DIGEST_TZ` case asserting the shifted hour/day.
+
+R2-5. **[Low] Cap-stats flush in the sweep path has no timeout.** `Scanner` awaits
+   `flush_cap_stats` directly in the sweep (shutdown path uses `wait_for`); a hanging DB stalls the
+   sweep. Wrap in `asyncio.wait_for(..., EVENT_EMIT_TIMEOUT_S)` (buffer already keeps counters on
+   failure; on timeout cancellation the swapped-out `pending` is lost — merge back in a
+   `finally`/`except BaseException` before re-raise, or accept and document).
+
+## New code review notes (no action)
+- `CapStatsBuffer`: swap-then-await is safe against concurrent `add_*` (sync, same loop); failed
+  flush merges counters back; growth bounded by sets x hours. Upsert is additive and correct.
+- `ensure_run`: single transaction, called sequentially from `PaperBook.start`; no concurrent
+  writer exists (single scanner). Created path returns before `load_state`, so no partial state.
+- `_release_idle`: skips in-flight legs, unpriced coins and the new base; oldest-first; conversion
+  record is persisted via `drain_conversions` in the same commit and rolled back with the deepcopy
+  on commit failure. Cost booking matches normal rebalances (balance debited + `rebalance_costs`).
+- No secrets, no order/transfer/withdrawal code (ADR 0001 ok).
+
+## Next
+backend-lead: R2-1, R2-2 (blocking); R2-3..5 in the same round. Round 3 (last allowed) re-review
+focuses on the capital invariant and run-scoped digest totals. Soak condition for point 3 goes to
+the card.
