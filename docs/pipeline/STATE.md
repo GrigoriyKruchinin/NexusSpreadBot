@@ -11,7 +11,7 @@
   commented it out; Gate support question stays in go-gates-checklist). D-03 first dump + restore drill PASSED
   14:06Z. Pending: D-01 live restart check (restart Docker/WSL once), first digest check (D-08), 24 h checkpoint.
 
-## D-01 live restart check 2026-10-24: FAILED (auto-recovery), stack recovered manually
+## D-01 live restart check 2026-10-24: FAILED (auto-recovery) -> fix D-01b deployed, re-check pending
 - User ran `wsl --shutdown` ~15:09Z; Docker Desktop reconnected. postgres/redis came back; scanner, beat, worker-alerts,
   worker-maintenance Exited (127) at start with no app log output. Hypothesis (unconfirmed; `docker inspect` is denied):
   bind mount `./config/nexus.toml` from the Ubuntu distro was not available when Docker Desktop restarted them.
@@ -22,7 +22,16 @@
   `docker compose start` + Telegram + optional external heartbeat). NOT deployed (needs rebuild + recreate of all app containers,
   user OK). Handoff `docs/handoffs/D01b-auto-recovery.md`, user guide `docs/guides/soak-auto-recovery.md`.
 - Risk for the soak: a Windows reboot/update leaves the stack down SILENTLY. Fix needed (devops): e.g. bake config into
-  the image or start the stack from WSL boot, plus an external dead-man alert. Awaiting user choice.
+  the image or start the stack from WSL boot, plus an external dead-man alert.
+- D-01b (devops): config baked into image, bind mount removed, backup-status bind long syntax create_host_path=false,
+  host watchdog `scripts/host_watchdog.sh` (cron, compose start + Telegram dead-man). Security ACCEPT (24f491a), tech-lead r2
+  ACCEPT (05cc8c4; deploy-list fixes D-1/D-2 applied by orchestrator at deploy). CI green on 05cc8c4.
+- DEPLOYED 2026-10-24 15:35Z (user OK): `make up-local`, all 5 app services recreated healthy, postgres/redis untouched,
+  paper run ids 1-4 resumed (no new runs), key policy pass, 0 errors. Soak gap ~15:35-15:37Z.
+- NEXT: user does guide `docs/guides/soak-auto-recovery.md` steps (Docker Desktop autostart, Task Scheduler keeps Ubuntu up,
+  crontab watchdog line), then re-run D-01 (`wsl --shutdown`, wait 3-5 min, `ps -a`). Follow-up: handoff deploy list still
+  has D-1/D-2 text to correct; Makefile `up-local` does `mkdir -p ~/nexus-backup-status` (conflicts with D-2 intent).
+- User decision 2026-10-24: external heartbeat (whole PC off) DEFERRED to the server; rely on the morning digest.
 
 ## Stage S0 (pre-soak gates) closed
 - Accepted: B15 part 1 (TL r3), A7 (security r1, TL r2), S0 (TL r2 `343df63`, security r2 `1fb8d60`), tester regression,
