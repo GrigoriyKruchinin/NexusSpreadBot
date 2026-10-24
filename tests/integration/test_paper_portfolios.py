@@ -19,8 +19,8 @@ H = 3_600_000
 NET = D("7.98101")  # net profit of every trade built from make_breakdown()
 
 
-def _trade(buy: str, sell: str) -> TradeOutcome:
-    return TradeOutcome("ABC/USDT", "ABC", buy, sell, T0 + H, None, make_breakdown())
+def _trade(buy: str, sell: str, at_ms: int = T0 + H) -> TradeOutcome:
+    return TradeOutcome("ABC/USDT", "ABC", buy, sell, at_ms, None, make_breakdown())
 
 
 def _rebalance(src: str, dst: str, fee: int) -> Rebalance:
@@ -179,8 +179,21 @@ async def test_digest_paper_block_ignores_rows_of_earlier_runs(sessions: Session
     await repo.commit(
         portfolio_id="all",
         at_ms=T0 + 3 * H,
-        trades=[(_trade("binance", "kucoin"), None)],
-        rebalances=[_rebalance("binance", "kucoin", 3)],
+        trades=[(_trade("binance", "kucoin", T0 + 3 * H), None)],
+        rebalances=[
+            Rebalance(
+                "USDT",
+                "binance",
+                "kucoin",
+                D(500),
+                D(1),
+                D(3),
+                "TRC20",
+                T0 + 3 * H,
+                T0 + 4 * H,
+                RebalanceStatus.COMPLETED,
+            )
+        ],
         holdings=[PaperHolding("binance", "USDT", D(100), Seed(D(100), D(1)), D(1))],
     )
     data = await DigestRepository(sessions).collect(T0, T0 + 5 * H)

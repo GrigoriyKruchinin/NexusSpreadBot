@@ -56,3 +56,18 @@ Gate: 794 unit tests, ruff 0, mypy --strict 0; integration tests run in CI only 
 Sets x cap expansion with 4 sets (all, excl_conditional, excl_bybit, excl_gateio): union candidate count is bounded by 4 x cap (200 at cap 50). Sets are nested subsets of `all`, so their top-N overlap strongly and the union is expected well below the bound. NOT measured on live data (no production access); the new `paper_cap_stats` table records eligible/selected per set per hour, so the soak measures it. Earlier synthetic latency (4 sets +2 ms/sweep) stands.
 
 Non-blocking follow-ups: expose union-size per sweep as a Prometheus metric; commit the latency bench script; A7 config file replaces the long env set definition.
+
+## Round 3 (commits 2854904, 8ffb9c3 + docs commit)
+Gate: 806 unit tests, ruff 0, mypy --strict 0; integration tests in CI only.
+
+| Point | Fix | Tests |
+|---|---|---|
+| R2-1 [High] capital growth on recycle | `PaperPortfolio._fund_from_recycled_usdt`: a new coin seed is paid from the USDT freed by a conversion (excess of the USDT seed over `usdt_per_exchange`, derived from seeds so it survives restart): USDT seed and balance debited, sum of seeds unchanged. Conversion cost (0.3 %) and `rebalance_costs` unchanged. | `test_idle_slot_is_converted_back_to_usdt_and_reused` (fixed: capital == before, mtm identity), new `test_capital_is_fixed_after_many_recycles` (6 recycles, capital constant, mtm = total - realized + rebal) |
+| R2-2 [Med] digest `_paper` run scope | every query of `DigestRepository._paper` (snapshot, IN_FLIGHT, window, lifetime and excl totals) bounded by the current `all` run `started_at` | integration `test_digest_paper_block_ignores_rows_of_earlier_runs` (old run incl. IN_FLIGHT 900 USDT, trades, rebalances excluded) |
+| R2-3 + R2-N1 | `PortfolioRun.previous_hash`; restart logs `paper_run_restarted` at WARNING (portfolio, run_id, old/new hash prefix, since_ms, capital; no secrets); digest line "Набор X перезапущен <since>" via `PortfolioSummary.restarted` (run began in the window and an earlier run existed); `.env.example` note | `test_changed_strategy_starts_a_fresh_run_and_warns`, `test_digest_says_when_a_set_restarted_with_its_new_since`, integration `test_digest_flags_a_set_restarted_inside_the_window` |
+| C1 strategy in hash | `strategy` sub-dict: whole `EstimatorConfig` (thresholds, ages, skew, gross caps, verified flags, taxes), route trade cooldown, plus container-provided latency, candidate cap, alert cooldown, re-alert growth, default taker fee, unverified cap, min quote volume | `test_strategy_parameters_are_part_of_the_run_hash`, `test_strategy_settings_change_the_run_hash` (5 env settings) |
+| R2-4 tz | non-UTC digest test (Asia/Tokyo) | `test_digest_since_is_rendered_in_the_digest_timezone` |
+| R2-5 flush timeout | `CapStatsBuffer.flush` under `asyncio.timeout(3 s, FLUSH_TIMEOUT_S)`; timeout/failure logs a warning, counters put back; cancellation also puts back and re-raises. Covers sweep and shutdown paths | `test_cap_stats_flush_times_out_without_losing_counters`, `test_cap_stats_flush_cancellation_keeps_counters` |
+| 7 | "Soak checkpoint" section in the task card | - |
+
+Notes: per-venue fee tiers fetched from exchanges at runtime are not config and are not hashed (default taker fee is). A restart-line stays in the digest only for the day of the restart. CI run of the first commit failed on a test bug (fixture trade stamped before the new run); fixed in the docs commit.

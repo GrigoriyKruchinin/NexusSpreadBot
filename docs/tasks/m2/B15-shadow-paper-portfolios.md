@@ -85,3 +85,10 @@ changing GO thresholds; DEX; proxying; capital sizing decisions (value comes fro
 - R2-1 from `docs/audit/tech-lead-review-B14.md` (Round 2): `_episodes` returns bare `EpisodeStats()`
   on an empty window, so the digest shows "без условных н/д" on quiet days. Fix:
   `EpisodeStats(total_excl_conditional=0)` plus one test.
+
+## Soak checkpoint (tech-lead round 2, condition for the cap decision)
+At the 24 h soak checkpoint compute from `sweep_done` logs: p50/p95 of `candidates / candidates_cap`
+(union over sets vs cap) and sweep duration p95; count exchange 429 / rate-limit errors. If union/cap
+p95 > 1.3, or sweep duration p95 regresses > 25 % vs the pre-B15 baseline, or any rate-limit ban
+appears -> `NEEDS_USER` (raise limits / lower cap / fewer sets). Prometheus metric for the union stays
+a follow-up. Also read `paper_cap_stats` (per-set heartbeat and cap effect) at the same checkpoint.
