@@ -231,6 +231,8 @@ def test_dotenv_ignored_in_container_runtime(monkeypatch: pytest.MonkeyPatch) ->
     from pathlib import Path
 
     Path(".env").write_text("SPREAD_MIN_NET_PROFIT_USD=7\n")
+    Path("empty.toml").write_text("")
+    monkeypatch.setenv("NEXUS_CONFIG_FILE", "empty.toml")
     monkeypatch.setenv("NEXUS_RUNTIME", "container")
     assert SpreadSettings().min_net_profit_usd == Decimal(5)
 

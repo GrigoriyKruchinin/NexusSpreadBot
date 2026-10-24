@@ -1,0 +1,130 @@
+# Nexus Spread Scanner - non-secret settings (committed, reviewed like code).
+#
+# Priority: environment variable > this file > code default. Every value below equals the code
+# default, so editing this file is the one place to tune a run; the run-settings hash logged at
+# startup (event "settings_loaded") covers exactly these keys.
+#
+# SECRETS DO NOT BELONG HERE: bot token, chat id, passwords, Redis/Celery URLs, exchange keys,
+# key-policy attestations and the Telegram API host stay in .env / container env. The loader
+# refuses to start if this file contains any of them, or any key not listed below.
+# Table = env prefix without the trailing "_" (e.g. SPREAD_MIN_NET_PROFIT_PCT -> [spread]
+# min_net_profit_pct). An environment variable with the old name still overrides a key here.
+
+[telegram]
+disable_notification = false
+# Drop opportunity alerts that waited in the queue longer than this (seconds)
+alert_max_age_s = 30
+# Drop system events (exchange down/recovered, start/stop) older than this (seconds)
+event_max_age_s = 300
+request_timeout_s = 10.0
+
+[postgres]
+# Inside docker compose host is overridden to "postgres" via the environment.
+# Changing host sends the DB login there: treat as security-relevant in review.
+host = "localhost"
+port = 5432
+# Live DB name. Integration tests MUST run with POSTGRES_DB=nexus_test in the environment;
+# the integration conftest refuses any other merged value.
+db = "nexus"
+user = "nexus"
+pool_size = 5
+max_overflow = 5
+echo = false # true logs SQL with bound parameters outside log redaction
+
+[redis]
+socket_timeout_s = 5.0
+
+[celery]
+timezone = "UTC"
+
+[log]
+level = "INFO" # DEBUG | INFO | WARNING | ERROR
+json_format = true
+
+[exchanges]
+# At least two. Core venues (ADR 0002); add mexc/bitget explicitly only for extension runs.
+enabled = ["binance", "bybit", "gateio", "kucoin", "okx"]
+request_timeout_ms = 10000
+
+[conditional]
+# Data is collected, but trading there may not be possible now. Digests and alerts show totals for
+# ALL venues and EXCLUDING these. Must be a subset of exchanges.enabled (scanner fails at startup
+# otherwise). [] means "no conditional venues".
+venues = ["bybit", "gateio"]
+
+[scanner]
+# Quote assets treated as USD 1:1 (allowed: USDT, USDC)
+quote_assets = ["USDT"]
+# Optional symbol filters, e.g. ["BTC/USDT", "ETH/USDT"]
+symbols_whitelist = []
+symbols_blacklist = []
+# Skip pairs whose 24h quote volume is below this on either exchange
+min_quote_volume_usd = 50000
+ticker_interval_s = 10.0
+metadata_refresh_s = 1800.0
+orderbook_depth = 50
+max_candidates_per_sweep = 30
+max_concurrent_requests_per_exchange = 4
+snapshot_top_k = 20
+heartbeat_ttl_s = 120
+exchange_down_after_failures = 3
+rate_limit_backoff_s = 60
+# Stream order books of recently profitable routes over WebSocket (hot set)
+ws_enabled = true
+ws_max_streams = 20
+ws_hot_ttl_s = 300
+
+[spread]
+min_net_profit_pct = 0.3
+min_net_profit_usd = 5
+reference_notional_usd = 1000
+max_orderbook_age_ms = 5000
+max_book_skew_ms = 3000
+max_gross_spread_pct = 20
+max_unverified_gross_spread_pct = 5
+default_taker_fee_pct = 0.2
+include_transfer_cost = true
+# On-chain transfer taxes (percent of the amount moved) not included in the withdrawal fee
+transfer_tax_pct = { LUNC = 1.5, USTC = 1.5 }
+require_verified_transfer = true
+alert_cooldown_s = 600
+
+[alert]
+# Re-alert an open episode only when its net profit grew by at least this percentage
+realert_growth_pct = 50
+
+[episode]
+close_gap_s = 300
+
+[quarantine]
+persist_min = 15
+ttl_h = 24
+window_h = 6
+max_episodes = 5
+
+[paper]
+enabled = true
+# Shadow portfolios, ";"-separated (see nexus.config.venue_sets)
+venue_sets = "all;excl_conditional"
+# Fixed virtual capital of EVERY venue set (nothing real moves)
+capital_usd = 10000
+usdt_share_pct = 50
+coin_per_route_usd = 250
+coin_idle_release_h = 24
+conversion_cost_pct = 0.3
+trade_notional_usd = 1000
+latency_ms = 2000
+rebalance_threshold_pct = 20
+rebalance_delay_min = 30
+
+[maintenance]
+# Lowering retention deletes data on the next cleanup: review such changes carefully.
+snapshot_retention_days = 7
+evaluation_retention_days = 30
+episode_retention_days = 90
+cleanup_interval_s = 3600
+
+[digest]
+enabled = true
+time = "09:00"
+tz = "Europe/Moscow"

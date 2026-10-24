@@ -15,3 +15,17 @@ regexes = [
   '''AbCdEf0123456789''',
   '''0123456789abcdef''',
 ]
+
+# A7: committed settings files must never carry secret-like keys or credential URLs. Scoped by
+# path. There is deliberately NO allowlist for config/ (docs/audit/security-config-split-A7.md).
+[[rules]]
+id = "nexus-config-toml-secret-key"
+description = "Secret-like key with a value in committed config TOML"
+path = '''^config/.*\.toml$'''
+regex = '''(?im)^\s*[a-z0-9_]*(password|passwd|secret|token|passphrase|api_key|private_key|attested|_url|dsn)[a-z0-9_]*\s*=\s*\S+'''
+
+[[rules]]
+id = "nexus-config-toml-credential-url"
+description = "URL with embedded credentials in committed config TOML"
+path = '''^config/.*\.toml$'''
+regex = '''[a-z][a-z0-9+.-]*://[^/\s:@]*:[^/\s@]+@'''

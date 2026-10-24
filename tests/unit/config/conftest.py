@@ -37,4 +37,5 @@ def isolated_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         if key.startswith(_PREFIXES):
             monkeypatch.delenv(key)
     monkeypatch.delenv("NEXUS_RUNTIME", raising=False)
+    monkeypatch.delenv("NEXUS_CONFIG_FILE", raising=False)  # default path, relative to tmp cwd
     monkeypatch.chdir(tmp_path)

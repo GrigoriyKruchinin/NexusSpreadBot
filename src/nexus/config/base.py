@@ -13,6 +13,8 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
+from nexus.config.file import toml_source
+
 RUNTIME_ENV_VAR = "NEXUS_RUNTIME"
 """Set to ``container`` in Docker images: disables ``.env`` file loading entirely."""
 
@@ -48,10 +50,15 @@ class NexusBaseSettings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """Drop the dotenv source when running inside a container."""
+        """Priority env > ``.env`` > ``config/nexus.toml`` > code default.
+
+        The dotenv source is dropped inside a container. The TOML source runs the fail-closed
+        guard of :mod:`nexus.config.file` on every load.
+        """
+        toml_settings = toml_source(settings_cls)
         if os.environ.get(RUNTIME_ENV_VAR, "").strip().lower() == "container":
-            return init_settings, env_settings, file_secret_settings
-        return init_settings, env_settings, dotenv_settings, file_secret_settings
+            return init_settings, env_settings, toml_settings, file_secret_settings
+        return init_settings, env_settings, dotenv_settings, toml_settings, file_secret_settings
 
 
 def _split_csv_or_json(value: Any) -> Any:

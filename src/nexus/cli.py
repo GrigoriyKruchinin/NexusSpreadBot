@@ -10,6 +10,7 @@ import sys
 import structlog
 
 from nexus.config.groups import LoggingSettings, RedisSettings, ScannerSettings
+from nexus.config.provenance import log_settings_provenance
 from nexus.config.roles import ScannerRoleSettings
 from nexus.domain.clock import SystemClock
 from nexus.domain.errors import KeyPolicyViolationError
@@ -26,6 +27,7 @@ async def _run_scanner() -> None:
 
     settings = ScannerRoleSettings.load()
     configure_logging(settings.logging, service="scanner")
+    log_settings_provenance("scanner")
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
