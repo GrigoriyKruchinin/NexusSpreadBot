@@ -5,7 +5,7 @@ from __future__ import annotations
 import statistics
 from collections.abc import Collection, Sequence
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -1169,6 +1169,8 @@ class RetentionRepository(_Repository, IRetentionRepository):
                 .where(
                     newer.portfolio_id == PaperBalanceSnapshotRow.portfolio_id,
                     newer.captured_at > PaperBalanceSnapshotRow.captured_at,
+                    # same UTC day implies < 24 h later: bounds the index range scan
+                    newer.captured_at < PaperBalanceSnapshotRow.captured_at + timedelta(days=1),
                     func.date_trunc("day", func.timezone("UTC", newer.captured_at))
                     == func.date_trunc(
                         "day", func.timezone("UTC", PaperBalanceSnapshotRow.captured_at)

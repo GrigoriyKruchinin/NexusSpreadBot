@@ -149,6 +149,60 @@ async def test_since_survives_snapshot_retention(sessions: Sessions) -> None:
     assert portfolio.since_ms == started_ms  # still the run start, not the retention horizon
 
 
+async def test_retention_keeps_last_set_per_portfolio_and_utc_day(sessions: Sessions) -> None:
+    now = datetime.now(tz=UTC)
+    started_ms = int((now - timedelta(days=20)).timestamp() * 1000)
+    repo = PaperRepository(sessions)
+    await repo.ensure_run("all", _definition(), started_ms)
+    await repo.ensure_run("excl_gateio", _definition("5000"), started_ms)
+    midnight = (now - timedelta(days=19)).replace(hour=0, minute=0, second=0, microsecond=0)
+    eps = timedelta(seconds=1)
+    old_day = {  # per portfolio: captured_at -> kept after purge
+        "all": [
+            (midnight - eps, True),  # last set of the previous UTC day
+            (midnight - 2 * eps, False),
+            (midnight + eps, False),  # first set after UTC midnight, same day as the next
+            (midnight + timedelta(hours=3), True),
+        ],
+        "excl_gateio": [
+            (midnight + timedelta(hours=1), False),  # same day as "all" sets, own timeline
+            (midnight + timedelta(hours=4), True),
+        ],
+    }
+    for pid, sets in old_day.items():
+        for at, _ in sets:
+            await repo.commit(
+                portfolio_id=pid,
+                at_ms=int(at.timestamp() * 1000),
+                trades=[],
+                rebalances=[],
+                holdings=[PaperHolding("binance", "USDT", D(100), None, D(1))],
+            )
+    for pid in old_day:  # latest set of every portfolio survives
+        await repo.commit(
+            portfolio_id=pid,
+            at_ms=int((now - timedelta(days=1)).timestamp() * 1000),
+            trades=[],
+            rebalances=[],
+            holdings=[PaperHolding("binance", "USDT", D(100), None, D(1))],
+        )
+    purged = await RetentionRepository(sessions).purge(
+        snapshots_before=now - timedelta(days=7),
+        evaluations_before=now - timedelta(days=30),
+        episodes_before=now - timedelta(days=90),
+    )
+    assert purged["paper_balance_snapshots"] == 3
+    async with sessions() as session:
+        rows = await session.execute(
+            text("SELECT DISTINCT portfolio_id, captured_at FROM paper_balance_snapshots")
+        )
+        kept = {(pid, at.replace(microsecond=0)) for pid, at in rows.all()}
+    for pid, sets in old_day.items():
+        for at, keep in sets:
+            assert ((pid, at.replace(microsecond=0)) in kept) is keep, (pid, at)
+        assert any(p == pid and at > now - timedelta(days=2) for p, at in kept)
+
+
 async def test_cap_stats_are_added_per_set_and_hour(sessions: Sessions) -> None:
     repo = PaperRepository(sessions)
     hour = T0 - T0 % H
