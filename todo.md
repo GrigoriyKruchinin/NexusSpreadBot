@@ -59,7 +59,7 @@ Ticks only after verification and commit.
 
 ## M3 — Data, quant, legal
 - [ ] Agree GO/NO-GO numbers (threshold 2 %/month; see `docs/pipeline/nexus-appendix.md` P6)
-- [ ] S0 pre-soak gates: D-01 restart policy, D-02 backup copy to C:\nexus-backups + status file, R-02 sweep isolation, liveness watchdog to Telegram, gap accounting (devops + backend-lead; medium) — card `docs/tasks/m3/S0-pre-soak-gates.md`
+- [x] S0 pre-soak gates: D-01 restart policy, D-02 backup copy to C:\nexus-backups + status file, R-02 sweep isolation, liveness watchdog to Telegram, gap accounting (devops + backend-lead; medium) — card `docs/tasks/m3/S0-pre-soak-gates.md`
 - [ ] Multi-day keyed soak (>= 7-14 days) with backups running (depends on B15: shadow portfolios must be running before the soak starts, else no valid "without" GO numbers; also A5a). Pre-soak gates from delta audit: D-01 scanner restart policy `on-failure:5` + no alert (fix or daily alive check), D-02 verified cron backup + off-machine copy decision, D-03 drill re-run on a `.counts` dump, R-02
 - [ ] Quant: formula review, cost model, latency vs spread lifetime, two execution modes, honest backtest, verdict
 - [ ] Lawyer: `docs/legal/nexus-risk-assessment.md` verified with sources

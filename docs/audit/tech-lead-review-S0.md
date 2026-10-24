@@ -69,3 +69,43 @@
    (restore drill refuses it). Copy the sidecar first, or remove the dump copy on sidecar failure.
 
 Round 2 needs 1-4 (+ tests); 5-9 may be fixed or carried to todo with an owner.
+
+## Round 2 (2026-10-24)
+
+- Scope: `2c528c6` (devops, S0a r2), `cb1c1af` (backend-lead, S0b r2); security follow-ups S-3/S-4 from
+  `docs/audit/security-review-S0.md`.
+- Checks (`make check` + `make test-cov`): **999 passed** (27 integration deselected), branch coverage
+  **91.31 %** (floor 89 %), ruff 0 (156 files formatted), mypy --strict 0 (163 files). Equal to baseline
+  (999 / 91.3 / 0 / 0), not worse. No stack, DB, integration run or `.env` access.
+
+| # | Item | Status | Evidence |
+|---|------|--------|----------|
+| 1 | D-01 scanner after daemon/WSL restart | FIXED | `docker-compose.local.yml:107-123` `restart: unless-stopped`, trap set before fork (`:108`), exit 3 parks (`sleep` + TERM/INT trap -> exit 0), a TERM during start is honoured (`stop` flag). Executable tests with fake `nexus` under `/bin/sh`: `tests/unit/test_compose.py` `test_wrapper_*` (exit 1 -> 1, 0 -> 0, exit 3 parks and does not exit by itself, TERM in park -> 0, TERM forwarded, child code after TERM propagated). Guide `docs/guides/backups.md` "Перезапуски сканера" updated. |
+| 2 | Watchdog silent on persistent check errors | FIXED | `src/nexus/services/watchdog.py:70-89` probe failure -> `Finding(check, CHECK_ERROR)` through `_apply` (grace = check's stale window, de-dup, recovery); `domain/watchdog.py:25-29` in `GRACE_REASONS`; RU text `notifications/formatting.py:65`. Tests: `test_persistent_check_error_alerts_once_after_the_grace_period`, `test_check_error_recovery_is_announced_once`, `test_short_error_burst_is_forgotten`, `test_unreadable_backup_file_error_alerts_after_grace`. |
+| 3 | One-shot watchdog alerts can expire | FIXED | `src/nexus/services/alerts.py:111-115` expiry skipped for `WatchdogAlert`/`WatchdogRecovered`; test `test_watchdog_events_never_expire`. |
+| 4 | Digest downtime under-reports | FIXED (doc nit R2-3) | `src/nexus/domain/digest.py:141-184`: gap-hour flag keeps the 60 minimum; downtime vs `min(expected_sweeps_per_hour=360, healthy-hour median)` floored at the minimum, hours < 90 % add their share; newest hour skipped until `FLUSH_LAG_MS` (5 min). Wired via `config/nexus.toml`, `config/groups.py:486`, `container.py:282`, `repositories.py:785-849`. Tests: partial-hour 45 min, split boundary, slow-steady, jitter, flush lag (`tests/unit/domain/test_digest_coverage.py`). "GO report recomputes from raw sweeps" is in the docstring and `docs/handoffs/S0b-to-review.md:60`, not in the card. |
+| 5 | Escalation swallowed while firing | FIXED | `domain/watchdog.py:31-41` `SEVERITY`; `services/watchdog.py:113-118` re-alerts once on a higher rank, downgrade silent; test `test_escalation_realerts_once_but_downgrade_does_not`. |
+| 6 | Prune may delete the archive dump | FIXED | `scripts/backup.sh:17-29,64-69` `BACKUP_ARCHIVE=1` -> `archive/nexus-archive-<stamp>.dump`, no prune, no status; `make backup-archive`; guide section "Архивный дамп"; test `test_archive_dump_is_never_pruned_and_leaves_status_alone` (local + copy dir). |
+| 7 | Card still says "mount `$BACKUP_DIR`" | FIXED | `docs/tasks/m3/S0-pre-soak-gates.md:24` records the accepted deviation. |
+| 8 | Job's own `CancelledError` aborts the sweep | FIXED | `src/nexus/scanner/service.py:98-125` `_is_job_failure` (`current.cancelling() == 0` -> failure, logged, `None`); `tests/unit/scanner/test_sweep_isolation.py`. |
+| 9 | Sidecar-less dump in copy dir | FIXED | `scripts/_backup_common.sh:129-144` `.counts` copied first, dump last, any failure removes the copied sidecar; test `test_copy_failure_of_dump_leaves_no_sidecar_less_or_orphan_files`. |
+| S-3 | Fixed temp name follows a planted symlink | FIXED | `scripts/_backup_common.sh:133` `mktemp` in the copy dir; test `test_copy_never_follows_a_planted_symlink`. |
+| S-4 | Status dir guard / `.env` vs shell mismatch | FIXED | `scripts/_backup_common.sh:93-103` refuses status dir == / inside `BACKUP_DIR` or holding `nexus-*.dump` (physical path); compose mounts fixed `${HOME}/nexus-backup-status` (`docker-compose.local.yml:167`), Makefile `up-local` fixed path; guide forbids setting it in `.env`/crontab; tests `test_status_dir_in_backup_dir_is_refused[same,inside]`, `test_status_dir_holding_dumps_is_refused`. |
+
+### Residual notes (non-blocking, no fix round needed)
+- R2-1 (nit) Wrapper: a SIGTERM arriving in the tiny window after the `rc -eq 3` test and before the
+  park trap is installed is consumed by the first trap; the wrapper then parks and Docker SIGKILLs it
+  after `stop_grace_period` (30 s). Only delays a manual stop; no restart, no API calls. Accept.
+- R2-2 (info) `check_error` on the backup check inherits the 26 h backup window, so an unreadable mount
+  alerts after ~26 h, the same horizon as `backup_stale`. Consistent with round-1 ask; accept.
+- R2-3 (doc) Add one line to the S0 card (or the B15 part 2 card): "digest downtime is an estimate; the
+  GO report recomputes from raw `paper_cap_stats.sweeps`". Orchestrator can do it in the S0 commit.
+- R2-4 (info) `write_status` creates a missing status dir before the guard, so a misconfigured path
+  inside BACKUP_DIR is created (0755, empty) and then refused. Harmless (parent is 0700).
+- Confirm D-01 on the first real Docker/WSL restart of the soak (security S-8): scanner container comes
+  back `Up` without manual action.
+
+## Verdict round 2: ACCEPT
+
+Items 1-4 fixed with executable tests, 5-9 and S-3/S-4 fixed; quality ratchet held (999 tests,
+91.31 % branch coverage, ruff 0, mypy 0). Next: tester -> security re-check of S-3/S-4 -> delta audit.

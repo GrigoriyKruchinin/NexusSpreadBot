@@ -1,4 +1,4 @@
-# STATE (updated 2026-10-23, end of session)
+# STATE (updated 2026-10-24)
 
 ## Where we are
 - Trajectory M. Branch `chore/agent-pipeline-adoption`, pushed, CI green on HEAD (7 jobs incl. integration).
@@ -16,12 +16,11 @@
 - Key-leak incident handled: deny rules in `.claude/settings.json`, CLAUDE.md rule 4, cards A5b/A5c/B1a fixed.
 - S0 pre-soak gates (card `docs/tasks/m3/S0-pre-soak-gates.md`): S0a devops 3bb5746 + r2 2c528c6,
   S0b backend-lead up to 21897bf + r2 cb1c1af. Security ACCEPT w/ follow-ups (S-1 fixed, S-2..S-4 fixed in r2,
-  S-7 deny widening done). Tech-lead r1 RETURN (`docs/audit/tech-lead-review-S0.md`), fixes pushed.
+  S-7 deny widening done). Tech-lead r1 RETURN, r2 ACCEPT 2026-10-24 (`docs/audit/tech-lead-review-S0.md`); S0 ticked.
+  Open check: D-01 must be confirmed live on first Docker/WSL restart of the soak (scanner back `Up`, security S-8).
 
 ## Next (in order) — resume here
-1. **Tech-lead round 2 re-review of S0** (previous run died on a rate limit, wrote nothing). Prompt: verify
-   r1 items 1-9 + security S-3/S-4 against 2c528c6 and cb1c1af; append "Round 2" to
-   `docs/audit/tech-lead-review-S0.md`. Max 3 rounds total. Then tick S0 in todo.md.
+1. Stage end for S0 can run now (code side): tester regression -> delta audit -> repo-hygiene.
 2. User steps before the fresh stack (U3/U4): rotate all 4 exchange keys and put them in `.env` himself;
    run `make check-env-settings` and move non-default values from `.env` to `config/nexus.toml`;
    disable Windows sleep; delete the leaked agent log
@@ -34,7 +33,7 @@
 4. In parallel with the soak: B15 part 2 GO report generator (quant spec; F2 fee disclosure; tax 15 % and
    35 %; strict concentration rule; per-set `since`; gap accounting from paper_cap_stats.sweeps).
 5. Then: B16 public probe of expansion batch 1; A5b Redis auth, A5c DB roles, A6/A7 follow-ups; A5d at VPS.
-6. Stage end (after S0): tester regression -> delta audit -> repo-hygiene -> summary.
+6. Stage summary to user after item 1.
 
 ## User decisions (2026-10-23)
 - Soak runs on this PC (WSL; user disables Windows sleep). Off-machine dump copy: `C:\nexus-backups` (/mnt/c/nexus-backups, outside OneDrive). Pre-soak gates in card S0.

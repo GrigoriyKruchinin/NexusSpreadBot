@@ -35,6 +35,8 @@ soak runs on this PC (WSL, Windows sleep disabled by the user); off-machine dump
    - de-duplicated (one alert per incident), no secrets in text, Russian alert text.
 3. Gap accounting for the GO report: persist per-hour "scanner was sweeping" coverage (cheapest: reuse
    `paper_cap_stats.sweeps` per set, quant N12) and expose total downtime per set in the digest.
+   The digest downtime is informational only; the B15 part 2 GO report recomputes gaps from raw
+   `paper_cap_stats.sweeps` (tech-lead S0 round 2, R2-3).
 4. Settings for thresholds go to `config/nexus.toml` + `TOML_ALLOWED` (A7 rules).
 
 ## Acceptance
