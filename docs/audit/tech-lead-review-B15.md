@@ -186,3 +186,53 @@ R2-5. **[Low] Cap-stats flush in the sweep path has no timeout.** `Scanner` awai
 backend-lead: R2-1, R2-2 (blocking); R2-3..5 in the same round. Round 3 (last allowed) re-review
 focuses on the capital invariant and run-scoped digest totals. Soak condition for point 3 goes to
 the card.
+
+---
+
+# Round 3 (final) — commits `2854904`, `8ffb9c3`, `9d70362` (mapping: handoff section "Round 3")
+
+- Checks run: `make check` -> ruff 0, mypy --strict 0, 806 unit passed (ratchet ok; CI green incl.
+  integration per handoff). No integration run, no DB touched.
+
+## Verdict: ACCEPT (with one required follow-up before the 24 h soak checkpoint)
+
+| # | Status | Evidence |
+|---|---|---|
+| R2-1 High (capital on recycle) | Closed for the normal path; residual edge case -> F1 | `_fund_from_recycled_usdt` pays the new seed from the USDT-seed excess (derived from persisted seeds -> survives restart). `test_idle_slot_*` now asserts capital == before + mtm identity; `test_capital_is_fixed_after_many_recycles` (6 cycles). |
+| R2-2 Medium (digest run scope) | Closed | `_paper`: run_start of the latest `all` run before `until`; `since = max(since, run_start)`; snapshot, IN_FLIGHT, window trades/skips/rebalances, lifetime and `*_excl` totals all bounded. Integration `test_digest_paper_block_ignores_rows_of_earlier_runs`. |
+| R2-3 Low (silent reset) | Closed | `previous_hash` -> `paper_run_restarted` WARNING (old/new hash prefix, since_ms; no secrets); digest restart line; `.env.example` note. |
+| R2-4 Low (tz test) | Closed | `test_digest_since_is_rendered_in_the_digest_timezone` (Asia/Tokyo, negative assertion on the UTC hour). |
+| R2-5 Low (flush timeout) | Closed | `asyncio.timeout(3 s)` inside `CapStatsBuffer.flush`; failure/timeout put counters back; cancellation puts back and re-raises. Covers the sweep path (`service.py:408`). |
+| C1 strategy in hash | Closed | full `EstimatorConfig` (asdict, `_stable`), route cooldown, latency, candidate cap, alert cooldown, re-alert growth, default taker fee, unverified cap, min quote volume. |
+
+## Runtime per-venue fees not hashed — judgment
+Acceptable: fee tiers are exchange-side market facts, not a tunable strategy choice; hashing them
+would restart every set on any fee-schedule refresh. Must be **disclosed** in the GO report
+(fee source = live exchange metadata, fees are per-trade inputs, not run-pinned) — see F2.
+
+## Follow-ups (non-blocking)
+F1. **[Medium, before the 24 h soak checkpoint]** Capital still grows in one edge case:
+   `funded = min(usd, recycled, balance)` — when the venue's USDT balance is below the freed
+   seed value (idle coin slot already sold out + USDT on that venue spent/rebalanced away), the
+   shortfall is seeded as fresh capital. Reproduced on `_slot_portfolio()`: AAA balance 0, USDT
+   on `b` 10 -> after recycle capital 1500 -> 1740, USDT seed 740 with balance 0. Effect is
+   conservative for the GO metric (denominator grows, P&L unaffected) but breaks AC2 equal
+   capital per set. Fix: when a recycled excess exists, size the new coin seed to the USDT
+   actually funded (`usd = funded`), never top up from fresh capital; add a unit test for this
+   case and a WARNING log if `capital != definition.capital_usd` after `ensure_seeded`.
+F2. GO report: disclose that per-venue fees come from runtime metadata and are not part of the
+   run hash; record the fee table snapshot at run start (or per trade, already in breakdown).
+F3. Universe parameters not hashed: `quote_assets`, `symbols_whitelist/blacklist`,
+   `orderbook_depth`, quarantine thresholds. They change *which* trades happen; either add them
+   to `strategy` or list them in the report as run-invariant assumptions (quant to decide).
+F4. Carried: soak condition for round-1 point 3 (candidates/cap p95, sweep duration, 429s) is in
+   the card's "Soak checkpoint" section — verify at 24 h.
+
+## Regressions
+None found in touched code: `ensure_run` unchanged apart from `previous_hash`; `_portfolios`
+signature change is internal; `CapStatsBuffer` keeps merge-on-failure semantics; no secrets,
+no order/transfer/withdrawal code (ADR 0001 ok).
+
+## Next
+B15 part 1 passes tech-lead. backend-lead: F1 as a small fix before the 24 h soak checkpoint
+(can ride with part 2). Then tester -> security per workflow.
