@@ -19,7 +19,8 @@ after all costs, plus no blocking legal verdict (`docs/legal/`).
    confirmation (ADR 0001). Reading transfer fee/status metadata is allowed.
 2. Exchange API keys: withdrawals disabled, IP whitelist; trading permission only after GO.
 3. Agents have no live keys and no production access. Stage 1 = public read-only data.
-4. Secrets never enter code, logs, Telegram, git, or chat. Never read `.env`.
+4. Secrets never enter code, logs, Telegram, git, or chat. Never read `.env`, and never run commands that
+   expand it (`docker compose config`, `docker inspect`, `exec ... env`); denied in `.claude/settings.json`.
 5. **Integration tests run only against a dedicated test DB** (`nexus_test`); never against the live
    `nexus` DB (it was wiped once, see risk R-01). No `docker compose down -v`, no `system prune`.
 6. No force-push, no `--no-verify`, no history rewrite, no push to `main` without user consent.

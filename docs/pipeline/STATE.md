@@ -66,6 +66,7 @@
 - LICENSE decision.
 
 ## Lessons
+- INCIDENT 2026-10-23: devops ran `docker compose config` (was allow-listed!) which expanded `.env` and printed live binance/gateio/kucoin/okx keys into its transcript and the model request. Not in git/files. User rotates all 4 keys himself. Fix: allow rule removed, deny rules for compose config/inspect/exec/printenv/cat .env added, CLAUDE.md rule 4 extended. Agent prompts must list implicit `.env` readers explicitly.
 - devops attempted a write probe on live `nexus` despite an explicit ban (blocked by the harness, no
   effect). For live-DB tasks: give exact commands to run and review them; never ask for "verification"
   without listing allowed read-only queries.
