@@ -3,18 +3,17 @@
 ## Where we are
 - Trajectory M. Branch `chore/agent-pipeline-adoption` (pushed; CI with 7 jobs, green on the last recorded run).
   Not merged to `main` (only with user consent).
-- Quality ratchet: 1009 unit tests, branch coverage 91.4 %, ruff 0, mypy --strict 0 (floor 89 %).
+- Quality ratchet: 1028 unit tests, branch coverage 91.5 %, ruff 0, mypy --strict 0 (floor 89 %).
 - Local stack STOPPED on purpose until the fresh-stack plan; nightly 03:15 backup fails meanwhile (expected).
 
 ## Stage S0 (pre-soak gates) closed
 - Accepted: B15 part 1 (TL r3), A7 (security r1, TL r2), S0 (TL r2 `343df63`, security r2 `1fb8d60`), tester regression,
-  D-08 per-set watchdog (`fba9dd4`, done; tech-lead review of D-08 in progress: `docs/audit/tech-lead-review-D08.md`).
-- Delta audit 02: `docs/audit/delta-02-S0.md`. Hygiene: `docs/audit/hygiene-S0.md` (applied; 7 DELETE files to `git rm`
-  by orchestrator, see report of the hygiene run).
+  D-08 per-set watchdog (`fba9dd4` + r1 fixes `4d1a990`; tech-lead r2 ACCEPT, `docs/audit/tech-lead-review-D08.md`).
+- Delta audit 02: `docs/audit/delta-02-S0.md`. Hygiene: `docs/audit/hygiene-S0.md` (applied `0e7175b`).
 - Open check: D-01 live restart check (security S-8) on the first Docker/WSL restart of the soak.
 
 ## Next (in order) - resume here
-1. Wait for tech-lead D-08 review verdict; fix if RETURN (max 3 rounds).
+1. (done) D-08 accepted. Stage summary given to the user in chat 2026-10-24.
 2. Fresh stack per `docs/guides/soak-fresh-stack.md`: each data step (archive dump, new empty DB volume, migrations
    from zero, stack up) needs explicit U4 OK from the user. No `down -v`; the old volume stays until the soak is verified.
 3. First-day checks: D-03 (manual dump + restore drill on `nexus_test`), D-10 (migrator exit 0, `alembic current` = head),

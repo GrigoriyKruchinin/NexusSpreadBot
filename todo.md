@@ -61,6 +61,7 @@ Ticks only after verification and commit.
 - [ ] Agree GO/NO-GO numbers (threshold 2 %/month; see `docs/pipeline/nexus-appendix.md` P6)
 - [x] S0 pre-soak gates: D-01 restart policy, D-02 backup copy to C:\nexus-backups + status file, R-02 sweep isolation, liveness watchdog to Telegram, gap accounting (devops + backend-lead; medium) — card `docs/tasks/m3/S0-pre-soak-gates.md`
 - [x] S0 follow-up D-08: watchdog check for per-set paper data freshness (newest `paper_cap_stats` hour per set older than N h -> alert; disabled/failing set must not go silent) (backend-lead; small; before or early in the soak) — delta audit `docs/audit/delta-02-S0.md`
+- [ ] Integration test (CI only, `nexus_test`) for the D-08 paper-set activity SQL (`PaperSetActivityRepository`), tech-lead D-08 review risk (tester; small)
 - [ ] Multi-day keyed soak (>= 7-14 days) with backups running. Remaining before/at soak start: fresh stack (U4 at each data step; guide `docs/guides/soak-fresh-stack.md`), D-03 restore drill on the first dump of the new DB, D-10 migrator exit 0 + `alembic current` = head, D-01 live restart check (security S-8). D-08 per-set freshness is its own line above (done). B15 part 1 done; part 2 report runs in parallel.
 - [ ] Quant: formula review, cost model, latency vs spread lifetime, two execution modes, honest backtest, verdict
 - [ ] Lawyer: `docs/legal/nexus-risk-assessment.md` verified with sources

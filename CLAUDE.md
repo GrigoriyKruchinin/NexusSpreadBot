@@ -48,7 +48,7 @@ make test-integration       # ONLY with test DB (ask first)
 Single test: `uv run pytest tests/unit/<path>::<name> -q`.
 
 ## Quality ratchet (baseline docs/audit/05, updated at delta 02)
-1009 unit tests green, branch coverage 91.4 % (floor 89 %), ruff 0, mypy --strict 0. Never get worse.
+1028 unit tests green, branch coverage 91.5 % (floor 89 %), ruff 0, mypy --strict 0. Never get worse.
 
 ## Workflow
 "continue" -> read CLAUDE.md, STATE.md, todo.md, check `git log` vs STATE.md, take the first

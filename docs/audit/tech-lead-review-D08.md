@@ -64,3 +64,39 @@ Round: 1 of 3. Spec: `docs/audit/delta-02-S0.md` row D-08; design: `docs/tasks/m
   container always builds frozensets, so no production impact. Pre-B15 `legacy` run on an old DB is older
   than 168 h -> retired; the soak uses a fresh DB.
 - Next round: re-review only items 1-2 (+ whichever of 3-6 are taken).
+
+## Round 2 (2026-10-24)
+
+Fix commit 4d1a990. Verdict: **ACCEPT**.
+
+### Checks
+`make check` green: ruff 0, mypy --strict 0 (163 files), 1028 unit tests passed (ratchet >= 1009 OK),
+branch coverage 91.52 % (ratchet >= 91.4 % OK).
+
+### Items
+1. **FIXED** — `services/watchdog.py:107-111`: every successful `source.read()` applies `Finding("paper_sets")`,
+   so a firing check error recovers once and a short failure's `since_ms` is cleared. Its own failure is isolated
+   (`actions["paper_sets"]="error"`, set checks still run). Tests: `test_paper_source_error_recovers_once_and_can_alert_again`,
+   `test_short_paper_source_failure_leaves_no_stale_grace`.
+2. **FIXED** — domain returns `PAPER_SET_RETIRED` (`domain/watchdog.py:136-137`); `_retire` (`services/watchdog.py:131-147`)
+   sends one `WatchdogRetired` only if firing, clears state after dispatch, else clears silently. Next tick: state empty
+   -> "ok", no repeat. Text `formatting.py:285-291`: fixed template, `esc(watchdog_title)` + int hours, no "устранена".
+   Event exempt from max-age drop (`alerts.py:115`) — correct, a late "no longer tracked" is not misleading; not in the
+   silent set, so it notifies with sound — intended. Tests for both branches present.
+3. **FIXED** — `config/groups.py:496-501` model validator `retire_h > stale_h`, test present.
+4. **FIXED** — design note in `docs/tasks/m3/S0-pre-soak-gates.md` (rename/remove -> alert at 3 h, retire at 168 h).
+5. **FIXED** — `_grace_gap` (`services/watchdog.py:172-179`, used at 190-193).
+6. **FIXED** — docstrings + design note updated.
+
+### Grace-restart analysis (new logic)
+- Normal cadence (Celery beat, 300 s): grace starts t0, alert at t0+15 min; gap limit 25 min is never hit. OK.
+- Postponement forever needs every consecutive evaluation of the check to be > 25 min apart. Causes: watchdog
+  worker stalled > 25 min per tick (then nothing alerts anyway), or the scanner check flapping so paper checks run
+  < once per 25 min — but then the scanner check itself is non-OK most of the time and alerts. Dispatch failing
+  repeatedly delays by at most one extra grace per restart, only while the broker is down (documented). No new bug.
+- Restart only for non-firing states, only paper checks; scanner/backup grace untouched. OK.
+
+### Notes (non-blocking)
+- `_retire` dispatch-then-save: a save failure after dispatch can repeat the retire message once (at-least-once,
+  same as `_apply`). Accept.
+- Integration test of the paper-set SQL on `nexus_test` still pending (round 1 note) — next integration pass.
