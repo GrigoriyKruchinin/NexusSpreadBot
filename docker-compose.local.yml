@@ -2,7 +2,7 @@
 #   cp .env.example .env  &&  make up-local
 #
 # Every service receives ONLY the secrets of its own domain (see x-*-env anchors). All other
-# settings come from config/nexus.toml, mounted read-only into every app container (A7).
+# settings come from config/nexus.toml, BAKED into the image (A7, D-01b; rebuild to change a setting).
 # Optional variables use ${VAR:-} -> empty means "use the default" (env_ignore_empty).
 
 name: nexus-local
@@ -17,8 +17,10 @@ x-image: &image
   read_only: true
   tmpfs: [/tmp]
   security_opt: ["no-new-privileges:true"]
-  volumes:
-    - ./config/nexus.toml:/app/config/nexus.toml:ro  # no secrets in it (guarded at startup)
+  # D-01b: NO bind mounts here. Docker Desktop (WSL2) mounts WSL-distro paths only after its distro proxy
+  # is up, which happens AFTER the engine restarted the containers on `wsl --shutdown` / reboot; a bind
+  # source that is not there yet kills the container at start (Exited 127, no app log). config/nexus.toml
+  # is copied into the image instead (Dockerfile); the file holds no secrets and is guarded at startup.
   logging:
     driver: json-file
     options: {max-size: "10m", max-file: "5"}
@@ -163,7 +165,8 @@ services:
     volumes:
       # Backup status for the liveness watchdog (S0b), read-only. NOT the 0700 dump dir (the container
       # uid cannot enter it and must not see dumps): backup.sh mirrors last_backup.json here.
-      - ./config/nexus.toml:/app/config/nexus.toml:ro
+      # The ONLY remaining distro bind mount: if it is not ready after a WSL restart this one container
+      # fails to start; scripts/host_watchdog.sh then runs `docker compose start` within minutes (D-01b).
       # Fixed path (no BACKUP_STATUS_DIR variable: compose would read it from .env, make/cron from the shell).
       - ${HOME}/nexus-backup-status:/backups:ro
     depends_on:

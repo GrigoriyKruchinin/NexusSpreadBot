@@ -116,10 +116,20 @@ def test_settings_are_not_wired_through_compose(compose: str) -> None:
 
 
 @pytest.mark.parametrize("compose", COMPOSE_FILES)
-def test_config_file_mounted_read_only_into_app_services(compose: str) -> None:
+def test_config_file_is_baked_into_the_image_not_bind_mounted(compose: str) -> None:
+    """D-01b: a WSL bind mount is not ready when Docker Desktop restarts containers (Exited 127)."""
     services = _load(compose)["services"]
     for name in APP_SERVICES:
-        assert "./config/nexus.toml:/app/config/nexus.toml:ro" in services[name]["volumes"], name
+        for volume in services[name].get("volumes", []):
+            assert "nexus.toml" not in volume, name
+    # Only the backup-status dir may remain a host bind mount (worker-maintenance, see its comment).
+    binds = {
+        name: [v for v in svc.get("volumes", []) if v.startswith(("./", "/", "$"))]
+        for name, svc in services.items()
+    }
+    assert {k: v for k, v in binds.items() if v and k != "worker-maintenance"} == {}
+    dockerfile = (ROOT / "Dockerfile").read_text()
+    assert "COPY config/nexus.toml ./config/nexus.toml" in dockerfile.split("AS runtime", 1)[1]
 
 
 @pytest.mark.parametrize("compose", COMPOSE_FILES)

@@ -129,7 +129,7 @@ make logs s=scanner
 
 Extension venues run in **public-data mode only (no API keys)**. The key policy check (A6) has no
 policy for MEXC and Bitget, so a configured MEXC/Bitget key is refused at startup (exit code 3)
-until policies exist. For an extension run, add `"mexc","bitget"` to `[exchanges] enabled` in `config/nexus.toml` and leave
+until policies exist. For an extension run, add `"mexc","bitget"` to `[exchanges] enabled` in `config/nexus.toml` (baked into the image: rebuild after any change) and leave
 all `MEXC_*` / `BITGET_*` variables unset (ADR 0002).
 
 ## Development

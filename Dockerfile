@@ -27,6 +27,11 @@ RUN groupadd --system --gid 10001 nexus \
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY alembic.ini ./
+# D-01b: settings are BAKED into the image (no bind mount). A bind mount of a WSL path is not yet available when
+# Docker Desktop restarts containers after `wsl --shutdown` / a reboot (the distro proxy mounts it later), so
+# every app container used to die at start. The file holds no secrets (startup guard, A7); a settings change
+# now needs `docker compose build` + recreate.
+COPY config/nexus.toml ./config/nexus.toml
 COPY src/nexus/persistence/migrations ./src/nexus/persistence/migrations
 
 ENV PATH="/app/.venv/bin:${PATH}" \
