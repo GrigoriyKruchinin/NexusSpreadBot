@@ -70,3 +70,41 @@ over-delete path found.
 
 ## NEEDS_USER
 none
+
+# Round 2
+
+- Date: 2026-10-24. Fix commits: d571f8b, 756dba7, b9aa8ba, 8534fa6, 73a9a5f (CI green incl. integration).
+- Checks (local): `make check` green — 1110 unit tests passed (r1: 1106), ruff 0, mypy --strict 0.
+  Not run (soak): integration tests, docker, any DB.
+
+## Verdict: ACCEPT
+
+| Point | Status | Evidence |
+|---|---|---|
+| TL-1 read-only session | closed | `persistence/db.py` `READ_ONLY_SERVER_SETTINGS` (`default_transaction_read_only=on`, `statement_timeout=300000`, `lock_timeout=5000`) via asyncpg `server_settings`, pooled and NullPool paths; `go_report.generate` uses `read_only=True`; unit test `test_read_only_engine_sets_server_settings`; docstrings, Makefile help and handoff corrected (app role, read-only by server setting). Note: a session could `SET` it back, but no code does; it is a guard against accidental writes, which is the goal. |
+| TL-2 bounded EXISTS | closed | `newer.captured_at < captured_at + 1 day` added; together with `portfolio_id =` and `> captured_at` it is an index range on `ix_paper_balance_snapshots_portfolio_captured_at` (portfolio_id, captured_at), max 24 h wide. Semantics unchanged (same UTC day implies < 24 h). |
+| TL-3 two portfolios + midnight | closed | `test_retention_keeps_last_set_per_portfolio_and_utc_day`: `all` +3 h survives although `excl_gateio` has a newer +4 h set the same day, so dropping the portfolio correlation would fail the test; sets at midnight -1 s / -2 s / +1 s pin the UTC boundary; latest set per portfolio survives; exact count 3. `test_digest` updated consistently (73a9a5f). |
+| TL-5 CLI | closed | `--until` argparse `type=` (usage error), `parse_ops` rejects non-object top level / `sets` / entries, exit 2 on bad ops file and on no run for `--go-set`; tested. |
+| TL-4 wider AC 5 test | deferred, acceptable | needs a CI-verified round; tracked in the card "Part 2 follow-ups" (before UF). Not a GO-number risk now: the report has not been run on real data and the first run is checked against manual SQL (Q11). |
+| Quant 1 reserve | closed (verified here, as quant asked) | `window_stats`: `liq_cost = end.non_usdt * pct / 100`. `non_usdt` is a sum of holding values (amount x price) plus in-flight non-conversion transfers, all >= 0, so the reserve is never a credit. It is used by every window: full, tuning, holdout (`analyze_set`), each period (`PeriodResult(window_stats(...))`), common window, and both ex-top-2 recomputes (`concentration` starts from the same `window_stats.total_liq`, keeping the full end reserve — conservative). New unit test: inventory held at start and end -> 0.6 (old delta rule gave 0); inventory sold -> 0, not negative. Sample regenerated: holdout reserve 3.04 (was -0.08), every reserve row positive; sample is pinned by `test_committed_sample_matches_the_fixture` (green). Disclosure text matches ("every window pays the exit cost at ITS end; periods do not sum to the holdout"). |
+| Quant 2, 4, 7 | closed | MTM residual + > 25 % flag, reserve-2x refute line, `membership_missing` > 0 flag (8534fa6). |
+| Quant 3, 5, 6, 8, 9, 10, 11 | deferred, acceptable | non-blocking per quant; none changes the verdict formula; now tracked in the card (was only in the handoff, which repo hygiene may delete). |
+
+## Retention change (d81811b + d571f8b): SAFE to deploy to the live scanner
+
+- Delete set is a strict SUBSET of the previously deployed rule: the old rule deleted every old set
+  with any newer set of the portfolio; the new one adds two more conditions to the same EXISTS, so
+  it can only delete fewer rows. No over-delete path; the latest set of each portfolio still survives.
+- No schema change, no migration (index already at head from b15a7c3e91d2); rows of one set share
+  `captured_at`, so a set is never split. Day boundary computed in UTC independent of session TZ.
+- Load: first purge after restart deletes the same or fewer rows than the current code would; the
+  EXISTS is now bounded to <= 24 h of rows per probe. The soak started 2026-10-24 14:05Z on fresh
+  volumes, so no snapshot is older than the 7-day window yet: the change only starts to act on day 8,
+  and deploying now (before day 8) is what keeps the daily curve for the GO report.
+- Verified by CI integration (two portfolios, midnight boundary) on 73a9a5f.
+- Deploy conditions (operational, not code): rebuild/restart is a U4 step for the user; follow the
+  soak restart checklist (D-01 live restart check, scanner/maintenance healthy after restart); the
+  restart gap shows up in per-set heartbeat gap hours and should be noted in the soak log.
+
+## NEEDS_USER
+none (the restart itself is a U4 action the orchestrator asks the user about).

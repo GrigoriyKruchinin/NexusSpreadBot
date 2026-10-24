@@ -6,7 +6,7 @@
 - reviewers: tech-lead (diff), quant-analyst (semantics, report), architect (schema/migration)
 - complexity: high (paper-simulation state per set, DB migration, concurrency of N portfolios, report math)
 - depends_on: B14 (done, returned fixes must be closed), A5a (backups + verified restore drill into `nexus_test`), user OK (U4) before the migration touches the live DB
-- status: part 1 done (Scope 1-4, digest, R2-1; AC 1-5, 7, 8; part 1 commits f9ac581, c61b060, 2854904, 8ffb9c3 (+F1/F3); TL r3 ACCEPT), part 2 implemented, TL r1 RETURN (`docs/audit/tech-lead-review-B15-part2.md`, fixes 1-3 required) (Scope 5 quant GO report, AC 5-6; integration test runs in CI only; spec `docs/quant/b15-review-and-report-spec.md`)
+- status: part 1 done (Scope 1-4, digest, R2-1; AC 1-5, 7, 8; part 1 commits f9ac581, c61b060, 2854904, 8ffb9c3 (+F1/F3); TL r3 ACCEPT), part 2 implemented, TL r1 RETURN -> TL r2 ACCEPT (`docs/audit/tech-lead-review-B15-part2.md`; fixes d571f8b, 756dba7, b9aa8ba, 8534fa6, 73a9a5f; quant point 1 verified by tech-lead; follow-ups below) (Scope 5 quant GO report, AC 5-6; integration test runs in CI only; spec `docs/quant/b15-review-and-report-spec.md`)
 - Config note (2026-10-24): venue sets now live in `config/nexus.toml` as `[paper] venue_sets` (env `PAPER_VENUE_SETS` overrides). The soak runs 4 sets: all, excl_conditional, excl_bybit, excl_gateio.
 
 ## Goal
@@ -98,3 +98,13 @@ a follow-up. Also read `paper_cap_stats` (per-set heartbeat and cap effect) at t
 - [x] F2 (disclosed in the report, per-trade breakdown relied on): runtime-fetched per-venue fees are NOT part of the run hash (fee tiers are exchange-side
   facts). Disclose in the GO report: fee source = live exchange metadata, applied per trade;
   record a fee-table snapshot at run start (or rely on the per-trade breakdown).
+
+## Part 2 follow-ups (before UF; tech-lead round 2)
+- [ ] TL-4 wider AC 5 integration test (`tests/integration/test_go_repository.py`): earlier run excluded and listed in `previous_runs`; rows at/after `until` excluded; several sets in one hour -> one kept; `fee_observations` avg/min/max per venue (buy+sell merged); skips and cap hours per set. CI-verified round.
+- [ ] Q3 fees tuning vs holdout per venue, flag holdout min != max (> 0.005 pp); note that profitable-only observations over-represent low-fee symbols.
+- [ ] Q5 fill `regimes` (BTC 30-day vol per period, public daily candles) in the ops file; add to the UF runbook (otherwise confidence is `low` by default).
+- [ ] Q6 count and show holdings valued at stale `seed_price` and in-flight assets valued at 0; flag > 1 % of capital at a boundary.
+- [ ] Q8 gate table for every set as context ("not a verdict, no best-of selection").
+- [ ] Q9 overview table: show holdout days next to the holdout %.
+- [ ] Q10 label (or midnight-align) the full-window daily std.
+- [ ] Q11 / handoff: first real report run by the user, checked against one manual SQL sum per set before UF.
