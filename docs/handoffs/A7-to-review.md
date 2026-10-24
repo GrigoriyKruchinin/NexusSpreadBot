@@ -44,3 +44,20 @@
 - Adding a settings field needs: `TOML_ALLOWED`, `config/nexus.toml`, and the tests in `test_config_file.py` will fail
   until both are done (completeness + classification test).
 - Not verified here: `docker compose config` / a real stack start (no docker run per rules); CI jobs.
+
+## Round 2 (backend-lead, 2026-10-23) - fixes for tech-lead RETURN and security L1-L5
+
+| Point | Fix | Commit |
+|---|---|---|
+| TL1 dict/list merge | `NexusTomlSource` drops a key when its full name is set non-empty in env or (locally) `.env`; shared `present_env_names()`. Tests: dict/list, `.env`, container, empty env | "fix(config): A7 round 2 ..." |
+| TL2 stale `.env` lines | Containers cannot see `.env`, so detection is host-side: `make check-env-settings` (also run by `make up-local`) prints NAMES only; Russian guide rewritten (docker ignores, host overrides, move values into the TOML) | same |
+| TL2 soak venue sets | `[paper] venue_sets` = 4 soak sets; valid with default venues (test); defaults-equality test allows exactly this deviation | "feat(config): set the four soak venue sets ..." |
+| TL3 hash | Decimals normalized; `POSTGRES_*`, `REDIS_*`, `LOG_*` excluded (deployment plumbing) | first |
+| TL4 tests | Telegram in defaults-equality; bare keys vs denylist; `not_settings` derived from `_DENY_EXACT` | first |
+| TL5 / sec L3 | beat (`beat_init`) and migrator (`migrations/env.py`) log `settings_loaded` | first |
+| sec L1 | key/table names not matching `[A-Za-z0-9_-]{1,64}` print as `<unprintable key>` | first |
+| sec L2 | gitleaks key rule from the review (prefix `[^#\n]*?`, adds `chat_id`), URL rule `(?i)`; tested with Python `re` | first |
+| sec L5 | `isolated_env` clears `KEY_POLICY_*` and `NEXUS_WORKER_ROLE` | first |
+
+Notes: the GO report should cite the scanner `settings_loaded` event. The settings hash changed
+definition (new feature, nothing persisted). `todo.md` not ticked.
