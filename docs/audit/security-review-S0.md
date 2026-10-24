@@ -55,3 +55,63 @@ before the fresh-stack soak (S-1 and S-3 recommended before the soak, the rest w
 
 ## Secrets check
 No secret values in the reviewed diffs, texts, logs or tests. `.env` not read; no env-expanding command run.
+
+## Round 2 (2026-10-24)
+
+- Scope: fix commits 2c528c6 (S0a r2: scanner park on exit 3, `backup-archive`, copy hardening, status dir
+  guard), cb1c1af (S0b r2: `check_error`, watchdog events exempt from expiry, downtime vs expected rate,
+  `gather_isolated` cancel handling), tests 79326fa; tech-lead round 2 (`tech-lead-review-S0.md`).
+- Method: diff and file reading, grep; ran `uv run pytest tests/unit/scripts tests/unit/test_compose.py
+  tests/unit/services/test_watchdog.py -q` (117 passed, hermetic sandbox). Not done (by rule): `.env`,
+  env-expanding commands, Docker, DB, backup scripts against the real stack.
+
+### Verdict: ACCEPT
+
+No Critical/High/Medium finding. All round-1 items that needed a fix before the soak are fixed.
+
+### Per-item status
+
+| # | Status | Evidence |
+|---|--------|----------|
+| S-1 | Fixed (r1 follow-up) | A5b criterion 5 and A5c criterion 4 now say "parse the YAML as in `tests/unit/test_compose.py`; never `docker compose config`". |
+| S-2 | Fixed | Guide `docs/guides/backups.md` has the optional `icacls ... /inheritance:r` step and "never OneDrive". Applying it is a user step (not verifiable by agents). |
+| S-3 | Fixed | `copy_offsite` uses `mktemp -- "$real_dst/.$name.XXXXXX.partial"` (O_EXCL, 0600, unpredictable name); `mv -f` renames over the final name (does not follow a symlink there). Residual: see R2-3. |
+| S-4 | Fixed | `write_status` resolves the status dir with `pwd -P` and skips (WARNING, never fails) when it equals BACKUP_DIR, is inside it, or holds `nexus-*.dump`; tests for all three. Compose and `make up-local` now use the fixed path `${HOME}/nexus-backup-status` (no `.env` interpolation, no shell/compose mismatch); the variable is documented as test-only. |
+| Sidecar order (TL8) | Fixed | `.counts` copied first, dump last; any failure removes the copied `.counts`, so no dump without its sidecar appears in the copy dir. |
+| S-5 | Open (Info) | No OneDrive path guard in code; guide statement only. Optional. |
+| S-6 | Deferred to A5b | Unchanged (Redis auth). |
+| S-7 | Done | `.claude/settings.json` deny list widened (`--file`, `-f ./...`, `-p`, `--env-file`, `run`, `docker run/exec`, `docker-compose:*`, plain `env`/`set`/`export`, `printenv`, `.env` viewers). |
+| S-8 | Config fixed, live check pending | Scanner is now `restart: unless-stopped`; exit 3 parks (sleep, no API calls) instead of exiting. Must still be confirmed on the first Docker/WSL restart of the soak (STATE D-01). |
+
+### New checks in the r2 diffs (fine)
+- **Watchdog texts**: new `check_error` reason is a fixed Russian template without exception text, paths,
+  DB host or file path; logs keep `type(error).__name__` only. Severity escalation re-alert carries the
+  same fields (check, reason, minutes). No config values reach Telegram.
+- **Event expiry exemption** for `WatchdogAlert`/`WatchdogRecovered`: availability change only; payloads
+  contain no secrets, so a late delivery leaks nothing.
+- **`gather_isolated`** logs `exc_info`; `nexus.log` runs `redact_processor` after `format_exc_info`, so
+  tracebacks (ccxt/httpx messages) are scrubbed. No change in exposure versus r1.
+- **Scanner wrapper**: no secret in the `sh -c` text; trap set before the fork; exit 3 parks without
+  touching exchange APIs. A daemon restart re-runs the scanner once -> one signed key-introspection round
+  per restart (bounded, acceptable; A6 intent kept).
+- **New TOML key** `WATCHDOG_EXPECTED_SWEEPS_PER_HOUR` in `TOML_ALLOWED`, not secret-like; `.env.example`
+  unchanged.
+- **`backup-archive`**: archive dir created via `ensure_backup_dir` (0700, owner check, outside repo),
+  names `nexus-archive-*` do not match `DUMP_RE`, so neither prune touches them; no status/heartbeat.
+- Secrets check: no secret values in the r2 diffs, tests or docs.
+
+### New findings (round 2)
+
+| # | Severity | Finding | Recommendation |
+|---|----------|---------|----------------|
+| R2-1 | Low | `SOURCE_DB` (now advertised by `make backup-archive`) is not validated: it is logged verbatim (`dumping $SOURCE_DB ...`) and passed to `pg_dump -d` / `psql -d`, which also accept a conninfo string or URI. A value with a password would land in `backup.log`. User-run only, quoted (no shell injection). | Validate `SOURCE_DB` against `^[A-Za-z_][A-Za-z0-9_]*$` in `_backup_common.sh` (die otherwise). One line; any time before the archive step. |
+| R2-2 | Info | In archive mode BACKUP_DIR is the `archive/` subdir, so the "copy dir equals BACKUP_DIR" guard compares against the subdir: `BACKUP_COPY_DIR=~/nexus-backups` would be accepted and put the archive into the main dump dir (0600, not pruned). Harmless. | Optional: compare against the top-level backup dir too. |
+| R2-3 | Info | Residual race: a writer of the copy dir could swap the fresh mktemp file for a symlink between `mktemp` and `cp` (`cp` follows a destination symlink). Window is tiny and the dir is user-only after the S-2 `icacls` step. The regression test `test_copy_never_follows_a_planted_symlink` plants the old fixed names, so it now passes trivially. | Accept. Optional: `cp --remove-destination`, and adjust the test to assert that no file outside the copy dir changes. |
+
+### Key-leak incident follow-up (2026-10-23)
+- 2026-10-24: the user rotated all 4 exchange keys (binance, gateio, kucoin, okx) in `.env`; the leaked
+  subagent `.jsonl` transcript no longer exists (reported by the orchestrator, not verified by agents:
+  `.env` and keys are out of agent reach by rule). `make check-env-settings` reported no setting lines
+  left in `.env`. Preventive controls in place: CLAUDE.md rule 4, widened deny list (S-7), A5b/A5c/B1a
+  cards reworded (S-1). Incident closed from the security side; the old keys must stay revoked at the
+  exchanges (user check: revoked, not just disabled).
