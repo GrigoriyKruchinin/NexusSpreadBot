@@ -1,12 +1,14 @@
 """B15: per-set persistence and the per-set digest query return the manual sums."""
 
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal as D
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from nexus.interfaces.repositories import PaperHolding
-from nexus.persistence.repositories import DigestRepository, PaperRepository
+from nexus.interfaces.repositories import CapStatsDelta, PaperHolding, RunDefinition
+from nexus.persistence.repositories import DigestRepository, PaperRepository, RetentionRepository
 from nexus.simulation.portfolio import Rebalance, RebalanceStatus, TradeOutcome
 from tests.support import make_breakdown
 
@@ -40,8 +42,16 @@ async def _commit(
     )
 
 
+def _definition(
+    capital: str = "10000", venues: tuple[str, ...] = ("binance", "kucoin")
+) -> RunDefinition:
+    return RunDefinition(venues, D(capital), f"hash-{capital}-{'-'.join(venues)}")
+
+
 async def test_portfolios_are_isolated_and_summed_per_set(sessions: Sessions) -> None:
     repo = PaperRepository(sessions)
+    await repo.ensure_run("all", _definition(), T0)
+    await repo.ensure_run("excl_conditional", _definition(), T0 + H)
     await _commit(repo, "all", ["binance", "bybit"], 3, 2)
     await _commit(repo, "excl_conditional", ["binance", "kucoin"], 1, 1)
 
@@ -64,4 +74,89 @@ async def test_portfolios_are_isolated_and_summed_per_set(sessions: Sessions) ->
     assert by_id["all"].hedged_pnl_usd == 3 * NET - 2
     assert by_id["excl_conditional"].trades == 1
     assert by_id["excl_conditional"].hedged_pnl_usd == NET - 1
-    assert by_id["all"].since_ms == T0 + H
+    assert by_id["all"].since_ms == T0  # from the run registry, not from the first snapshot
+    assert by_id["excl_conditional"].since_ms == T0 + H
+
+
+async def test_run_registry_resumes_or_starts_a_new_run(sessions: Sessions) -> None:
+    repo = PaperRepository(sessions)
+    first = await repo.ensure_run("core3", _definition(), T0)
+    assert first.created
+    assert first.started_at_ms == T0
+    again = await repo.ensure_run("core3", _definition(), T0 + 5 * H)
+    assert not again.created
+    assert again.run_id == first.run_id
+    assert again.started_at_ms == T0
+    redefined = await repo.ensure_run("core3", _definition("5000"), T0 + 6 * H)
+    assert redefined.created
+    assert redefined.run_id > first.run_id
+    assert redefined.started_at_ms == T0 + 6 * H
+    # back to the first definition is yet another run (the latest run decides)
+    third = await repo.ensure_run("core3", _definition(), T0 + 7 * H)
+    assert third.created
+    assert third.run_id > redefined.run_id
+
+
+async def test_load_state_ignores_rows_of_earlier_runs(sessions: Sessions) -> None:
+    repo = PaperRepository(sessions)
+    await _commit(repo, "all", ["binance", "bybit"], 3, 2)  # old run rows at T0 + H
+    assert (await repo.load_state("all", T0 + 2 * H)) is None  # nothing in the new run yet
+    await repo.commit(
+        portfolio_id="all",
+        at_ms=T0 + 3 * H,
+        trades=[(_trade("binance", "kucoin"), None)],
+        rebalances=[],
+        holdings=[PaperHolding("binance", "USDT", D(7), None, D(1))],
+    )
+    state = await repo.load_state("all", T0 + 2 * H)
+    assert state is not None
+    assert [(h.exchange, h.amount) for h in state.holdings] == [("binance", D(7))]
+    assert state.rebalance_costs == 0
+    assert state.in_flight == []
+    assert state.realized == 0  # the new trade is stamped T0 + H (before the new run)
+
+
+async def test_since_survives_snapshot_retention(sessions: Sessions) -> None:
+    now = datetime.now(tz=UTC)
+    started_ms = int((now - timedelta(days=20)).timestamp() * 1000)
+    repo = PaperRepository(sessions)
+    await repo.ensure_run("all", _definition(), started_ms)
+    for days_ago in (19, 12, 1):
+        await repo.commit(
+            portfolio_id="all",
+            at_ms=int((now - timedelta(days=days_ago)).timestamp() * 1000),
+            trades=[],
+            rebalances=[],
+            holdings=[PaperHolding("binance", "USDT", D(100), None, D(1))],
+        )
+    purged = await RetentionRepository(sessions).purge(
+        snapshots_before=now - timedelta(days=7),
+        evaluations_before=now - timedelta(days=30),
+        episodes_before=now - timedelta(days=90),
+    )
+    assert purged["paper_balance_snapshots"] == 2  # the 19- and 12-day-old sets are gone
+    data = await DigestRepository(sessions).collect(
+        int((now - timedelta(days=1)).timestamp() * 1000), int(now.timestamp() * 1000)
+    )
+    [portfolio] = data.portfolios
+    assert portfolio.since_ms == started_ms  # still the run start, not the retention horizon
+
+
+async def test_cap_stats_are_added_per_set_and_hour(sessions: Sessions) -> None:
+    repo = PaperRepository(sessions)
+    hour = T0 - T0 % H
+    await repo.add_cap_stats([CapStatsDelta("all", hour, 10, 4, 12, 1)])
+    await repo.add_cap_stats(
+        [CapStatsDelta("all", hour, 5, 1, 3, 0), CapStatsDelta("ab", hour, 5, 0, 0, 2)]
+    )
+    await repo.add_cap_stats([])
+    async with sessions() as session:
+        rows = (
+            await session.execute(
+                text(
+                    "SELECT portfolio_id, sweeps, sweeps_cap_bound, dropped_routes, "
+                    "alerts_cap_excluded FROM paper_cap_stats ORDER BY portfolio_id"
+                )
+            )
+        ).all()
+    assert [tuple(r) for r in rows] == [("ab", 5, 0, 0, 2), ("all", 15, 5, 15, 1)]

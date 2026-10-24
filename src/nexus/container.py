@@ -39,6 +39,7 @@ from nexus.persistence.repositories import (
     RetentionRepository,
     SnapshotRepository,
 )
+from nexus.scanner.capstats import CapStatsBuffer
 from nexus.scanner.episodes import EpisodeTracker
 from nexus.scanner.health import ExchangeHealthTracker
 from nexus.scanner.paper import PaperBook, PaperTrader
@@ -95,6 +96,8 @@ def build_paper_book(
                 trade_notional_usd=paper.trade_notional_usd,
                 transfer_tax_pct=dict(settings.spread.transfer_tax_pct),
                 coin_budget_per_venue_usd=coin_budget,
+                coin_idle_release_ms=paper.coin_idle_release_h * 3_600_000 or None,
+                conversion_cost_pct=paper.conversion_cost_pct,
             ),
             repository,
             NetSpreadEstimator(pricing, clock),
@@ -108,7 +111,7 @@ def build_paper_book(
             venues=list(venues),
             capital_usd=str(paper.capital_usd),
         )
-    return PaperBook(traders)
+    return PaperBook(traders, CapStatsBuffer(repository))
 
 
 def redis_client(url: str, socket_timeout_s: float) -> Redis:

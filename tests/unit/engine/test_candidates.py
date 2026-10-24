@@ -104,6 +104,12 @@ def test_cap_binds_in_all_but_not_in_excl_conditional() -> None:
     assert picked.membership[route_key("D/USDT", "a", "b")] == frozenset({"excl"})
     assert picked.membership[route_key("A/USDT", "g", "a")] == frozenset({"all"})
     assert {r.symbol for r in picked.routes} == {"A/USDT", "B/USDT", "C/USDT", "D/USDT", "E/USDT"}
+    # cap-binding count: the cap cuts D/E in `all`, `excl` fits both of its routes
+    assert (picked.stats["all"].eligible, picked.stats["all"].selected) == (5, 3)
+    assert picked.stats["all"].dropped == 2
+    assert picked.stats["all"].cap_bound
+    assert (picked.stats["excl"].eligible, picked.stats["excl"].selected) == (2, 2)
+    assert not picked.stats["excl"].cap_bound
 
 
 def test_route_in_both_sets_is_listed_once_with_both_memberships() -> None:

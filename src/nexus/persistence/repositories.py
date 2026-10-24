@@ -36,6 +36,7 @@ from nexus.domain.spread import (
 from nexus.engine.candidates import RouteQuote
 from nexus.interfaces.repositories import (
     AlertDeliveryStatus,
+    CapStatsDelta,
     ExchangeMetadataStats,
     IAlertLogRepository,
     IDigestRepository,
@@ -50,6 +51,8 @@ from nexus.interfaces.repositories import (
     ISnapshotRepository,
     PaperHolding,
     PaperState,
+    PortfolioRun,
+    RunDefinition,
 )
 from nexus.persistence.models import (
     AlertLogRow,
@@ -58,6 +61,8 @@ from nexus.persistence.models import (
     MarketPairRow,
     OpportunityEpisodeRow,
     PaperBalanceSnapshotRow,
+    PaperCapStatsRow,
+    PaperPortfolioRow,
     PaperRebalanceRow,
     PaperTradeRow,
     RouteQuarantineRow,
@@ -526,12 +531,72 @@ class PaperRepository(_Repository, IPaperRepository):
             )
         return stored
 
-    async def load_state(self, portfolio_id: str) -> PaperState | None:
-        """Latest snapshot set + open transfers + totals of one portfolio."""
+    async def ensure_run(
+        self, portfolio_id: str, definition: RunDefinition, now_ms: int
+    ) -> PortfolioRun:
+        """Resume the latest run when its definition hash matches, else start a new run."""
+        async with self._sessions.begin() as session:
+            latest = await session.scalar(
+                select(PaperPortfolioRow)
+                .where(PaperPortfolioRow.portfolio_id == portfolio_id)
+                .order_by(PaperPortfolioRow.id.desc())
+                .limit(1)
+            )
+            if latest is not None and latest.config_hash == definition.config_hash:
+                return PortfolioRun(
+                    portfolio_id, latest.id, datetime_to_ms(latest.started_at), definition
+                )
+            row = PaperPortfolioRow(
+                portfolio_id=portfolio_id,
+                started_at=ms_to_datetime(now_ms),
+                venues=",".join(definition.venues),
+                capital_usd=definition.capital_usd,
+                config_hash=definition.config_hash,
+            )
+            session.add(row)
+            await session.flush()
+            return PortfolioRun(portfolio_id, row.id, now_ms, definition, created=True)
+
+    async def add_cap_stats(self, deltas: Sequence[CapStatsDelta]) -> None:
+        """Additive upsert of the hourly cap-binding counters."""
+        if not deltas:
+            return
+        async with self._sessions.begin() as session:
+            for d in deltas:
+                insert = pg_insert(PaperCapStatsRow).values(
+                    portfolio_id=d.portfolio_id,
+                    hour=ms_to_datetime(d.hour_ms),
+                    sweeps=d.sweeps,
+                    sweeps_cap_bound=d.sweeps_cap_bound,
+                    dropped_routes=d.dropped_routes,
+                    alerts_cap_excluded=d.alerts_cap_excluded,
+                )
+                table = PaperCapStatsRow.__table__
+                await session.execute(
+                    insert.on_conflict_do_update(
+                        index_elements=[PaperCapStatsRow.portfolio_id, PaperCapStatsRow.hour],
+                        set_={
+                            "sweeps": table.c.sweeps + insert.excluded.sweeps,
+                            "sweeps_cap_bound": table.c.sweeps_cap_bound
+                            + insert.excluded.sweeps_cap_bound,
+                            "dropped_routes": table.c.dropped_routes
+                            + insert.excluded.dropped_routes,
+                            "alerts_cap_excluded": table.c.alerts_cap_excluded
+                            + insert.excluded.alerts_cap_excluded,
+                        },
+                    )
+                )
+
+    async def load_state(self, portfolio_id: str, since_ms: int = 0) -> PaperState | None:
+        """Latest snapshot set + open transfers + totals of one portfolio's current run
+        (rows before ``since_ms`` belong to an earlier run and are ignored)."""
         snap, trade, rebal = PaperBalanceSnapshotRow, PaperTradeRow, PaperRebalanceRow
+        since = ms_to_datetime(since_ms)
         async with self._sessions() as session:
             latest = await session.scalar(
-                select(func.max(snap.captured_at)).where(snap.portfolio_id == portfolio_id)
+                select(func.max(snap.captured_at)).where(
+                    snap.portfolio_id == portfolio_id, snap.captured_at >= since
+                )
             )
             if latest is None:
                 return None
@@ -553,18 +618,22 @@ class PaperRepository(_Repository, IPaperRepository):
             open_rows = await session.scalars(
                 select(rebal).where(
                     rebal.portfolio_id == portfolio_id,
+                    rebal.started_at >= since,
                     rebal.status == RebalanceStatus.IN_FLIGHT.value,
                 )
             )
             in_flight = [_row_to_rebalance(r) for r in open_rows]
             realized = await session.scalar(
                 select(func.coalesce(func.sum(trade.net_usd), 0)).where(
-                    trade.portfolio_id == portfolio_id, trade.executed.is_(True)
+                    trade.portfolio_id == portfolio_id,
+                    trade.executed_at >= since,
+                    trade.executed.is_(True),
                 )
             )
             costs = await session.scalar(
                 select(func.coalesce(func.sum(rebal.fee_usd), 0)).where(
                     rebal.portfolio_id == portfolio_id,
+                    rebal.started_at >= since,
                     rebal.status != RebalanceStatus.BLOCKED.value,
                 )
             )
@@ -734,45 +803,42 @@ class DigestRepository(_Repository, IDigestRepository):
 
     @staticmethod
     async def _portfolios(session: AsyncSession, until: datetime) -> tuple[PortfolioSummary, ...]:
-        """Per shadow portfolio: first snapshot (``since``), trade count, hedged P&L."""
-        snap, trade, rebal = PaperBalanceSnapshotRow, PaperTradeRow, PaperRebalanceRow
-        firsts = (
-            await session.execute(
-                select(snap.portfolio_id, func.min(snap.captured_at))
-                .where(snap.captured_at < until)
-                .group_by(snap.portfolio_id)
-            )
-        ).all()
-        done = (
-            await session.execute(
-                select(
-                    trade.portfolio_id,
-                    func.count(),
-                    func.coalesce(func.sum(trade.net_usd), 0),
+        """Per shadow portfolio: current run start (``since``, from the registry, never from the
+        purged snapshots), trade count and hedged P&L of that run."""
+        run, trade, rebal = PaperPortfolioRow, PaperTradeRow, PaperRebalanceRow
+        runs: dict[str, PaperPortfolioRow] = {}
+        for row in (
+            await session.scalars(select(run).where(run.started_at < until).order_by(run.id))
+        ).all():
+            runs[row.portfolio_id] = row  # the latest run of a name wins
+        summaries = []
+        for pid, current in runs.items():
+            count, net = (
+                await session.execute(
+                    select(func.count(), func.coalesce(func.sum(trade.net_usd), 0)).where(
+                        trade.portfolio_id == pid,
+                        trade.executed.is_(True),
+                        trade.executed_at >= current.started_at,
+                        trade.executed_at < until,
+                    )
                 )
-                .where(trade.executed.is_(True), trade.executed_at < until)
-                .group_by(trade.portfolio_id)
+            ).one()
+            fees = await session.scalar(
+                select(func.coalesce(func.sum(rebal.fee_usd), 0)).where(
+                    rebal.portfolio_id == pid,
+                    rebal.status != RebalanceStatus.BLOCKED.value,
+                    rebal.started_at >= current.started_at,
+                    rebal.started_at < until,
+                )
             )
-        ).all()
-        fees = (
-            await session.execute(
-                select(rebal.portfolio_id, func.coalesce(func.sum(rebal.fee_usd), 0))
-                .where(rebal.status != RebalanceStatus.BLOCKED.value, rebal.started_at < until)
-                .group_by(rebal.portfolio_id)
+            summaries.append(
+                PortfolioSummary(
+                    portfolio_id=pid,
+                    since_ms=datetime_to_ms(current.started_at),
+                    trades=int(count),
+                    hedged_pnl_usd=Decimal(net or 0) - Decimal(fees or 0),
+                )
             )
-        ).all()
-        trades = {str(pid): (int(n), Decimal(net or 0)) for pid, n, net in done}
-        costs = {str(pid): Decimal(total or 0) for pid, total in fees}
-        summaries = [
-            PortfolioSummary(
-                portfolio_id=str(pid),
-                since_ms=datetime_to_ms(first),
-                trades=trades.get(str(pid), (0, Decimal(0)))[0],
-                hedged_pnl_usd=trades.get(str(pid), (0, Decimal(0)))[1]
-                - costs.get(str(pid), Decimal(0)),
-            )
-            for pid, first in firsts
-        ]
         summaries.sort(key=lambda p: (p.portfolio_id != DEFAULT_PORTFOLIO_ID, p.portfolio_id))
         return tuple(summaries)
 

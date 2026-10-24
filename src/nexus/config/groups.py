@@ -393,6 +393,12 @@ class PaperSettings(NexusBaseSettings):
     """Shadow portfolios (``name`` or ``name=spec``, ``;``-separated), see
     :mod:`nexus.config.venue_sets`. Data of a set accrues only from the moment it is added
     (no backfill); removing a set stops accrual, its rows stay."""
+    coin_idle_release_h: int = Field(default=24, ge=0, le=24 * 365)
+    """A coin slot idle this many hours is freed (converted back to USDT, cost booked) when a
+    new coin needs the venue's coin budget, so the soak does not freeze on the first coins seen.
+    0 = never free (first-come lock-in; skipped routes then count as COIN_BUDGET_EXHAUSTED)."""
+    conversion_cost_pct: Decimal = Field(default=Decimal("0.3"), ge=0, lt=100)
+    """Estimated cost of that conversion (taker fee + half the spread), percent of its value."""
     trade_notional_usd: Decimal = Field(default=Decimal(1_000), gt=0)
     rebalance_threshold_pct: Decimal = Field(default=Decimal(20), gt=0, lt=100)
     """A balance below this share of its starting amount triggers a virtual rebalance."""

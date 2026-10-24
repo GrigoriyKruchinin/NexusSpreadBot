@@ -251,8 +251,8 @@ def test_digest_portfolio_lines_and_accrual_footer() -> None:
     )
     text = DigestFormatter().render(data, "UTC")
     assert "📦 <b>Наборы бирж</b> (реальная симуляция по набору)" in text
-    assert "• <code>all</code> с 13 Oct: сделок 120 · hedged +$41.20" in text
-    assert "• <code>excl_conditional</code> с 17 Oct: сделок 40 · hedged -$3.50" in text
+    assert "• <code>all</code> с 13 Oct 06:00: сделок 120 · hedged +$41.20" in text
+    assert "• <code>excl_conditional</code> с 17 Oct 06:00: сделок 40 · hedged -$3.50" in text
     assert "&lt;b&gt;x" in text
     assert "<b>x" not in text
     assert "копятся только с момента добавления набора" in text

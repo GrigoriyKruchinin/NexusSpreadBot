@@ -118,8 +118,53 @@ class PaperState:
     rebalance_costs: Decimal
 
 
+@dataclass(frozen=True, slots=True)
+class RunDefinition:
+    """What a paper portfolio run was configured with (``config_hash`` identifies it)."""
+
+    venues: tuple[str, ...]
+    capital_usd: Decimal
+    config_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class PortfolioRun:
+    """One run of a named portfolio: a fresh capital start under one definition."""
+
+    portfolio_id: str
+    run_id: int
+    started_at_ms: int
+    definition: RunDefinition
+    created: bool = False
+    """True when this call started the run (fresh capital); False = resumed the stored one."""
+
+
+@dataclass(frozen=True, slots=True)
+class CapStatsDelta:
+    """Per-set, per-hour cap-binding counters to add to the stored aggregate."""
+
+    portfolio_id: str
+    hour_ms: int
+    sweeps: int = 0
+    sweeps_cap_bound: int = 0
+    dropped_routes: int = 0
+    alerts_cap_excluded: int = 0
+
+
 class IPaperRepository(ABC):
     """Paper trading records."""
+
+    @abstractmethod
+    async def ensure_run(
+        self, portfolio_id: str, definition: RunDefinition, now_ms: int
+    ) -> PortfolioRun:
+        """Resume the latest run of the portfolio if its definition is identical, else start a
+        NEW run (``created=True``; the old rows stay but are never restored). The run's
+        ``started_at`` is the portfolio's ``since``; it lives outside the purged snapshots."""
+
+    @abstractmethod
+    async def add_cap_stats(self, deltas: Sequence[CapStatsDelta]) -> None:
+        """Add the counters to the stored hourly aggregates (upsert, additive)."""
 
     @abstractmethod
     async def commit(
@@ -135,9 +180,9 @@ class IPaperRepository(ABC):
         balance snapshot of one portfolio; returns the rebalances with their ids."""
 
     @abstractmethod
-    async def load_state(self, portfolio_id: str) -> PaperState | None:
-        """Latest snapshot, in-flight rebalances and running totals of one portfolio
-        (``None`` = fresh / the set was just added)."""
+    async def load_state(self, portfolio_id: str, since_ms: int = 0) -> PaperState | None:
+        """Latest snapshot, in-flight rebalances and running totals of one portfolio, counting
+        only rows at or after ``since_ms`` (the current run; ``None`` = nothing to resume)."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -102,14 +102,14 @@ class DigestFormatter:
         if len(portfolios) < MIN_PORTFOLIOS_SHOWN:
             return []
         lines = [SEPARATOR, "📦 <b>Наборы бирж</b> (реальная симуляция по набору)"]
-        for p in portfolios:
-            since = datetime.fromtimestamp(p.since_ms / 1000, tz=ZoneInfo("UTC"))
-            lines.append(
-                f"• <code>{esc(p.portfolio_id)}</code> с {since:%d %b}: сделок {p.trades}"
-                f" · hedged {fmt_usd(p.hedged_pnl_usd, signed=True)}"
-            )
+        lines.extend(
+            f"• <code>{esc(p.portfolio_id)}</code> с {local(p.since_ms)}: сделок {p.trades}"
+            f" · hedged {fmt_usd(p.hedged_pnl_usd, signed=True)}"
+            for p in portfolios
+        )
         lines.append(
-            "<blockquote>Данные набора копятся только с момента добавления набора: "
+            "<blockquote>Данные набора копятся только с момента добавления набора "
+            "(смена его параметров = новый прогон с полным капиталом): "
             "без истории назад. Строки «фильтр» выше - оценка по уже записанным сделкам."
             "</blockquote>"
         )

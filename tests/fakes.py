@@ -22,6 +22,7 @@ from nexus.interfaces.market_data import BaseExchangeAdapter
 from nexus.interfaces.notifications import DeliveryReceipt, INotifier, OutgoingMessage
 from nexus.interfaces.repositories import (
     AlertDeliveryStatus,
+    CapStatsDelta,
     IAlertLogRepository,
     IEpisodeRepository,
     IEvaluationRepository,
@@ -33,6 +34,8 @@ from nexus.interfaces.repositories import (
     ISnapshotRepository,
     PaperHolding,
     PaperState,
+    PortfolioRun,
+    RunDefinition,
 )
 from nexus.simulation.portfolio import Rebalance, RebalanceStatus, TradeOutcome
 
@@ -323,7 +326,11 @@ class MemoryPaper(IPaperRepository):
         self.data: dict[str, PaperData] = {"all": PaperData()}
         self.fail_next = False
         self.fail_portfolios: set[str] = set()
+        self.fail_cap_stats = False
         self._next_id = 1
+        self._next_run_id = 0
+        self.runs: dict[str, list[PortfolioRun]] = {}
+        self.cap_stats: list[CapStatsDelta] = []
 
     @property
     def trades(self) -> list[tuple[TradeOutcome, int | None]]:
@@ -361,16 +368,34 @@ class MemoryPaper(IPaperRepository):
         data.snapshots.append((at_ms, list(holdings)))
         return stored
 
-    async def load_state(self, portfolio_id: str) -> PaperState | None:
+    async def ensure_run(
+        self, portfolio_id: str, definition: RunDefinition, now_ms: int
+    ) -> PortfolioRun:
+        runs = self.runs.setdefault(portfolio_id, [])
+        if runs and runs[-1].definition.config_hash == definition.config_hash:
+            return replace(runs[-1], created=False)
+        self._next_run_id += 1
+        run = PortfolioRun(portfolio_id, self._next_run_id, now_ms, definition, created=True)
+        runs.append(run)
+        return run
+
+    async def add_cap_stats(self, deltas: Sequence[CapStatsDelta]) -> None:
+        if self.fail_cap_stats:
+            raise ConnectionError("db down")
+        self.cap_stats.extend(deltas)
+
+    async def load_state(self, portfolio_id: str, since_ms: int = 0) -> PaperState | None:
         data = self.data.get(portfolio_id)
-        if data is None or not data.snapshots:
+        if data is None:
             return None
-        executed = [t for t, _ in data.trades if t.executed]
+        snapshots = [h for at, h in data.snapshots if at >= since_ms]
+        if not snapshots:
+            return None
+        executed = [t for t, _ in data.trades if t.executed and t.at_ms >= since_ms]
+        rebalances = [r for r in data.rebalances.values() if r.started_at_ms >= since_ms]
         return PaperState(
-            holdings=data.snapshots[-1][1],
-            in_flight=[
-                r for r in data.rebalances.values() if r.status is RebalanceStatus.IN_FLIGHT
-            ],
+            holdings=snapshots[-1],
+            in_flight=[r for r in rebalances if r.status is RebalanceStatus.IN_FLIGHT],
             realized=sum((t.net_usd for t in executed), D(0)),
-            rebalance_costs=sum((r.fee_usd for r in data.rebalances.values()), D(0)),
+            rebalance_costs=sum((r.fee_usd for r in rebalances), D(0)),
         )

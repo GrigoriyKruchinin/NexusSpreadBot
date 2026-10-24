@@ -19,6 +19,9 @@ USD_QUOTE = "USDT"
 """Quote asset of the paper inventory. Accepted simplification: every USD stablecoin quote
 (USDT/USDC) is booked as USDT 1:1 - depeg and cross-stable conversion costs are ignored."""
 
+CONVERSION_NETWORK = "conversion"
+"""``network`` marker of a bookkeeping conversion of an idle coin slot back to USDT."""
+
 DEFAULT_PORTFOLIO_ID = "all"
 """The primary shadow portfolio (every enabled venue); rows written before B15 belong to it."""
 
@@ -42,6 +45,9 @@ class SkipReason(StrEnum):
     """The coin has no usable market price yet, so its inventory cannot be seeded."""
     RECENT_FILL = "recent_fill"
     """The route was paper-traded moments ago: the same book depth is not captured twice."""
+    COIN_BUDGET_EXHAUSTED = "coin_budget_exhausted"
+    """The sell venue's coin budget is fully seeded and no idle coin slot could be released:
+    not a real inventory shortage but a limit of the simulation (reported separately)."""
 
 
 class RebalanceStatus(StrEnum):
@@ -70,6 +76,11 @@ class PaperConfig:
     """On-chain transfer tax per asset (percent of the amount moved after the fee)."""
     coin_budget_per_venue_usd: Decimal | None = None
     """Fixed cap of the coin inventory seeded on one venue (``None`` = unlimited, legacy)."""
+    coin_idle_release_ms: int | None = 24 * 3_600_000
+    """A coin slot idle at least this long is freed (converted back to USDT) when a new coin
+    needs the venue's budget; ``None`` = never (slots stay forever, first-come lock-in)."""
+    conversion_cost_pct: Decimal = Decimal("0.3")
+    """Estimated cost of converting an idle coin back to USDT (taker fee + half the spread)."""
 
     def __post_init__(self) -> None:
         if self.usdt_per_exchange <= ZERO or self.coin_per_route_usd <= ZERO:
@@ -80,6 +91,12 @@ class PaperConfig:
             raise ValueError(msg)
         if self.rebalance_delay_ms < 0:
             msg = "rebalance_delay_ms must not be negative"
+            raise ValueError(msg)
+        if self.coin_idle_release_ms is not None and self.coin_idle_release_ms <= 0:
+            msg = "coin_idle_release_ms must be positive (or None)"
+            raise ValueError(msg)
+        if not ZERO <= self.conversion_cost_pct < HUNDRED:
+            msg = "conversion_cost_pct must be within [0, 100)"
             raise ValueError(msg)
 
 
@@ -208,6 +225,11 @@ class PaperPortfolio:
     """Destination venues whose last rebalance had no verified network -> blocked-at ms."""
     venues: frozenset[str] | None = None
     """The venue set this portfolio may touch (``None`` = unrestricted, legacy/tests)."""
+    last_used_ms: dict[Venue, int] = field(default_factory=dict)
+    """Last time a coin slot was seeded or traded (idle detection; not persisted - after a
+    restart every slot gets a fresh idle window)."""
+    conversions: list[Rebalance] = field(default_factory=list)
+    """Idle-slot conversions made since the last :meth:`drain_conversions` (to be persisted)."""
 
     def _require_in_set(self, *exchanges: str) -> None:
         if self.venues is None:
@@ -224,11 +246,15 @@ class PaperPortfolio:
         if price > ZERO:
             self.prices[asset] = price
 
-    def ensure_seeded(self, buy_exchange: str, sell_exchange: str, base: str) -> bool:
+    def ensure_seeded(
+        self, buy_exchange: str, sell_exchange: str, base: str, now_ms: int = 0
+    ) -> bool:
         """Seed USDT on both venues and the coin on the sell venue on first use.
 
         Returns False when the coin has no price yet (cannot be seeded). When the sell venue's
-        coin budget is used up the coin is left unseeded (the trade then skips for lack of coin).
+        coin budget is used up, a slot idle for ``coin_idle_release_ms`` is freed first
+        (``now_ms`` required); if none is free the coin stays unseeded and the trade skips
+        with ``COIN_BUDGET_EXHAUSTED``.
         """
         self._require_in_set(buy_exchange, sell_exchange)
         for exchange in (buy_exchange, sell_exchange):
@@ -239,9 +265,85 @@ class PaperPortfolio:
         if price is None:
             return False
         usd = self._coin_seed_usd(sell_exchange)
+        if usd < self.config.coin_per_route_usd and self._release_idle(
+            sell_exchange, base, now_ms, self.config.coin_per_route_usd - usd
+        ):
+            usd = self._coin_seed_usd(sell_exchange)
         if usd > ZERO:
             self._seed((sell_exchange, base), usd / price, price)
+            self.last_used_ms[(sell_exchange, base)] = now_ms
         return True
+
+    def drain_conversions(self) -> list[Rebalance]:
+        """Idle-slot conversions made so far (cleared), to be stored with the next commit."""
+        done, self.conversions = self.conversions, []
+        return done
+
+    def _release_idle(self, exchange: str, new_base: str, now_ms: int, needed: Decimal) -> bool:
+        """Free idle coin slots of ``exchange`` (oldest first) until ``needed`` USD of budget.
+
+        The coin is converted back to USDT at the current price minus ``conversion_cost_pct``:
+        the original slot value becomes USDT seed (capital stays fixed), the cost is booked as
+        a rebalance cost and stored as a ``conversion`` record. Returns True if any was freed.
+        """
+        release_ms = self.config.coin_idle_release_ms
+        if release_ms is None or now_ms <= 0:
+            return False
+        busy = {(r.to_exchange, r.asset) for r in self.in_flight} | {
+            (r.from_exchange, r.asset) for r in self.in_flight
+        }
+        idle: list[tuple[int, Venue]] = []
+        for venue in self.seeds:
+            ex, asset = venue
+            if ex != exchange or asset in (USD_QUOTE, new_base) or venue in busy:
+                continue
+            last = self.last_used_ms.setdefault(venue, now_ms)
+            if now_ms - last >= release_ms and asset in self.prices:
+                idle.append((last, venue))
+        freed = ZERO
+        for _, venue in sorted(idle):
+            if freed >= needed:
+                break
+            freed += self._convert_to_usdt(venue, now_ms)
+        return freed > ZERO
+
+    def _convert_to_usdt(self, venue: Venue, now_ms: int) -> Decimal:
+        """Sell the whole balance of an idle coin slot; returns the freed slot value (USD)."""
+        exchange, asset = venue
+        seed = self.seeds.pop(venue)
+        amount = self.balances.pop(venue, ZERO)
+        price = self.prices[asset]
+        self.last_used_ms.pop(venue, None)
+        self.blocked.pop(venue, None)
+        gross = amount * price
+        cost = gross * self.config.conversion_cost_pct / HUNDRED
+        slot_value = seed.amount * seed.price
+        usdt = (exchange, USD_QUOTE)
+        old_usdt = self.seeds.get(usdt)
+        # Capital is unchanged: the slot's seed value moves to the venue's USDT seed, so the
+        # price drift and the cost show up as P&L (mark-to-market and rebalance cost).
+        self.seeds[usdt] = Seed(
+            amount=(old_usdt.amount if old_usdt else ZERO) + slot_value, price=Decimal(1)
+        )
+        self._add(usdt, gross - cost)
+        self.rebalance_costs += cost
+        if amount > ZERO:
+            self.conversions.append(
+                Rebalance(
+                    asset,
+                    exchange,
+                    exchange,
+                    amount,
+                    cost / price,
+                    cost,
+                    CONVERSION_NETWORK,
+                    now_ms,
+                    now_ms,
+                    RebalanceStatus.COMPLETED,
+                    "idle coin slot converted back to USDT",
+                )
+            )
+        return slot_value
 
     def _coin_seed_usd(self, exchange: str) -> Decimal:
         budget = self.config.coin_budget_per_venue_usd
@@ -270,7 +372,12 @@ class PaperPortfolio:
     # ------------------------------------------------------------------ trading
 
     def trade_size(
-        self, buy_exchange: str, sell_exchange: str, base: str, best_ask: Decimal
+        self,
+        buy_exchange: str,
+        sell_exchange: str,
+        base: str,
+        best_ask: Decimal,
+        now_ms: int = 0,
     ) -> tuple[Decimal, SkipReason | None]:
         """USD size of the next trade: the target notional, capped by the USDT on the buy
         venue and by the coin on the sell venue.
@@ -281,7 +388,7 @@ class PaperPortfolio:
         Returns ``(0, reason)`` when the available inventory is below the minimum size.
         """
         self._require_in_set(buy_exchange, sell_exchange)
-        if not self.ensure_seeded(buy_exchange, sell_exchange, base):
+        if not self.ensure_seeded(buy_exchange, sell_exchange, base, now_ms):
             return ZERO, SkipReason.NO_PRICE
         usdt_venue, coin_venue = (buy_exchange, USD_QUOTE), (sell_exchange, base)
         usdt = self.balance(*usdt_venue)
@@ -290,7 +397,7 @@ class PaperPortfolio:
         if usdt < minimum:
             return ZERO, self._shortage_reason(usdt_venue, SkipReason.INSUFFICIENT_USDT)
         if coin_usd < minimum:
-            return ZERO, self._shortage_reason(coin_venue, SkipReason.INSUFFICIENT_COIN)
+            return ZERO, self._shortage_reason(coin_venue, self._coin_shortage(coin_venue))
         return min(self.config.trade_notional_usd, usdt, coin_usd), None
 
     def trade(
@@ -315,19 +422,28 @@ class PaperPortfolio:
             return outcome(SkipReason.BOOKS_UNAVAILABLE)
         if breakdown.net_profit_usd <= ZERO:
             return outcome(SkipReason.SPREAD_GONE)
-        if not self.ensure_seeded(buy_exchange, sell_exchange, base):
+        if not self.ensure_seeded(buy_exchange, sell_exchange, base, at_ms):
             return outcome(SkipReason.NO_PRICE)
         usdt_venue, coin_venue = (buy_exchange, USD_QUOTE), (sell_exchange, base)
         if self.balance(*usdt_venue) < breakdown.cost_quote:
             return outcome(self._shortage_reason(usdt_venue, SkipReason.INSUFFICIENT_USDT))
         if self.balance(*coin_venue) < breakdown.base_sold:
-            return outcome(self._shortage_reason(coin_venue, SkipReason.INSUFFICIENT_COIN))
+            return outcome(self._shortage_reason(coin_venue, self._coin_shortage(coin_venue)))
         self._add(usdt_venue, -breakdown.cost_quote)
         self._add((buy_exchange, base), breakdown.base_received)
         self._add(coin_venue, -breakdown.base_sold)
         self._add((sell_exchange, USD_QUOTE), breakdown.proceeds_quote)
         self.realized += breakdown.net_profit_usd
+        self.last_used_ms[coin_venue] = at_ms
+        if (buy_exchange, base) in self.seeds:
+            self.last_used_ms[(buy_exchange, base)] = at_ms
         return outcome(None)
+
+    def _coin_shortage(self, coin_venue: Venue) -> SkipReason:
+        """No coin to sell: a never-seeded slot means the venue's coin budget is exhausted."""
+        if coin_venue in self.seeds:
+            return SkipReason.INSUFFICIENT_COIN
+        return SkipReason.COIN_BUDGET_EXHAUSTED
 
     def _shortage_reason(self, venue: Venue, default: SkipReason) -> SkipReason:
         if any((r.to_exchange, r.asset) == venue for r in self.in_flight):

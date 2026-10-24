@@ -232,6 +232,45 @@ class RouteQuarantineRow(Base):
     lifted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class PaperPortfolioRow(Base):
+    """Registry of paper portfolio runs (one row per run; the latest row of a name is current).
+
+    ``started_at`` is the portfolio's ``since``: unlike the snapshots it is never purged by
+    retention. A changed definition (``config_hash``) starts a new run with fresh capital.
+    """
+
+    __tablename__ = "paper_portfolios"
+    __table_args__ = (
+        Index("ix_paper_portfolios_portfolio_started_at", "portfolio_id", "started_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    """Run id."""
+    portfolio_id: Mapped[str] = mapped_column(String(32))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    venues: Mapped[str] = mapped_column(Text)
+    """Sorted venue names, comma-separated (empty for the legacy pre-B15 run)."""
+    capital_usd: Mapped[Decimal] = mapped_column(Money)
+    config_hash: Mapped[str] = mapped_column(String(64))
+    """SHA-256 of the run definition (``legacy`` for the backfilled pre-B15 run)."""
+
+
+class PaperCapStatsRow(Base):
+    """Hourly per-set cap-binding counters (is the candidate cap distorting a set?)."""
+
+    __tablename__ = "paper_cap_stats"
+
+    portfolio_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    hour: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    sweeps: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    sweeps_cap_bound: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    """Sweeps in which the set's own top-N cut at least one eligible route."""
+    dropped_routes: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    """Eligible routes cut by the cap, summed over the hour's sweeps."""
+    alerts_cap_excluded: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    """Alerts on routes inside the set but outside its top-N that sweep (not paper-traded)."""
+
+
 class PaperTradeRow(Base):
     """A simulated trade (executed or skipped with a reason)."""
 

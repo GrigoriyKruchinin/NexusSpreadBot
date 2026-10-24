@@ -107,6 +107,8 @@ async def test_cooldown_and_skip_reasons_are_per_set() -> None:
 async def test_each_set_resumes_from_its_own_state() -> None:
     h = _harness()
     await h.scanner.refresh_metadata()
+    assert h.scanner._paper is not None
+    await h.scanner._paper.start()  # registers the runs
     await h.scanner.sweep()
     await _settle(h)
     book = h.scanner._paper

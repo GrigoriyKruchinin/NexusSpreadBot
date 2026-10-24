@@ -36,6 +36,7 @@ from nexus.engine.estimator import EstimatorConfig, NetSpreadEstimator
 from nexus.interfaces.market_data import ITradingFeeSource
 from nexus.interfaces.repositories import ExchangeMetadataStats, IMetadataStatsRepository
 from nexus.scanner import service
+from nexus.scanner.capstats import CapStatsBuffer
 from nexus.scanner.episodes import EpisodeTracker
 from nexus.scanner.health import ExchangeHealthTracker
 from nexus.scanner.paper import PaperBook, PaperTrader
@@ -92,7 +93,9 @@ class Harness:
         paper: bool = False,
         paper_sets: dict[str, frozenset[str] | None] | None = None,
         max_candidates: int = 10,
+        paper_config: PaperConfig | None = None,
     ) -> None:
+        self.paper_config = paper_config or _paper_config()
         self.clock = ManualClock()
         self.a = (FeeLookupExchange if fee_lookup else FakeExchange)("a", self.clock)
         self.streaming_b = StreamingExchange("b", self.clock)
@@ -182,7 +185,7 @@ class Harness:
         return PaperBook(
             {
                 name: PaperTrader(
-                    _paper_config(),
+                    self.paper_config,
                     self.paper_repo,
                     estimator,
                     self.clock,
@@ -190,7 +193,8 @@ class Harness:
                     venues=venues,
                 )
                 for name, venues in (sets or {"all": None}).items()
-            }
+            },
+            CapStatsBuffer(self.paper_repo),
         )
 
 
@@ -1069,6 +1073,7 @@ async def test_paper_portfolio_resumes_after_restart() -> None:
     h = _episode_harness(paper=True)
     _usdt_and_abc_transfers(h, usdt_verified=True)
     await h.scanner.refresh_metadata()
+    await h.scanner._paper.start()  # type: ignore[union-attr]  # registers the run
     await h.scanner.sweep()
     await _settle(h)
     before = h.scanner._paper.trader().portfolio  # type: ignore[union-attr]
@@ -1117,10 +1122,10 @@ async def test_route_is_paper_traded_once_per_minute() -> None:
 async def test_resume_failure_disables_paper_trading() -> None:
     h = _episode_harness(paper=True)
 
-    async def broken() -> None:
+    async def broken(*args: object) -> None:
         raise ConnectionError("db down")
 
-    h.paper_repo.load_state = broken  # type: ignore[method-assign,assignment]
+    h.paper_repo.ensure_run = broken  # type: ignore[method-assign,assignment]
     stop = asyncio.Event()
 
     async def beat_then_stop(service: str, ttl_s: int) -> None:
