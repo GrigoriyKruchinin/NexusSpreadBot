@@ -71,3 +71,14 @@ Gate: 806 unit tests, ruff 0, mypy --strict 0; integration tests in CI only.
 | 7 | "Soak checkpoint" section in the task card | - |
 
 Notes: per-venue fee tiers fetched from exchanges at runtime are not config and are not hashed (default taker fee is). A restart-line stays in the digest only for the day of the restart. CI run of the first commit failed on a test bug (fixture trade stamped before the new run); fixed in the docs commit.
+
+## Follow-ups F1/F3 (after round 3 ACCEPT)
+- F1 closed: `_fund_from_recycled_usdt` now returns the amount actually funded and the new coin
+  seed is sized to it when a recycled excess exists (a USDT shortfall shrinks or skips the seed;
+  fresh capital is never injected). Test: `test_recycle_with_a_usdt_shortfall_never_injects_capital`
+  (reproduced 1500 -> 1740 before the fix). `PaperTrader._check_capital` logs WARNING
+  `paper_capital_drift` (once per value, no secrets) if seeds exceed the configured capital.
+- F3 closed: run-hash `strategy` now includes quote_assets, symbols whitelist/blacklist,
+  orderbook_depth and the four QUARANTINE_* thresholds (`container.py`); parametrized test in
+  `tests/unit/test_container_paper.py`. Existing runs restart fresh once on deploy (hash change).
+- F2 open: moved to part 2 of the card (fee disclosure in the GO report).

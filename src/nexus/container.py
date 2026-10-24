@@ -114,6 +114,15 @@ def build_paper_book(
                     settings.spread.max_unverified_gross_spread_pct
                 ),
                 "min_quote_volume_usd": str(settings.scanner.min_quote_volume_usd),
+                # universe: which routes/coins are eligible at all
+                "quote_assets": ",".join(sorted(settings.scanner.quote_assets)),
+                "symbols_whitelist": ",".join(sorted(settings.scanner.symbols_whitelist)),
+                "symbols_blacklist": ",".join(sorted(settings.scanner.symbols_blacklist)),
+                "orderbook_depth": str(settings.scanner.orderbook_depth),
+                "quarantine_persist_min": str(settings.quarantine.persist_min),
+                "quarantine_ttl_h": str(settings.quarantine.ttl_h),
+                "quarantine_window_h": str(settings.quarantine.window_h),
+                "quarantine_max_episodes": str(settings.quarantine.max_episodes),
             },
         )
         log.info(

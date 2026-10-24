@@ -92,3 +92,8 @@ At the 24 h soak checkpoint compute from `sweep_done` logs: p50/p95 of `candidat
 p95 > 1.3, or sweep duration p95 regresses > 25 % vs the pre-B15 baseline, or any rate-limit ban
 appears -> `NEEDS_USER` (raise limits / lower cap / fewer sets). Prometheus metric for the union stays
 a follow-up. Also read `paper_cap_stats` (per-set heartbeat and cap effect) at the same checkpoint.
+
+## Part 2 items (from tech-lead round 3)
+- [ ] F2: runtime-fetched per-venue fees are NOT part of the run hash (fee tiers are exchange-side
+  facts). Disclose in the GO report: fee source = live exchange metadata, applied per trade;
+  record a fee-table snapshot at run start (or rely on the per-trade breakdown).

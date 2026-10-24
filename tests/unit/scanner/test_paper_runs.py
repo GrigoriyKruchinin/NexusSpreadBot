@@ -512,3 +512,23 @@ async def test_cap_stats_flush_cancellation_keeps_counters() -> None:
     repo.add_cap_stats = ok_add  # type: ignore[method-assign]
     await buf.flush(HOUR_MS + 10, force=True)
     assert [d.sweeps for d in repo.cap_stats] == [1]
+
+
+def test_capital_drift_above_configured_logs_a_warning_once() -> None:
+    clock, repo = ManualClock(), MemoryPaper()
+    trader = _trader(repo, "ab", AB, clock)
+    trader.portfolio.seeds[("a", "USDT")] = Seed(amount=D(99_999), price=D(1))
+    with capture_logs() as logs:
+        trader._check_capital()
+        trader._check_capital()
+    drift = [e for e in logs if e["event"] == "paper_capital_drift"]
+    assert len(drift) == 1
+    assert drift[0]["log_level"] == "warning"
+
+
+def test_no_capital_warning_when_capital_is_at_or_below_configured() -> None:
+    clock, repo = ManualClock(), MemoryPaper()
+    trader = _trader(repo, "ab", AB, clock)
+    with capture_logs() as logs:
+        trader._check_capital()
+    assert not [e for e in logs if e["event"] == "paper_capital_drift"]

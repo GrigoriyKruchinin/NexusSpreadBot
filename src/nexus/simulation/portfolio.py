@@ -269,28 +269,34 @@ class PaperPortfolio:
             sell_exchange, base, now_ms, self.config.coin_per_route_usd - usd
         ):
             usd = self._coin_seed_usd(sell_exchange)
+        usd = self._fund_from_recycled_usdt(sell_exchange, usd)
         if usd > ZERO:
-            self._fund_from_recycled_usdt(sell_exchange, usd)
             self._seed((sell_exchange, base), usd / price, price)
             self.last_used_ms[(sell_exchange, base)] = now_ms
         return True
 
-    def _fund_from_recycled_usdt(self, exchange: str, usd: Decimal) -> None:
+    def _fund_from_recycled_usdt(self, exchange: str, usd: Decimal) -> Decimal:
         """Pay a new coin seed from USDT that a slot conversion moved into the USDT seed.
 
         The excess of the USDT seed over ``usdt_per_exchange`` is value freed by an idle-slot
         conversion (derived from the seeds, so it survives a restart). Spending it keeps the
         sum of seeds - the capital - fixed instead of growing by a slot on every recycle.
+        Returns the USD to seed as the new coin: ``usd`` when nothing was recycled (fresh
+        budget), otherwise only what was actually funded (a USDT shortfall shrinks the seed;
+        fresh capital is never injected).
         """
         usdt = (exchange, USD_QUOTE)
         seed = self.seeds.get(usdt)
         if seed is None:
-            return
+            return usd
         recycled = seed.amount - self.config.usdt_per_exchange
-        funded = min(usd, recycled, self.balances.get(usdt, ZERO))
+        if recycled <= ZERO:
+            return usd
+        funded = max(min(usd, recycled, self.balances.get(usdt, ZERO)), ZERO)
         if funded > ZERO:
             self.seeds[usdt] = Seed(amount=seed.amount - funded, price=Decimal(1))
             self._add(usdt, -funded)
+        return funded
 
     def drain_conversions(self) -> list[Rebalance]:
         """Idle-slot conversions made so far (cleared), to be stored with the next commit."""

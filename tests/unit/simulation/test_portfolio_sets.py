@@ -244,3 +244,17 @@ def test_capital_is_fixed_after_many_recycles() -> None:
         assert v.capital == fixed
         assert v.mark_to_market == v.total_pnl - v.realized + v.rebalance_costs
     assert p.rebalance_costs > D(0)  # the booked conversion cost stays
+
+
+def test_recycle_with_a_usdt_shortfall_never_injects_capital() -> None:
+    p = _slot_portfolio()
+    fixed = p.valuation().capital
+    p.balances[("b", "USDT")] = D(10)  # venue USDT was spent/rebalanced away
+    p.balances[("b", "AAA")] = D(0)  # the idle slot was already sold out
+    p.mark_price("AAA", D(10))
+    assert p.ensure_seeded("a", "b", "CCC", T0 + DAYMS + 1)
+    assert p.valuation().capital == fixed
+    usdt = p.seeds[("b", "USDT")]
+    assert usdt.amount <= p.balances[("b", "USDT")] + D(1000)  # no phantom seed above holdings
+    ccc = p.seeds.get(("b", "CCC"))
+    assert ccc is None or ccc.amount * ccc.price <= D(10) + D("1e-9")

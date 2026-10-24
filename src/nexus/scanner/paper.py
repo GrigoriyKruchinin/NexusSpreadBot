@@ -47,6 +47,7 @@ log = structlog.get_logger(__name__)
 SNAPSHOT_INTERVAL_MS = 15 * 60_000
 """Balances are snapshotted after every change and at least this often (mark-to-market)."""
 ROUTE_TRADE_COOLDOWN_MS = 60_000
+CAPITAL_TOLERANCE_USD = Decimal("0.01")
 """A route is paper-traded at most once per minute: a quick re-alert must not capture the
 same order book depth twice (paper fills never consume real liquidity)."""
 MAX_TICKER_SPREAD = Decimal("0.05")
@@ -90,6 +91,7 @@ class PaperTrader:
         self.run: PortfolioRun | None = None
         self._last_snapshot_ms: int | None = None
         self._last_trade_ms: dict[str, int] = {}
+        self._warned_capital: Decimal | None = None
         self._lock = asyncio.Lock()
         """Serializes state changes + commits of background trades and the sweep."""
 
@@ -286,7 +288,23 @@ class PaperTrader:
         breakdown = self._price(size, buy_book, sell_book, buy_market, sell_market, transfer)
         if breakdown is None:
             return skipped(SkipReason.UNFILLABLE)
-        return self.portfolio.trade(symbol, base, buy_exchange, sell_exchange, breakdown, now)
+        outcome = self.portfolio.trade(symbol, base, buy_exchange, sell_exchange, breakdown, now)
+        self._check_capital()
+        return outcome
+
+    def _check_capital(self) -> None:
+        """Warn (once per value) if the seeds sum to MORE than the configured capital (unseeded
+        coin budget keeps it below; only injected capital is a bug)."""
+        capital = self.portfolio.valuation().capital
+        expected = self.definition().capital_usd
+        if capital - expected > CAPITAL_TOLERANCE_USD and capital != self._warned_capital:
+            self._warned_capital = capital
+            log.warning(
+                "paper_capital_drift",
+                portfolio=self.portfolio_id,
+                capital_usd=str(capital),
+                configured_usd=str(expected),
+            )
 
     def _price(
         self,

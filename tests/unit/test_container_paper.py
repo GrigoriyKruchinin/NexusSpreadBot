@@ -64,6 +64,14 @@ def test_default_sets_are_all_and_excl_conditional(monkeypatch: pytest.MonkeyPat
         {"SPREAD_ALERT_COOLDOWN_S": "60"},
         {"SCANNER_MAX_CANDIDATES_PER_SWEEP": "60"},
         {"PAPER_LATENCY_MS": "100"},
+        {"SCANNER_QUOTE_ASSETS": "USDT,USDC"},
+        {"SCANNER_SYMBOLS_WHITELIST": "BTC/USDT"},
+        {"SCANNER_SYMBOLS_BLACKLIST": "DOGE/USDT"},
+        {"SCANNER_ORDERBOOK_DEPTH": "100"},
+        {"QUARANTINE_PERSIST_MIN": "30"},
+        {"QUARANTINE_TTL_H": "48"},
+        {"QUARANTINE_WINDOW_H": "12"},
+        {"QUARANTINE_MAX_EPISODES": "9"},
     ],
 )
 def test_strategy_settings_change_the_run_hash(
