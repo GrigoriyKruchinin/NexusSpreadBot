@@ -232,6 +232,10 @@ class KeyPolicySettings(NexusBaseSettings):
     """KuCoin's key info does not show the IP whitelist: the key is IP-restricted."""
     gateio_permissions_attested: bool = False
     """Gate.io has no per-key scope introspection: every permission group is read-only or off."""
+    ip_binding_waived: bool = False
+    """Local-run waiver (user decision 2026-10-24): keys may lack an IP whitelist. Waives only
+    ``ip_not_restricted`` and the KuCoin IP attestation; every other rule stays fatal.
+    Env-only (``KEY_POLICY_IP_BINDING_WAIVED``); never to be set on a server (A5d guard)."""
 
 
 class ScannerSettings(NexusBaseSettings):

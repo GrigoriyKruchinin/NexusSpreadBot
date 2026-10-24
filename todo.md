@@ -25,6 +25,7 @@ Ticks only after verification and commit.
   - [ ] A5b Redis auth, healthcheck, maxmemory noeviction — card `docs/tasks/track0/A5b-redis-auth.md`
   - [ ] A5c DB roles + `nexus_test_owner` test role (needs user OK, U4) — card `docs/tasks/track0/A5c-db-roles-test-role.md`
   - [ ] A5d Docker hardening + secrets files (before any VPS) — card `docs/tasks/track0/A5d-docker-hardening-secrets.md`
+    - [ ] A5d must add a guard that refuses `KEY_POLICY_IP_BINDING_WAIVED=true` on a server/VPS/prod deployment (fail closed; no environment setting exists yet) — see A6 card addendum KP-W
 - [x] A6 key-policy startup check (6766bfd + ee38592; tech-lead round 2 + security: accepted) `KeyPolicyCheck` (S-08/G4; before U3, no real keys without it) — card `docs/tasks/track0/A6-key-policy-startup-check.md`
 - [ ] A6 follow-ups F-1..F-5 (parallel venue checks, IKeyIntrospection Protocol, guard test for _ws/transfer fallback, IP CIDR cut-off at U3, .env.example MEXC/Bitget wording) — see `docs/audit/tech-lead-review-track0.md` Round 2
 - [x] B1a remove MEXC_*/BITGET_* key vars from scanner env + `.env.example` (G5; low) — card `docs/tasks/track0/B1a-remove-unused-key-vars.md`

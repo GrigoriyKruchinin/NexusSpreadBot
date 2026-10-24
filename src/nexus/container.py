@@ -159,7 +159,7 @@ async def scanner_scope(settings: ScannerRoleSettings) -> AsyncIterator[Scanner]
         for adapter in adapters.values():
             stack.push_async_callback(adapter.close)
         # Fail closed before any market data / DB work: a trade-capable key never runs.
-        await verify_key_policies(adapters, settings.credentials, settings.key_policy)
+        ip_unbound = await verify_key_policies(adapters, settings.credentials, settings.key_policy)
 
         engine = create_engine(settings.database)
         stack.push_async_callback(engine.dispose)
@@ -185,6 +185,7 @@ async def scanner_scope(settings: ScannerRoleSettings) -> AsyncIterator[Scanner]
         if streams is not None:
             stack.push_async_callback(streams.close)
         yield Scanner(
+            ip_unbound_venues=tuple(ip_unbound or ()),
             adapters=adapters,
             authenticated={n: c.is_configured for n, c in settings.credentials.items()},
             estimator=NetSpreadEstimator(EstimatorConfig.from_settings(spread), clock),

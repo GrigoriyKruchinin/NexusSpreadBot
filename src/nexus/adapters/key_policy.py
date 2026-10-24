@@ -233,6 +233,16 @@ class KeyPolicyCheck:
 
     def evaluate(self, payload: Any, settings: KeyPolicySettings) -> tuple[str, ...]:
         """Rule names violated by ``payload`` (empty = key passes). Never raises."""
+        return self.evaluate_waiver(payload, settings)[0]
+
+    def evaluate_waiver(
+        self, payload: Any, settings: KeyPolicySettings
+    ) -> tuple[tuple[str, ...], bool]:
+        """``(violated rules, key is IP-unbound under the waiver)``. Never raises.
+
+        With ``ip_binding_waived`` only ``ip_not_restricted`` and the KuCoin IP attestation
+        are dropped; every other rule is kept.
+        """
         try:
             rules = list(self.parse(payload))
         except Exception as exc:
@@ -248,7 +258,10 @@ class KeyPolicyCheck:
             attested, rule = self.attestation(settings)
             if not attested:
                 rules.append(rule)
-        return tuple(rules)
+        if not settings.ip_binding_waived:
+            return tuple(rules), False
+        waived = {IP_UNBOUND, ATTEST_KUCOIN_IP}
+        return tuple(r for r in rules if r not in waived), any(r in waived for r in rules)
 
 
 KEY_POLICIES: dict[str, KeyPolicyCheck] = {
@@ -268,14 +281,18 @@ async def verify_key_policies(
     adapters: Mapping[str, object],
     credentials: Mapping[str, ExchangeCredentials],
     settings: KeyPolicySettings,
-) -> None:
+) -> tuple[str, ...]:
     """Check every venue that has a key configured; raise on any violation.
+
+    Returns the venues whose keys are IP-unbound under the explicit local-run waiver
+    (``KEY_POLICY_IP_BINDING_WAIVED``), sorted; empty without the waiver.
 
     Venues without a key (public data mode) are skipped. All venues are evaluated before
     raising so one run reports every problem. A configured key on a venue without a policy
     is refused (fail closed).
     """
     violations: dict[str, tuple[str, ...]] = {}
+    unbound: list[str] = []
     for venue, adapter in adapters.items():
         creds = credentials.get(venue)
         if creds is None or not creds.is_configured:
@@ -295,10 +312,17 @@ async def verify_key_policies(
             log.warning("key_policy_request_failed", exchange=venue, error=type(exc).__name__)
             violations[venue] = (REQUEST_FAILED,)
             continue
-        rules = policy.evaluate(payload, settings)
+        rules, ip_unbound = policy.evaluate_waiver(payload, settings)
         del payload  # raw response holds apiKey / uid / label
         log.info("key_policy_checked", exchange=venue, passed=not rules, violations=list(rules))
         if rules:
             violations[venue] = rules
+        elif ip_unbound:
+            unbound.append(venue)
     if violations:
         raise KeyPolicyViolationError(violations)
+    result = tuple(sorted(unbound))
+    if result:
+        # Names only: no key material, no IPs.
+        log.warning("key_policy_ip_binding_waived", venues=list(result))
+    return result

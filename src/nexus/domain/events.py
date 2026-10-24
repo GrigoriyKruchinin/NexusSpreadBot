@@ -44,6 +44,8 @@ class ScannerStarted:
     min_net_profit_usd: str
     reference_notional_usd: str
     common_symbols: int
+    ip_unbound_venues: tuple[str, ...] = ()
+    """Venues whose keys have no IP binding (local-run waiver); names only."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,6 +222,7 @@ def event_from_payload(payload: dict[str, Any]) -> SystemEvent:
     data = dict(payload.get("data") or {})
     if cls is ScannerStarted:
         data["exchanges"] = tuple(ExchangeStatus(**e) for e in data.get("exchanges", ()))
+        data["ip_unbound_venues"] = tuple(data.get("ip_unbound_venues", ()))
     if cls is RoutesQuarantined:
         data["routes"] = tuple(QuarantinedRoute(**r) for r in data.get("routes", ()))
     event: SystemEvent = cls(**data)

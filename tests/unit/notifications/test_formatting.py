@@ -1,4 +1,6 @@
+import json
 from decimal import Decimal as D
+from typing import Any
 
 import pytest
 
@@ -100,6 +102,26 @@ def test_number_formatting() -> None:
     assert fmt_pct(D("0.798101")) == "0.80%"
     assert fmt_amount(D("9.99000000")) == "9.99"
     assert fmt_amount(D("12345")) == "12,345"
+
+
+def test_started_message_waiver_line_roundtrip() -> None:
+    formatter = SystemEventFormatter()
+    base: dict[str, Any] = {
+        "exchanges": (ExchangeStatus("okx", True, 1),),
+        "min_net_profit_pct": "0.3",
+        "min_net_profit_usd": "5",
+        "reference_notional_usd": "1000",
+        "common_symbols": 1,
+    }
+    plain = formatter.render(ScannerStarted(**base))
+    assert "без привязки к IP" not in plain
+    event = ScannerStarted(**base, ip_unbound_venues=("binance", "okx", "kucoin"))
+    restored = event_from_payload(json.loads(json.dumps(event_to_payload(event))))
+    assert restored == event
+    assert (
+        "⚠️ Ключи без привязки к IP (разрешено для локального запуска): binance, okx, kucoin"
+        in formatter.render(restored)
+    )
 
 
 def test_system_events_roundtrip_and_render() -> None:

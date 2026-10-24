@@ -302,6 +302,99 @@ def test_attestation_flags_come_from_env(monkeypatch: pytest.MonkeyPatch) -> Non
     assert settings.gateio_permissions_attested is False
 
 
+# ---------------------------------------------------------------- IP binding waiver
+WAIVED = KeyPolicySettings(ip_binding_waived=True)
+
+
+def test_waiver_default_off_and_same_as_before() -> None:
+    assert KeyPolicySettings().ip_binding_waived is False
+    unbound = mutated(BINANCE_OK, lambda p: p.update(ipRestrict=False))
+    assert rules("binance", unbound) == (IP_UNBOUND,)
+    assert rules("kucoin", KUCOIN_OK, KeyPolicySettings()) == (ATTEST_KUCOIN_IP,)
+
+
+def test_waiver_ignores_only_ip_rules() -> None:
+    unbound = mutated(BINANCE_OK, lambda p: p.update(ipRestrict=False))
+    assert rules("binance", unbound, WAIVED) == ()
+    okx = mutated(OKX_OK, lambda p: p["data"][0].update(ip=""))
+    assert rules("okx", okx, WAIVED) == ()
+    wildcard = mutated(OKX_OK, lambda p: p["data"][0].update(ip="0.0.0.0/0"))
+    assert rules("okx", wildcard, WAIVED) == ()
+    assert rules("kucoin", KUCOIN_OK, WAIVED) == ()
+
+
+def test_waiver_keeps_other_violations_fatal() -> None:
+    both = mutated(BINANCE_OK, lambda p: p.update(ipRestrict=False, enableWithdrawals=True))
+    assert rules("binance", both, WAIVED) == ("permission:enableWithdrawals",)
+    okx = mutated(OKX_OK, lambda p: p["data"][0].update(ip="", perm="read_only,trade"))
+    assert rules("okx", okx, WAIVED) == ("permission:trade",)
+    kucoin = mutated(KUCOIN_OK, lambda p: p["data"].update(permission="General,Transfer"))
+    assert rules("kucoin", kucoin, WAIVED) == ("permission:Transfer",)
+    assert rules("kucoin", {"code": "400"}, WAIVED) == (UNPARSEABLE,)
+    # Gate.io permission attestation is not waived.
+    assert rules("gateio", GATEIO_OK, WAIVED) == (ATTEST_GATEIO_PERMS,)
+    gate_unbound = mutated(GATEIO_OK, lambda p: p.update(ip_whitelist=[]))
+    assert rules("gateio", gate_unbound, WAIVED) == (ATTEST_GATEIO_PERMS,)
+    assert rules("okx", {"code": "1"}, WAIVED) == (UNPARSEABLE,)
+    missing = {k: v for k, v in BINANCE_OK.items() if k != "ipRestrict"}
+    assert rules("binance", missing, WAIVED) == (_missing_ip_restrict(),)
+
+
+def _missing_ip_restrict() -> str:
+    return "missing_or_invalid_field:ipRestrict"
+
+
+async def test_waiver_runner_returns_venues_and_warns() -> None:
+    adapters = {
+        "binance": FakeAdapter(mutated(BINANCE_OK, lambda p: p.update(ipRestrict=False))),
+        "bybit": FakeAdapter(BYBIT_OK),
+        "okx": FakeAdapter(mutated(OKX_OK, lambda p: p["data"][0].update(ip=""))),
+        "kucoin": FakeAdapter(KUCOIN_OK),
+    }
+    with capture_logs() as logs:
+        result = await verify_key_policies(adapters, dict.fromkeys(adapters, creds()), WAIVED)
+    assert result == ("binance", "kucoin", "okx")
+    warned = [e for e in logs if e["event"] == "key_policy_ip_binding_waived"]
+    assert len(warned) == 1
+    assert warned[0]["venues"] == ["binance", "kucoin", "okx"]
+    assert warned[0]["log_level"] == "warning"
+
+
+async def test_waiver_runner_still_raises_on_other_violation() -> None:
+    adapters = {
+        "binance": FakeAdapter(
+            mutated(BINANCE_OK, lambda p: p.update(ipRestrict=False, enableMargin=True))
+        ),
+        "okx": FakeAdapter(OKX_OK),
+    }
+    with pytest.raises(KeyPolicyViolationError) as err:
+        await verify_key_policies(adapters, dict.fromkeys(adapters, creds()), WAIVED)
+    assert err.value.violations == {"binance": ("permission:enableMargin",)}
+
+
+async def test_no_waiver_runner_returns_empty_and_no_warning() -> None:
+    adapters = {v: FakeAdapter(OK[v]) for v in CORE_EXCHANGES}
+    with capture_logs() as logs:
+        result = await verify_key_policies(adapters, dict.fromkeys(adapters, creds()), ATTESTED)
+    assert result == ()
+    assert not [e for e in logs if e["event"] == "key_policy_ip_binding_waived"]
+
+
+async def test_waiver_request_failed_stays_fatal() -> None:
+    adapters = {"okx": FakeAdapter(error=ExchangeError("okx", "boom"))}
+    with pytest.raises(KeyPolicyViolationError) as err:
+        await verify_key_policies(adapters, {"okx": creds()}, WAIVED)
+    assert err.value.violations == {"okx": (REQUEST_FAILED,)}
+
+
+def test_waiver_flag_from_env_and_strict_bool(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("KEY_POLICY_IP_BINDING_WAIVED", "true")
+    assert KeyPolicySettings().ip_binding_waived is True
+    monkeypatch.setenv("KEY_POLICY_IP_BINDING_WAIVED", "maybe")
+    with pytest.raises(ValueError):  # noqa: PT011 - pydantic ValidationError is a ValueError
+        KeyPolicySettings()
+
+
 # ---------------------------------------------------------------- runner
 class FakeAdapter:
     def __init__(self, payload: Any = None, error: BaseException | None = None) -> None:

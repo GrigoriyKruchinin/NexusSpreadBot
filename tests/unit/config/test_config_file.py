@@ -201,6 +201,7 @@ def test_default_missing_file_refused_in_container(monkeypatch: pytest.MonkeyPat
         (f'[okx]\napi_passphrase = "{SECRET_VALUE}"\n', "api_passphrase"),
         ("[key_policy]\nkucoin_ip_attested = true\n", "kucoin_ip_attested"),
         ("[key_policy]\ngateio_permissions_attested = true\n", "gateio_permissions_attested"),
+        ("[key_policy]\nip_binding_waived = true\n", "ip_binding_waived"),
         (f'[spread]\nsome_dsn = "{SECRET_VALUE}"\n', "some_dsn"),
     ],
 )

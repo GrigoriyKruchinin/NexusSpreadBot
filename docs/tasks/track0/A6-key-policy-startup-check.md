@@ -34,6 +34,16 @@ At scanner startup a per-venue `KeyPolicyCheck` refuses to start if the configur
 9. `target.md` §10.4 gets the fail-closed, booleans-only, IP-refuse and attestation lines (docs-only edit in same commit).
 10. `make check` not worse than baseline; no secrets in diff.
 
+## Addendum KP-W (2026-10-24): IP-binding waiver for local runs
+User decision (CLAUDE.md rule 2, STATE.md "User decisions"): keys for the local soak have no IP whitelist.
+`KEY_POLICY_IP_BINDING_WAIVED=true` (env-only, strict bool, default false, refused from TOML by the
+`KEY_POLICY_` deny-prefix) drops only `ip_not_restricted` and `attestation_required:ip_binding`; all other
+rules stay fatal. `verify_key_policies` returns the sorted IP-unbound venue names, logs
+`key_policy_ip_binding_waived` (names only) and the scanner puts one fixed line into the Telegram start
+message. There is no environment/deploy-name setting in the code, so the "refuse on server/prod" guard
+does not exist yet: **A5d must add it** (fail closed when the waiver is set on a VPS/prod deployment);
+tracked in `todo.md` under A5d. Until then the guard is the user's own discipline plus guide wording.
+
 ## Out of scope
 Real-key verification of [U] items (done at U3 with the user), gateio `main_keys` probe, runtime
 re-checks (startup only), trading code, transfer-metadata fetching.
