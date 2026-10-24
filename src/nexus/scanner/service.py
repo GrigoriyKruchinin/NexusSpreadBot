@@ -10,7 +10,7 @@ import asyncio
 import contextlib
 import time
 from collections import Counter
-from collections.abc import Coroutine, Mapping, Sequence
+from collections.abc import Awaitable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -67,6 +67,14 @@ from nexus.scanner.universe import MarketUniverse, UniverseFilter
 
 log = structlog.get_logger(__name__)
 
+
+def _as_exchange_error(exchange: str, exc: Exception) -> ExchangeError:
+    """Exchange errors pass through; anything else becomes a counted, type-only failure."""
+    if isinstance(exc, ExchangeError):
+        return exc
+    return ExchangeUnavailableError(exchange, f"unexpected {type(exc).__name__}")
+
+
 HEARTBEAT_SERVICE = "scanner"
 MIN_LIVE_EXCHANGES = 2
 EVENT_EMIT_TIMEOUT_S = 5.0
@@ -85,6 +93,26 @@ EPISODE_ALERT_KEY_TTL_S = 24 * 3600
 """Account fee tiers change (30-day volume, promos): looked-up fees are re-fetched after this."""
 
 BookKey = tuple[str, str]
+
+
+async def gather_isolated[K, T](jobs: Mapping[K, Awaitable[T]], *, event: str) -> dict[K, T | None]:
+    """Run per-venue/per-route jobs concurrently; a failing job yields ``None`` (R-02).
+
+    ``Exception`` from one job is logged under ``event`` and never aborts its siblings.
+    ``BaseException`` (``CancelledError``, ``KeyboardInterrupt``, ``SystemExit``) is re-raised.
+    """
+    keys = list(jobs)
+    results = await asyncio.gather(*(jobs[k] for k in keys), return_exceptions=True)
+    out: dict[K, T | None] = {}
+    for key, result in zip(keys, results, strict=True):
+        if isinstance(result, BaseException) and not isinstance(result, Exception):
+            raise result
+        if isinstance(result, Exception):
+            log.error(event, key=str(key), error=type(result).__name__, exc_info=result)
+            out[key] = None
+        else:
+            out[key] = result
+    return out
 
 
 @dataclass(frozen=True, slots=True)
@@ -310,8 +338,8 @@ class Scanner:
             try:
                 markets[name] = await adapter.load_markets()
                 transfers[name] = await adapter.load_transfer_info()
-            except ExchangeError as exc:
-                await self._record(name, "load_metadata", started, exc)
+            except Exception as exc:  # one venue's parse bug must not drop the others (R-02)
+                await self._record(name, "load_metadata", started, _as_exchange_error(name, exc))
                 previous = self._universe.markets.get(name)
                 if previous:
                     markets[name] = list(previous.values())
@@ -320,7 +348,9 @@ class Scanner:
                 return
             await self._record(name, "load_metadata", started, None)
 
-        await asyncio.gather(*(load(n, a) for n, a in self._adapters.items()))
+        await gather_isolated(
+            {n: load(n, a) for n, a in self._adapters.items()}, event="metadata_load_failed"
+        )
         self._universe = MarketUniverse.build(markets, transfers, self._filter).with_taker_fees(
             self._fresh_account_fees()
         )
@@ -871,14 +901,16 @@ class Scanner:
             started = time.monotonic()
             try:
                 tickers = await adapter.fetch_tickers(sorted(self._universe.symbols_for(name)))
-            except ExchangeError as exc:
-                await self._record(name, "fetch_tickers", started, exc)
+            except Exception as exc:  # unexpected adapter failure counts as a failed call (R-02)
+                await self._record(name, "fetch_tickers", started, _as_exchange_error(name, exc))
                 return None
             await self._record(name, "fetch_tickers", started, None)
             return tickers
 
-        results = await asyncio.gather(*(tickers_of(n, a) for n, a in active.items()))
-        return {name: t for name, t in zip(active, results, strict=True) if t is not None}
+        results = await gather_isolated(
+            {n: tickers_of(n, a) for n, a in active.items()}, event="ticker_fetch_failed"
+        )
+        return {name: t for name, t in results.items() if t is not None}
 
     async def _record(
         self, exchange: str, operation: str, started: float, error: ExchangeError | None
@@ -951,6 +983,9 @@ class Scanner:
         for task in (*pending, *helpers):
             task.cancel()
         await asyncio.gather(*pending, *helpers, return_exceptions=True)
+        for task in tasks:
+            if task in done and not task.cancelled() and (error := task.exception()):
+                log.error("route_evaluation_failed", error=type(error).__name__, exc_info=error)
         evaluations = [
             result
             for task in tasks
