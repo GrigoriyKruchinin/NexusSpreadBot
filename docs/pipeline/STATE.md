@@ -36,6 +36,9 @@
 7. Then soak (needs B15 + backups running), quant, GO/NO-GO.
 
 ## User decisions (2026-10-23)
+- A7: non-secret settings move to committed `config/nexus.toml`; `.env` keeps only secrets (after B15 part 1).
+- B15 concentration rule (strict): GO requires >= 2 %/month after tax even without the top-2 routes and, separately, without the top-2 coins.
+- Soak runs 4 venue sets: all, excl_conditional, excl_bybit, excl_gateio.
 - B15 GO report tax rate: show BOTH 15 % and 35 %; GO judged on the worse (35 %). Preliminary, accountant to confirm.
 - GO bar 2 %/month **after** income tax. GO-HOLD = analytical GO but gates unmet -> keep developing
   without money (DEX allowed), launch after DNI + keys for the final GO venue set. Real legal

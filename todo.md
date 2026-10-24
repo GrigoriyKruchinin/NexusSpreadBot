@@ -30,6 +30,8 @@ Ticks only after verification and commit.
 - [x] B1a remove MEXC_*/BITGET_* key vars from scanner env + `.env.example` (G5; low) — card `docs/tasks/track0/B1a-remove-unused-key-vars.md`
 - [ ] LICENSE decision (user)
 
+- [ ] A7 non-secret settings to committed `config/nexus.toml`, `.env` = secrets only (user decision 2026-10-23; after B15 part 1; security split pre-check; backend-lead; medium) — card `docs/tasks/track0/A7-config-file.md`
+
 ## Track 1 — Retro-verification
 - [ ] `/audit`-style review for items 1.5.6 and 1.5.11 (security + tech-lead)
 - [ ] Verify transfer-status parsers (needs read-only keys; guide for user)
