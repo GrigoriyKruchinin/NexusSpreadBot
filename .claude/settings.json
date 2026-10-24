@@ -30,7 +30,12 @@
       "Bash(uv run pytest -m integration:*)",
       "Bash(make up-local)",
       "Bash(make down-local)",
-      "Bash(make migrate)"
+      "Bash(make migrate)",
+      "Bash(make backup)",
+      "Bash(make backup-archive)",
+      "Bash(make backup:*)",
+      "Bash(make restore-drill)",
+      "Bash(make restore-drill:*)"
     ],
     "deny": [
       "Bash(git push origin main)",
@@ -84,7 +89,16 @@
       "Bash(more .env:*)",
       "Bash(sed:* .env)",
       "Bash(awk:* .env)",
-      "Bash(grep:* .env)"
+      "Bash(grep:* .env)",
+      "Bash(docker compose down -v:*)",
+      "Bash(docker compose down --volumes:*)",
+      "Bash(docker compose -f docker-compose.local.yml down --volumes:*)",
+      "Bash(docker volume rm:*)",
+      "Bash(docker volume prune:*)",
+      "Bash(git push origin HEAD:main)",
+      "Bash(git push origin HEAD:main:*)",
+      "Bash(git push origin main:*)",
+      "Bash(git push origin *:main)"
     ]
   },
   "hooks": {
