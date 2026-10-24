@@ -12,13 +12,14 @@ import structlog
 
 from nexus.config.groups import WatchdogSettings
 from nexus.domain.clock import Clock
-from nexus.domain.events import WatchdogAlert, WatchdogRecovered
+from nexus.domain.events import WatchdogAlert, WatchdogRecovered, WatchdogRetired
 from nexus.domain.watchdog import (
     CHECK_BACKUP,
     CHECK_ERROR,
     CHECK_PAPER_SET_PREFIX,
     CHECK_SCANNER,
     MINUTE_MS,
+    PAPER_SET_RETIRED,
     SCANNER_STALE,
     SEVERITY,
     Finding,
@@ -103,6 +104,11 @@ class LivenessWatchdog:
             log.error("watchdog_check_failed", check="paper_sets", error=type(error).__name__)
             return {"paper_sets": await self._probe_failed("paper_sets", now)}
         actions: dict[str, str] = {}
+        try:  # the source works again: close a pending "paper_sets" check error
+            await self._apply(Finding("paper_sets"), now)
+        except Exception as error:
+            log.error("watchdog_check_failed", check="paper_sets", error=type(error).__name__)
+            actions["paper_sets"] = "error"
         for name, seen in sorted(sets.items()):
             finding = check_paper_set(
                 name,
@@ -113,11 +119,32 @@ class LivenessWatchdog:
                 self._settings.paper_set_retire_h,
             )
             try:
-                actions[finding.check] = await self._apply(finding, now)
+                if finding.reason == PAPER_SET_RETIRED:
+                    actions[finding.check] = await self._retire(finding.check)
+                else:
+                    actions[finding.check] = await self._apply(finding, now)
             except Exception as error:
                 log.error("watchdog_check_failed", check=finding.check, error=type(error).__name__)
                 actions[finding.check] = "error"
         return actions
+
+    async def _retire(self, check: str) -> str:
+        """A set silent past the retire threshold is treated as removed from the configuration.
+
+        A set that was firing gets one distinct message (it did not recover, it is dropped);
+        a quiet one is forgotten silently. State is cleared only after the message was queued.
+        """
+        state = await self._state.get(check)
+        if state.firing:
+            await self._dispatcher.dispatch_event(
+                WatchdogRetired(check, self._settings.paper_set_retire_h)
+            )
+            log.warning("watchdog_retired", check=check)
+            await self._state.save(check, WatchdogState())
+            return "retired"
+        if state.since_ms is not None:
+            await self._state.save(check, WatchdogState())
+        return "ok"
 
     async def _probe_failed(self, check: str, now_ms: int) -> str:
         """A check that cannot run is itself a problem once it persists for the grace period."""
@@ -142,6 +169,15 @@ class LivenessWatchdog:
             return PAPER_SET_GRACE_MS
         return self._settings.backup_max_age_h * 60 * MINUTE_MS
 
+    def _grace_gap(self, check: str, state: WatchdogState, now_ms: int) -> bool:
+        """A paper-set grace window older than grace + 2 runs was interrupted by a pause."""
+        if state.firing or state.since_ms is None:
+            return False
+        if not (check.startswith(CHECK_PAPER_SET_PREFIX) or check == "paper_sets"):
+            return False
+        limit = PAPER_SET_GRACE_MS + 2 * self._settings.interval_s * 1000
+        return now_ms - state.since_ms > limit
+
     async def _apply(self, finding: Finding, now_ms: int) -> str:
         state = await self._state.get(finding.check)
         if finding.ok:
@@ -151,6 +187,10 @@ class LivenessWatchdog:
             # A stale scanner has been silent since its last call, not since we noticed.
             silent = finding.minutes if finding.reason == SCANNER_STALE else 0
             since = now_ms - (silent or 0) * MINUTE_MS
+        elif self._grace_gap(finding.check, state, now_ms):
+            # The check was not evaluated for a while (scanner stale, source down): the old
+            # grace window is meaningless, start a fresh one.
+            since = now_ms
         # Already announced: one alert per incident, unless it got worse (e.g. "not copied" ->
         # "backup failed"), which is announced once more.
         if state.firing and SEVERITY.get(finding.reason or "", 0) <= SEVERITY.get(

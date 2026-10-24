@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 import pytest
 
 from nexus.config.groups import WatchdogSettings
-from nexus.domain.events import WatchdogAlert, WatchdogRecovered
+from nexus.domain.events import WatchdogAlert, WatchdogRecovered, WatchdogRetired
 from nexus.interfaces.watchdog import (
     IBackupStatusSource,
     IPaperSetActivity,
@@ -460,3 +460,97 @@ async def test_dispatch_failure_for_a_paper_set_is_retried_next_run() -> None:
     rig.advance(5)
     rig.set_hour("all", 425)
     assert (await rig.dog.run_once())["paper_set:all"] == "alert"
+
+
+async def test_paper_source_error_recovers_once_and_can_alert_again() -> None:
+    rig = PaperRig()
+    rig.set_hour("all", 30)
+    rig.paper.error = OSError("db down")
+    await rig.dog.run_once()
+    rig.advance(20)
+    await rig.dog.run_once()
+    assert rig.dispatcher.events == [WatchdogAlert("paper_sets", "check_error", None)]
+    rig.paper.error = None
+    rig.advance(5)
+    await rig.dog.run_once()
+    rig.advance(5)
+    await rig.dog.run_once()
+    assert len(rig.dispatcher.events) == 2
+    assert isinstance(rig.dispatcher.events[1], WatchdogRecovered)
+    assert rig.dispatcher.events[1].check == "paper_sets"
+    rig.paper.error = OSError("db down")
+    rig.advance(5)
+    await rig.dog.run_once()
+    assert len(rig.dispatcher.events) == 2  # new incident waits for the grace period
+    rig.advance(20)
+    await rig.dog.run_once()
+    assert len(rig.dispatcher.events) == 3
+    assert isinstance(rig.dispatcher.events[2], WatchdogAlert)
+
+
+async def test_short_paper_source_failure_leaves_no_stale_grace() -> None:
+    rig = PaperRig()
+    rig.set_hour("all", 30)
+    rig.paper.error = OSError("db down")
+    await rig.dog.run_once()
+    assert rig.state.items["paper_sets"].since_ms is not None
+    rig.paper.error = None
+    rig.advance(5)
+    await rig.dog.run_once()
+    assert rig.state.items["paper_sets"] == WatchdogState()
+    rig.advance(7 * 24 * 60)
+    rig.set_hour("all", 30)
+    rig.paper.error = OSError("db down")
+    await rig.dog.run_once()
+    assert rig.dispatcher.events == []
+
+
+async def test_retired_firing_paper_set_gets_one_distinct_message() -> None:
+    rig = PaperRig()
+    rig.set_hour("old", 4 * 60)
+    await rig.dog.run_once()
+    rig.advance(20)
+    rig.set_hour("old", 4 * 60 + 20)
+    assert (await rig.dog.run_once())["paper_set:old"] == "alert"
+    rig.advance(5)
+    rig.set_hour("old", 169 * 60, started_h_ago=400)
+    assert (await rig.dog.run_once())["paper_set:old"] == "retired"
+    assert rig.dispatcher.events[1] == WatchdogRetired("paper_set:old", 168)
+    assert rig.state.items["paper_set:old"] == WatchdogState()
+    rig.advance(5)
+    assert (await rig.dog.run_once())["paper_set:old"] == "ok"
+    assert len(rig.dispatcher.events) == 2
+
+
+async def test_retired_quiet_paper_set_is_forgotten_silently() -> None:
+    rig = PaperRig()
+    rig.set_hour("old", 4 * 60)
+    assert (await rig.dog.run_once())["paper_set:old"] == "grace"
+    rig.advance(5)
+    rig.set_hour("old", 169 * 60, started_h_ago=400)
+    assert (await rig.dog.run_once())["paper_set:old"] == "ok"
+    assert rig.state.items["paper_set:old"] == WatchdogState()
+    assert rig.dispatcher.events == []
+
+
+async def test_paper_grace_restarts_after_a_scanner_pause() -> None:
+    rig = PaperRig()
+    rig.set_hour("all", 200)
+    assert (await rig.dog.run_once())["paper_set:all"] == "grace"
+    rig.activity.value = rig.clock.now - 60 * MIN  # scanner goes stale: paper checks suppressed
+    rig.advance(5)
+    rig.activity.value = rig.clock.now - 60 * MIN
+    assert "paper_set:all" not in await rig.dog.run_once()
+    rig.advance(60)
+    rig.set_hour("all", 270)
+    assert (await rig.dog.run_once())["paper_set:all"] == "grace"  # not an instant alert
+    rig.advance(20)
+    rig.set_hour("all", 290)
+    assert (await rig.dog.run_once())["paper_set:all"] == "alert"
+
+
+def test_retire_threshold_must_exceed_the_stale_threshold() -> None:
+    with pytest.raises(ValueError, match="RETIRE_H"):
+        WatchdogSettings(paper_set_stale_h=200, paper_set_retire_h=168)
+    with pytest.raises(ValueError, match="RETIRE_H"):
+        WatchdogSettings(paper_set_stale_h=5, paper_set_retire_h=5)

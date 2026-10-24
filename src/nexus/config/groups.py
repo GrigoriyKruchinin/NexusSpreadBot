@@ -490,7 +490,15 @@ class WatchdogSettings(NexusBaseSettings):
     """Alert when a paper venue set has no ``paper_cap_stats`` hour newer than this. Measured
     from the hour start, so a healthy set already shows ~1 h 5 min (hour + flush lag)."""
     paper_set_retire_h: int = Field(default=168, ge=3)
-    """A set silent for longer than this counts as removed from PAPER_VENUE_SETS (no alert)."""
+    """A set silent for longer than this counts as removed from PAPER_VENUE_SETS (no alert; a
+    set that was firing gets one "no longer tracked" message). Must exceed paper_set_stale_h."""
+
+    @model_validator(mode="after")
+    def _retire_after_stale(self) -> WatchdogSettings:
+        if self.paper_set_retire_h <= self.paper_set_stale_h:
+            msg = "WATCHDOG_PAPER_SET_RETIRE_H must be greater than WATCHDOG_PAPER_SET_STALE_H"
+            raise ValueError(msg)
+        return self
 
     @field_validator("backup_status_path")
     @classmethod

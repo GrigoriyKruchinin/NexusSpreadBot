@@ -25,6 +25,8 @@ BACKUP_FAILED: Final = "backup_failed"
 BACKUP_NOT_COPIED: Final = "backup_not_copied"
 BACKUP_STALE: Final = "backup_stale"
 PAPER_SET_STALE: Final = "paper_set_stale"
+#: Silent for longer than the retire threshold: treated as removed from the configuration.
+PAPER_SET_RETIRED: Final = "paper_set_retired"
 CHECK_ERROR: Final = "check_error"
 
 #: Reasons that can be a normal state right after a fresh start (no data / no backup yet):
@@ -125,13 +127,14 @@ def check_paper_set(
     start of its newest stats hour (``None`` = no row yet). The age is measured from the hour
     start, so a healthy set shows up to ~65 min (hour + flush interval); ``stale_h`` must leave
     room for that. A set silent for longer than ``retire_h`` is treated as removed from the
-    configuration (its rows stay, nothing more is expected) and reports healthy.
+    configuration (its rows stay, nothing more is expected): the finding carries
+    ``PAPER_SET_RETIRED`` and the service clears the incident state (see ``_retire``).
     """
     last_ms = max(started_ms, newest_hour_ms or 0)
     age_min = max(0, (now_ms - last_ms) // MINUTE_MS)
     check = paper_set_check(name)
     if age_min >= retire_h * 60:
-        return Finding(check)
+        return Finding(check, PAPER_SET_RETIRED, age_min)
     if age_min >= stale_h * 60:
         return Finding(check, PAPER_SET_STALE, age_min)
     return Finding(check)

@@ -307,3 +307,13 @@ def test_paper_set_alert_and_recovery_name_only_the_set() -> None:
         WatchdogRecovered("paper_set:core", 30)
     )
     assert "Paper-наборы" in fmt.render(WatchdogAlert("paper_sets", "check_error", None))
+
+
+def test_paper_set_retired_message_is_distinct_from_recovery() -> None:
+    from nexus.domain.events import WatchdogRetired
+    from nexus.notifications.formatting import SystemEventFormatter
+
+    text = SystemEventFormatter().render(WatchdogRetired("paper_set:core", 168))
+    assert "Paper-набор core больше не отслеживается" in text
+    assert "168 ч" in text
+    assert "проблема устранена" not in text

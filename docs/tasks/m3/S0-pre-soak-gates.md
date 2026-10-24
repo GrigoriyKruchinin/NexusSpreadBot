@@ -6,7 +6,7 @@
 - reviewers: tech-lead (diff), security (backup copy path, Telegram content)
 - complexity: medium
 - depends_on: A7 (done), B15 part 1 (done)
-- status: todo
+- status: done (S0a 3bb5746 + r2 2c528c6, 8b1e81d; S0b up to 21897bf + r2 cb1c1af; D-08 fba9dd4; TL r2 ACCEPT 343df63, security r2 ACCEPT 1fb8d60). Open: D-01 live restart check on the first Docker/WSL restart of the soak (security S-8); D-08 tech-lead review in progress (`docs/audit/tech-lead-review-D08.md`)
 
 ## Context
 Delta audit `docs/audit/delta-track0-B14.md` D-01, D-02, R-02; STATE.md. User decisions 2026-10-23:
@@ -53,3 +53,13 @@ set with no row is judged from its run start. Settings `watchdog.paper_set_stale
 `TOML_ALLOWED`. A 15 min grace absorbs the flush lag after a scanner restart. Paper checks are skipped
 while the scanner check is stale / no-data / failing (no double alerts; they resume after recovery).
 Alert text: fixed Russian template + set name only. Read-only queries, no migration.
+
+D-08 tech-lead round 1 fixes: (1) the `paper_sets` source-read `check_error` is now closed by an OK finding
+after every successful read (one recovery, no stale grace). (2) A set that crosses `paper_set_retire_h`
+while firing gets one distinct message (event `WatchdogRetired`, "Paper-набор X больше не отслеживается:
+данных нет более N ч, считаю удалённым из конфигурации"), never "проблема устранена"; the state is then
+cleared. A non-firing set is forgotten silently. (3) Validator: `paper_set_retire_h > paper_set_stale_h`.
+(4) Grace edge: a paper-set / `paper_sets` grace window older than grace + 2 watchdog runs (the check was
+paused, e.g. scanner stale) restarts instead of alerting instantly on resume; side effect: if dispatch keeps
+failing for > 2 runs after grace, the alert is delayed by up to one more grace (15 min). Removing or renaming
+a set in `PAPER_VENUE_SETS` alerts after 3 h and keeps firing until retire (168 h), then sends the retire message.

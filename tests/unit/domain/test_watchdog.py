@@ -118,4 +118,5 @@ def test_check_paper_set_thresholds() -> None:
     assert not check_paper_set("a", now - 4 * hour, None, now, 3, 168).ok
     # a redefined set (newer run than its last stats hour) is judged from the run start
     assert check_paper_set("a", now - hour, now - 50 * hour, now, 3, 168).ok
-    assert check_paper_set("a", now - 200 * hour, now - 169 * hour, now, 3, 168).ok  # retired
+    retired = check_paper_set("a", now - 200 * hour, now - 169 * hour, now, 3, 168)
+    assert retired.reason == "paper_set_retired"

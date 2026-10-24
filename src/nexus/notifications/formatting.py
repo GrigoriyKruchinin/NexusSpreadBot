@@ -24,6 +24,7 @@ from nexus.domain.events import (
     SystemEvent,
     WatchdogAlert,
     WatchdogRecovered,
+    WatchdogRetired,
 )
 from nexus.domain.spread import SpreadEvaluation, TransferStatus
 
@@ -280,6 +281,13 @@ class SystemEventFormatter:
                 return (
                     f"✅ <b>{esc(title)}: проблема устранена</b>\n"
                     f"Длилась около <b>{fmt_duration(event.downtime_min * 60)}</b>"
+                )
+            case WatchdogRetired():
+                name = watchdog_title(event.check)
+                return (
+                    f"ℹ️ <b>{esc(name)} больше не отслеживается</b>\n"
+                    f"Данных нет более {event.hours} ч, считаю удалённым из конфигурации. "
+                    "Проверьте, нужен ли он."
                 )
 
     @staticmethod
