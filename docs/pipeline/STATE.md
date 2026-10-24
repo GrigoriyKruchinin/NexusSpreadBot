@@ -24,7 +24,11 @@
 3. First-day checks: D-03 (manual dump + restore drill on `nexus_test`), D-10 (migrator exit 0, `alembic current` = head),
    D-01 (scanner back `Up` after a restart), D-08 (all 4 sets in the first digest; a 100 % idle set is reported).
 4. 24 h soak checkpoint (card B15): union/cap p95 > 1.3, sweep duration +25 %, any 429 ban -> NEEDS_USER.
-5. B15 part 2 IMPLEMENTED (2c82c7f, 8c1cc16, 9673351; retention fix d81811b); quant + tech-lead review r1 running.
+5. B15 part 2 ACCEPTED by tech-lead r2 (10925ab; quant r1 point 1 verified by TL). Fixes d571f8b, 756dba7, b9aa8ba, 8534fa6,
+   73a9a5f; CI green on 73a9a5f incl. integration. Follow-ups before UF: card section "Part 2 follow-ups (before UF)".
+   Retention fix safe to deploy (TL r2). NOTE: retention runs in `worker-maintenance` (celery task nexus.maintenance.purge),
+   NOT in the scanner; scanner code unchanged since soak start -> deploy = rebuild image + recreate worker-maintenance only.
+   Awaiting user OK for that variant (user approved a 'scanner' restart). D-01 stays open until a real Docker/WSL restart.
    Then: scanner rebuild/restart (user OK given, deadline 2026-10-31 14:05Z) + D-01 check. Original item: B15 part 2 GO report generator (`docs/quant/b15-review-and-report-spec.md`, incl. F2 fee
    disclosure). Quant pre-soak condition C1 (strategy params in run hash) is DONE in 8ffb9c3 (tech-lead B15 r3).
 6. Then: B16 public probe, A5b Redis auth, A5c DB roles, A6/A7 follow-ups, A5d at VPS.
