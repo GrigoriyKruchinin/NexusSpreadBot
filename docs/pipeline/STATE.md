@@ -28,6 +28,8 @@
 7. Stage summary to the user for S0 (`docs/reports/stage-S0-summary.md`) if not yet written.
 
 ## User decisions (2026-10-23)
+- 2026-10-24: IP whitelist on exchange keys NOT required for the local soak (keys read-only, no withdrawals). Mandatory again
+  on server/VPS (A5d) and before any trading permission. Implemented as explicit env-only waiver flag (task KP-W).
 - Soak runs on this PC (WSL; Windows sleep disabled). Off-machine dump copy: `C:\nexus-backups` (outside OneDrive).
 - Soak on a FRESH stack + clean `nexus` DB; old data/logs/backups are obsolete; old volume removed only after the soak is verified, with user OK.
 - Soak runs 4 venue sets: all, excl_conditional, excl_bybit, excl_gateio (`[paper] venue_sets` in `config/nexus.toml`); $10,000 fixed each.

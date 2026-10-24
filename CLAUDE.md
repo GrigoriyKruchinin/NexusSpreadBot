@@ -17,7 +17,9 @@ after all costs, plus no blocking legal verdict (`docs/legal/`).
 ## Hard rules (never break)
 1. **No withdrawal/transfer/address-management code**, no real orders until GO and explicit user
    confirmation (ADR 0001). Reading transfer fee/status metadata is allowed.
-2. Exchange API keys: withdrawals disabled, IP whitelist; trading permission only after GO.
+2. Exchange API keys: read-only, withdrawals disabled; trading permission only after GO. IP whitelist is
+   waived for the local soak (user decision 2026-10-24, explicit `KEY_POLICY_IP_BINDING_WAIVED`) and is
+   mandatory again on any server/VPS deployment and before any trading permission.
 3. Agents have no live keys and no production access. Stage 1 = public read-only data.
 4. Secrets never enter code, logs, Telegram, git, or chat. Never read `.env`, and never run commands that
    expand it (`docker compose config`, `docker inspect`, `exec ... env`); denied in `.claude/settings.json`.
