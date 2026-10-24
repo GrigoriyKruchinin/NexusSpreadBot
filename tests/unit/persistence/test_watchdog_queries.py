@@ -56,7 +56,7 @@ async def test_set_coverage_from_hourly_sweeps() -> None:
     first_rows = [("all", datetime.fromtimestamp(first / 1000, tz=UTC))]
     session: Any = _Session(results=[first_rows, stats])
     repo = DigestRepository(_sessions(session), coverage_min_sweeps_per_hour=60)
-    (cov,) = await repo._set_coverage(session, since, since + 4 * HOUR)
+    (cov,) = await repo._set_coverage(session, since, since + 4 * HOUR + 600_000)
     assert (cov.portfolio_id, cov.hours_expected, cov.hours_gap, cov.downtime_min) == (
         "all",
         4,

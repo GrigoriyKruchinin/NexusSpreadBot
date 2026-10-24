@@ -782,10 +782,12 @@ class DigestRepository(_Repository, IDigestRepository):
         sessions: Sessions,
         conditional_venues: Collection[str] = (),
         coverage_min_sweeps_per_hour: int = 60,
+        expected_sweeps_per_hour: int | None = None,
     ) -> None:
         super().__init__(sessions)
         self._conditional = tuple(conditional_venues)
         self._min_sweeps = coverage_min_sweeps_per_hour
+        self._expected_sweeps = expected_sweeps_per_hour
 
     async def collect(self, since_ms: int, until_ms: int) -> DigestData:
         """Aggregate the window ``[since_ms, until_ms)``."""
@@ -842,7 +844,9 @@ class DigestRepository(_Repository, IDigestRepository):
         )
         for pid, hour, sweeps in rows.all():
             by_hour.setdefault(pid, {})[datetime_to_ms(hour)] = int(sweeps)
-        return compute_set_coverage(by_hour, first_seen, since_ms, until_ms, self._min_sweeps)
+        return compute_set_coverage(
+            by_hour, first_seen, since_ms, until_ms, self._min_sweeps, self._expected_sweeps
+        )
 
     @staticmethod
     async def _portfolios(

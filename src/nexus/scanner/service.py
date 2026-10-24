@@ -95,19 +95,32 @@ EPISODE_ALERT_KEY_TTL_S = 24 * 3600
 BookKey = tuple[str, str]
 
 
+def _is_job_failure(error: BaseException, current: asyncio.Task[object] | None) -> bool:
+    if isinstance(error, Exception):
+        return True
+    return (
+        isinstance(error, asyncio.CancelledError)
+        and current is not None
+        and current.cancelling() == 0
+    )
+
+
 async def gather_isolated[K, T](jobs: Mapping[K, Awaitable[T]], *, event: str) -> dict[K, T | None]:
     """Run per-venue/per-route jobs concurrently; a failing job yields ``None`` (R-02).
 
     ``Exception`` from one job is logged under ``event`` and never aborts its siblings.
-    ``BaseException`` (``CancelledError``, ``KeyboardInterrupt``, ``SystemExit``) is re-raised.
+    ``KeyboardInterrupt`` / ``SystemExit`` are re-raised. A job's own ``CancelledError`` is a
+    failure of that job when the sweep itself is not being cancelled (e.g. a library cancelling
+    an internal task); a cancelled sweep propagates through ``gather`` and never reaches here.
     """
+    current = asyncio.current_task()
     keys = list(jobs)
     results = await asyncio.gather(*(jobs[k] for k in keys), return_exceptions=True)
     out: dict[K, T | None] = {}
     for key, result in zip(keys, results, strict=True):
-        if isinstance(result, BaseException) and not isinstance(result, Exception):
+        if isinstance(result, BaseException) and not _is_job_failure(result, current):
             raise result
-        if isinstance(result, Exception):
+        if isinstance(result, BaseException):
             log.error(event, key=str(key), error=type(result).__name__, exc_info=result)
             out[key] = None
         else:

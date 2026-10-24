@@ -483,6 +483,8 @@ class WatchdogSettings(NexusBaseSettings):
     """Alert when the last backup finished longer ago than this (daily cron + slack)."""
     coverage_min_sweeps_per_hour: int = Field(default=60, ge=1)
     """An hour with fewer recorded sweeps of a set counts as a scanner gap in the digest."""
+    expected_sweeps_per_hour: int = Field(default=360, ge=1)
+    """Nominal sweeps per hour (3600 / scanner.ticker_interval_s); digest downtime baseline."""
 
     @field_validator("backup_status_path")
     @classmethod

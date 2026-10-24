@@ -141,3 +141,5 @@ backup_status_path = "/backups/last_backup.json"
 backup_max_age_h = 26
 # An hour with fewer sweeps of a venue set counts as a scanner gap in the digest
 coverage_min_sweeps_per_hour = 60
+# Nominal sweeps per hour (3600 / ticker_interval_s); downtime in the digest is measured against it
+expected_sweeps_per_hour = 360

@@ -1,7 +1,14 @@
 import pytest
 
 from nexus.domain.errors import NotificationError
-from nexus.domain.events import AlertContext, EpisodeClosed, ExchangeRecovered, event_to_payload
+from nexus.domain.events import (
+    AlertContext,
+    EpisodeClosed,
+    ExchangeRecovered,
+    WatchdogAlert,
+    WatchdogRecovered,
+    event_to_payload,
+)
 from nexus.domain.spread import EvaluationStatus
 from nexus.interfaces.repositories import AlertDeliveryStatus
 from nexus.services.alerts import AlertOutcome, AlertService
@@ -105,6 +112,25 @@ async def test_stale_system_event_dropped() -> None:
     assert notifier.sent == []
     assert await service.send_event(fresh) is AlertOutcome.SENT
     assert len(notifier.sent) == 1
+
+
+async def test_watchdog_events_never_expire() -> None:
+    repos, notifier = MemoryRepos(), RecordingNotifier()
+    now = EVALUATED_AT_MS
+    service = AlertService(
+        evaluations=repos,
+        alert_log=repos,
+        notifier=notifier,
+        clock=ManualClock(now),
+        max_age_s=30,
+        event_max_age_s=300,
+    )
+    old = now - 6 * 3_600_000  # an alerts-worker outage of hours
+    alert = event_to_payload(WatchdogAlert("scanner", "scanner_stale", 40), emitted_at_ms=old)
+    back = event_to_payload(WatchdogRecovered("scanner", 50), emitted_at_ms=old)
+    assert await service.send_event(alert) is AlertOutcome.SENT
+    assert await service.send_event(back) is AlertOutcome.SENT
+    assert len(notifier.sent) == 2
 
 
 async def test_realert_context_reaches_the_message() -> None:

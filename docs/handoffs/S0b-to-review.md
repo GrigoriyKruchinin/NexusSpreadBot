@@ -44,3 +44,23 @@ Card: `docs/tasks/m3/S0-pre-soak-gates.md` (S0b). Not ticked in todo.md (orchest
 
 ## Checks
 `make check`: 976 unit tests, branch coverage 91 % (baseline 89 %), ruff 0, mypy --strict 0.
+
+## Round 2 (tech-lead review points 2, 3, 4, 5, 9)
+- **TL2 check_error**: a probe that raises (DB down, status file unreadable) is now a finding with
+  reason `check_error` (grace reason): alert once after `scanner_stale_min` (scanner) / `backup_max_age_h`
+  (backup) of continuous errors, de-duplicated, one recovery message. A short burst is forgotten.
+- **TL3 expiry**: `AlertService.send_event` no longer expires `watchdog_alert` / `watchdog_recovered`
+  (state-gated, never misleading when late). Design: the incident is marked firing once the event is
+  queued in the broker (durable, AOF); with no expiry an alerts-worker outage only delays delivery.
+- **TL4 digest downtime**: gap-hour flag stays `< coverage_min_sweeps_per_hour` (60). Downtime is
+  measured against `min(expected_sweeps_per_hour, median of healthy hours)`; new setting
+  `[watchdog] expected_sweeps_per_hour` (default 360 = 3600 / 10 s; keep in step with
+  `scanner.ticker_interval_s`). Hours under 90 % of it add their missing share (45-min outage = 45 min).
+  The newest hour is skipped until 5 min after it closed (counter flush lag). The digest figure is an
+  estimate: the B15 part 2 GO report recomputes from raw `paper_cap_stats.sweeps`.
+- **TL5**: a firing incident re-alerts once when severity rises (rank in `domain/watchdog.SEVERITY`);
+  milder reasons stay silent.
+- **TL9 (item 8 of review)**: `gather_isolated` treats a job's own `CancelledError` as a job failure
+  when `current_task().cancelling() == 0`; a cancelled sweep still propagates via `gather`.
+- Tests: watchdog (5 new), alert service, digest coverage (5 new), sweep isolation. `make check` green.
+- Not done: review item 9 (sidecar-less dump copy) belongs to devops scripts.

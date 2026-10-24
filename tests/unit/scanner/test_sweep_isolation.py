@@ -29,15 +29,14 @@ async def test_gather_isolated_maps_failures_to_none() -> None:
     assert await gather_isolated({"a": ok(), "b": boom()}, event="t") == {"a": 1, "b": None}
 
 
-async def test_gather_isolated_propagates_a_cancelled_job() -> None:
+async def test_a_jobs_own_cancellation_is_a_failure_when_the_sweep_is_not_cancelled() -> None:
     async def stop() -> int:
         raise asyncio.CancelledError
 
     async def ok() -> int:
         return 1
 
-    with pytest.raises(asyncio.CancelledError):
-        await gather_isolated({"a": ok(), "b": stop()}, event="t")
+    assert await gather_isolated({"a": ok(), "b": stop()}, event="t") == {"a": 1, "b": None}
 
 
 async def test_gather_isolated_propagates_cancellation() -> None:

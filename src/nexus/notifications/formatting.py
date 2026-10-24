@@ -62,6 +62,7 @@ WATCHDOG_REASONS: Final[dict[str, str]] = {
     "backup_unreadable": "файл статуса резервного копирования нечитаем",
     "backup_failed": "последняя резервная копия завершилась ошибкой ({minutes} мин назад)",
     "backup_not_copied": "копия дампа не сохранена вне контейнера (диск не подключён?)",
+    "check_error": "проверка не выполняется (база данных или файл статуса недоступны)",
     "backup_stale": "последняя резервная копия была {minutes} мин назад",
 }
 STOP_REASONS: Final[dict[str, str]] = {

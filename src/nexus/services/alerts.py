@@ -12,6 +12,7 @@ from nexus.domain.events import (
     AlertContext,
     EpisodeClosed,
     ExchangeRecovered,
+    WatchdogAlert,
     WatchdogRecovered,
     event_from_payload,
 )
@@ -103,11 +104,15 @@ class AlertService:
         """Render and deliver a system event payload unless it is older than the event max age.
 
         Stale events (e.g. an ``exchange_down`` retried for minutes after the exchange has
-        already recovered) would be misleading, so they are dropped.
+        already recovered) would be misleading, so they are dropped. Watchdog events never expire.
         """
         event = event_from_payload(payload)
         emitted_at_ms = payload.get("emitted_at_ms")
-        if isinstance(emitted_at_ms, int):
+        # Watchdog events are state-gated (one per incident, never misleading when late) and the
+        # incident is already marked as announced, so they must survive an alerts-worker outage.
+        if isinstance(emitted_at_ms, int) and not isinstance(
+            event, WatchdogAlert | WatchdogRecovered
+        ):
             age_ms = self._clock.now_ms() - emitted_at_ms
             if age_ms > self._event_max_age_ms:
                 log.warning("event_expired", kind=event.kind, age_ms=age_ms)

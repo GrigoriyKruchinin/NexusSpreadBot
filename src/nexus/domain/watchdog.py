@@ -22,10 +22,23 @@ BACKUP_UNREADABLE: Final = "backup_unreadable"
 BACKUP_FAILED: Final = "backup_failed"
 BACKUP_NOT_COPIED: Final = "backup_not_copied"
 BACKUP_STALE: Final = "backup_stale"
+CHECK_ERROR: Final = "check_error"
 
 #: Reasons that can be a normal state right after a fresh start (no data / no backup yet):
 #: they alert only after persisting for the check's grace period.
-GRACE_REASONS: Final = frozenset({SCANNER_NO_DATA, BACKUP_MISSING, BACKUP_UNREADABLE})
+GRACE_REASONS: Final = frozenset({SCANNER_NO_DATA, BACKUP_MISSING, BACKUP_UNREADABLE, CHECK_ERROR})
+
+#: Severity rank: a firing incident is announced again when its reason ranks higher.
+SEVERITY: Final[dict[str, int]] = {
+    SCANNER_NO_DATA: 1,
+    BACKUP_MISSING: 1,
+    BACKUP_UNREADABLE: 1,
+    CHECK_ERROR: 1,
+    BACKUP_NOT_COPIED: 2,
+    SCANNER_STALE: 3,
+    BACKUP_STALE: 3,
+    BACKUP_FAILED: 3,
+}
 
 MINUTE_MS: Final = 60_000
 HOUR_MS: Final = 3_600_000

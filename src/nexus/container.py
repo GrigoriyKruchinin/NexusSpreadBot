@@ -279,6 +279,7 @@ async def digest_scope(settings: AlertsWorkerSettings) -> AsyncIterator[DigestSe
                 create_session_factory(engine),
                 conditional_venues=settings.conditional.venues,
                 coverage_min_sweeps_per_hour=settings.watchdog.coverage_min_sweeps_per_hour,
+                expected_sweeps_per_hour=settings.watchdog.expected_sweeps_per_hour,
             ),
             notifier,
             SystemClock(),

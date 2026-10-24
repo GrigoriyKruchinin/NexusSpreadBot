@@ -33,7 +33,7 @@ async def test_digest_reports_set_coverage_from_cap_stats(sessions: Sessions) ->
         [CapStatsDelta("all", T0 - 2 * H + h * H, sweeps=360) for h in range(26) if h != 5]
     )
     data = await DigestRepository(sessions, coverage_min_sweeps_per_hour=60).collect(
-        T0, T0 + 24 * H
+        T0, T0 + 24 * H + 600_000
     )
     (cov,) = data.coverage
     assert cov.portfolio_id == "all"

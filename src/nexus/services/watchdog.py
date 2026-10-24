@@ -15,9 +15,11 @@ from nexus.domain.clock import Clock
 from nexus.domain.events import WatchdogAlert, WatchdogRecovered
 from nexus.domain.watchdog import (
     CHECK_BACKUP,
+    CHECK_ERROR,
     CHECK_SCANNER,
     MINUTE_MS,
     SCANNER_STALE,
+    SEVERITY,
     Finding,
     check_backup,
     check_scanner,
@@ -66,11 +68,25 @@ class LivenessWatchdog:
             (CHECK_BACKUP, self._probe_backup),
         ):
             try:
-                actions[check] = await self._apply(await probe(now), now)
+                finding = await probe(now)
+            except Exception as error:
+                log.error("watchdog_check_failed", check=check, error=type(error).__name__)
+                actions[check] = await self._probe_failed(check, now)
+                continue
+            try:
+                actions[check] = await self._apply(finding, now)
             except Exception as error:
                 log.error("watchdog_check_failed", check=check, error=type(error).__name__)
                 actions[check] = "error"
         return actions
+
+    async def _probe_failed(self, check: str, now_ms: int) -> str:
+        """A check that cannot run is itself a problem once it persists for the grace period."""
+        try:
+            await self._apply(Finding(check, CHECK_ERROR), now_ms)
+        except Exception as error:  # Redis/broker down too: nothing more we can do, retry later
+            log.error("watchdog_error_alert_failed", check=check, error=type(error).__name__)
+        return "error"
 
     async def _probe_scanner(self, now_ms: int) -> Finding:
         return check_scanner(
@@ -94,9 +110,17 @@ class LivenessWatchdog:
             # A stale scanner has been silent since its last call, not since we noticed.
             silent = finding.minutes if finding.reason == SCANNER_STALE else 0
             since = now_ms - (silent or 0) * MINUTE_MS
-        if state.firing:
-            return "firing"  # already announced: one alert per incident
-        if finding.needs_grace and now_ms - since < self._grace_ms(finding.check):
+        # Already announced: one alert per incident, unless it got worse (e.g. "not copied" ->
+        # "backup failed"), which is announced once more.
+        if state.firing and SEVERITY.get(finding.reason or "", 0) <= SEVERITY.get(
+            state.reason or "", 0
+        ):
+            return "firing"
+        if (
+            not state.firing
+            and finding.needs_grace
+            and now_ms - since < self._grace_ms(finding.check)
+        ):
             await self._state.save(finding.check, WatchdogState(False, since, finding.reason))
             return "grace"
         await self._dispatcher.dispatch_event(

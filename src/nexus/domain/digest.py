@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
+from typing import Final
 
 from nexus.domain.models import ZERO
 
@@ -128,7 +129,13 @@ class SetCoverage:
     hours_gap: int
     """Hours with fewer sweeps than the configured minimum (includes hours with no row)."""
     downtime_min: int
-    """Missing share of the minimum sweep count per hour, as minutes (60 = hour fully dark)."""
+    """Estimated minutes without sweeping: missing share of the expected rate, per hour."""
+
+
+#: The newest hour is judged only once this long after it closed (counters flush every 5 min).
+FLUSH_LAG_MS: Final = 5 * 60_000
+#: An hour below this share of the expected sweeps contributes to the downtime estimate.
+DOWNTIME_TOLERANCE: Final = 0.9
 
 
 def compute_set_coverage(
@@ -137,20 +144,43 @@ def compute_set_coverage(
     window_start_ms: int,
     window_end_ms: int,
     min_sweeps_per_hour: int,
+    expected_sweeps_per_hour: int | None = None,
 ) -> tuple[SetCoverage, ...]:
-    """Per-set gap accounting from ``paper_cap_stats.sweeps`` (hour start ms -> sweeps)."""
+    """Per-set gap accounting from ``paper_cap_stats.sweeps`` (hour start ms -> sweeps).
+
+    An hour with fewer than ``min_sweeps_per_hour`` sweeps is a *gap hour* (a flag only).
+    Downtime is measured against the expected rate: ``expected_sweeps_per_hour`` (nominal, from
+    the sweep interval) capped by the median of the set's healthy hours, so a slow-but-steady
+    scanner is not blamed. Hours under 90 % of it add their missing share, so a 45-minute outage
+    inside one hour is not hidden. The newest hour is skipped until its counters were flushed.
+    This is an estimate for the digest; the GO report recomputes from raw ``sweeps``.
+    """
     first_full = -(-window_start_ms // HOUR_MS) * HOUR_MS  # ceil to a whole hour
-    last_end = window_end_ms - window_end_ms % HOUR_MS
+    last_end = (window_end_ms - FLUSH_LAG_MS) // HOUR_MS * HOUR_MS
     result: list[SetCoverage] = []
     for pid, first_seen in sorted(first_seen_ms.items()):
         start = max(first_full, first_seen - first_seen % HOUR_MS + HOUR_MS)
         hours = range(start, last_end, HOUR_MS)
         counts = sweeps_by_hour.get(pid, {})
         gaps = [h for h in hours if counts.get(h, 0) < min_sweeps_per_hour]
-        missing = sum(round(60 * (1 - counts.get(h, 0) / min_sweeps_per_hour)) for h in gaps)
+        expected = _expected_rate(
+            [counts.get(h, 0) for h in hours], min_sweeps_per_hour, expected_sweeps_per_hour
+        )
+        missing = 0
+        for h in hours:
+            share = counts.get(h, 0) / expected
+            if share < DOWNTIME_TOLERANCE:
+                missing += round(60 * (1 - share))
         result.append(SetCoverage(pid, len(hours), len(gaps), missing))
     result.sort(key=lambda c: (c.portfolio_id != "all", c.portfolio_id))
     return tuple(result)
+
+
+def _expected_rate(counts: list[int], minimum: int, nominal: int | None) -> int:
+    healthy = sorted(c for c in counts if c >= minimum)
+    median = healthy[len(healthy) // 2] if healthy else None
+    candidates = [v for v in (nominal, median) if v is not None]
+    return max(minimum, min(candidates)) if candidates else minimum
 
 
 @dataclass(frozen=True, slots=True)
