@@ -21,6 +21,7 @@ umask 077
 archive="${BACKUP_ARCHIVE:-0}"
 ensure_backup_dir "$BACKUP_DIR"
 BACKUP_DIR="$REAL_BACKUP_DIR"
+MAIN_BACKUP_DIR="$BACKUP_DIR"
 prefix="nexus"
 if [ "$archive" = "1" ]; then
   ensure_backup_dir "$BACKUP_DIR/archive"

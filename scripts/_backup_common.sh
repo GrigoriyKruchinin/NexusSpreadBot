@@ -7,6 +7,13 @@ COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/docker-compose.local.yml}"
 BACKUP_DIR="${BACKUP_DIR:-$HOME/nexus-backups}"
 BACKUP_USER="${BACKUP_USER:-nexus_ro}"
 SOURCE_DB="${SOURCE_DB:-nexus}"
+# R2-1: a plain identifier only. pg_dump -d accepts a conninfo/URI (could carry a password into logs), so the
+# value is validated before any use and is deliberately NOT echoed on rejection.
+if ! [[ "$SOURCE_DB" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+  printf '%s ERROR: SOURCE_DB must be a plain database name ([A-Za-z_][A-Za-z0-9_]*); value not shown\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+  exit 1
+fi
 # Exact file-name formats written by backup.sh (single source of truth for prune/latest_dump).
 DUMP_RE='^nexus-[0-9]{8}T[0-9]{6}Z\.dump$'
 
@@ -124,7 +131,8 @@ copy_offsite() {
   fi
   real_dst="$(cd "$dest" && pwd -P)" || return 1
   real_src="$(cd "$(dirname "$dump")" && pwd -P)" || return 1
-  if [ "$real_dst" = "$real_src" ]; then log "WARNING: BACKUP_COPY_DIR equals BACKUP_DIR; copy skipped"; return 1; fi
+  # R2-2: also refuse the main dump dir when the dump lives in its archive/ subdir (MAIN_BACKUP_DIR from backup.sh).
+  if [ "$real_dst" = "$real_src" ] || [ "$real_dst" = "${MAIN_BACKUP_DIR:-}" ]; then log "WARNING: BACKUP_COPY_DIR equals BACKUP_DIR; copy skipped"; return 1; fi
   case "$real_dst/" in "$REPO_ROOT"/*) log "WARNING: BACKUP_COPY_DIR is inside the repository; copy skipped"; return 1 ;; esac
   # Sidecar first, dump last: a dump is never visible in the copy dir without its .counts (TL8).
   # Temp files are fresh mktemp names in the copy dir (S-3: no fixed name, no symlink following).

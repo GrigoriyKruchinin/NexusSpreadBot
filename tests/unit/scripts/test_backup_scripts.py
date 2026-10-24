@@ -445,15 +445,65 @@ def test_copy_failure_of_dump_leaves_no_sidecar_less_or_orphan_files(sb: Sandbox
     assert _status(sb.backups)["copied"] is False
 
 
-def test_copy_never_follows_a_planted_symlink(sb: Sandbox) -> None:
+def test_copy_uses_fresh_mktemp_names_and_never_follows_a_planted_symlink(sb: Sandbox) -> None:
+    # Temp names are random (mktemp), so a planted name cannot be predicted. The test plants the
+    # legacy fixed names, shims mktemp to record the template, and asserts the temp lives in the
+    # copy dir with a random suffix and the symlink victims stay untouched.
     copy = sb.root / "copy"
     copy.mkdir()
     victim = sb.root / "victim"
     victim.write_text("keep")
-    for name in (".nexus-x.dump.partial", ".nexus-x.counts.partial"):
+    planted = [".nexus-x.dump.partial", ".nexus-x.counts.partial"]
+    for name in planted:
         (copy / name).symlink_to(victim)
+    shim = sb.fake_bin / "mktemp"
+    shim.write_text('#!/bin/sh\necho "$*" >> "$FAKE_LOG.mktemp"\nexec /usr/bin/mktemp "$@"\n')
+    shim.chmod(0o755)
     assert sb.run([str(SCRIPTS / "backup.sh")]).returncode == 0
     assert victim.read_text() == "keep"
+    templates = [
+        t for t in (sb.root / "calls.log.mktemp").read_text().splitlines() if str(copy) in t
+    ]
+    assert len(templates) >= 2
+    for t in templates:
+        assert t.endswith(".XXXXXX.partial")
+        assert Path(t.split("--", 1)[1].strip()).parent == copy
+    assert all((copy / n).is_symlink() for n in planted)  # untouched, not replaced
+    assert not [p for p in copy.glob(".*partial") if p.name not in planted]
+
+
+def test_source_db_uri_is_rejected_and_not_echoed(sb: Sandbox) -> None:
+    secret = "postgresql://u:hunter2secret@h/db"
+    for script in ("backup.sh", "restore_drill.sh"):
+        result = sb.run([str(SCRIPTS / script)], SOURCE_DB=secret)
+        assert result.returncode != 0
+        assert "hunter2secret" not in result.stdout + result.stderr
+        assert "SOURCE_DB" in result.stderr
+    assert not sb.calls()
+    assert not sb.backups.exists()
+
+
+@pytest.mark.parametrize("bad", ["1db", "a-b", "a b", "a;b", "db\nx"])
+def test_source_db_non_identifier_is_rejected(sb: Sandbox, bad: str) -> None:
+    result = sb.run([str(SCRIPTS / "backup.sh")], SOURCE_DB=bad)
+    assert result.returncode != 0
+    assert not sb.calls()
+
+
+def test_source_db_plain_name_passes(sb: Sandbox) -> None:
+    result = sb.run([str(SCRIPTS / "backup.sh")], SOURCE_DB="nexus_old1")
+    assert result.returncode == 0, result.stderr
+    assert any("-d nexus_old1" in c for c in sb.calls())
+
+
+def test_archive_copy_dir_equal_to_main_backup_dir_is_refused(sb: Sandbox) -> None:
+    result = sb.run(
+        [str(SCRIPTS / "backup.sh")], BACKUP_ARCHIVE="1", BACKUP_COPY_DIR=str(sb.backups)
+    )
+    assert result.returncode == 0, result.stderr
+    assert "equals BACKUP_DIR" in result.stderr
+    assert not list(sb.backups.glob("nexus-archive-*"))  # nothing copied into the main dir
+    assert len(list((sb.backups / "archive").glob("nexus-archive-*.dump"))) == 1
 
 
 @pytest.mark.parametrize("where", ["same", "inside"])
