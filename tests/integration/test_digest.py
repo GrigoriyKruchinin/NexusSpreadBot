@@ -132,20 +132,25 @@ async def test_uptime_and_retention_of_new_tables(sessions: Sessions) -> None:
     await _episode(episodes, opened=now_ms - 200 * 24 * H, symbol="OPEN/USDT")  # still open
     paper = PaperRepository(sessions)
     holding = [PaperHolding("a", "USDT", D(1), Seed(D(1), D(1)), D(1))]
-    await paper.commit(
-        portfolio_id="all", at_ms=now_ms - 30 * 24 * H, trades=[], rebalances=[], holdings=holding
-    )
-    await paper.commit(
-        portfolio_id="all", at_ms=now_ms - 20 * 24 * H, trades=[], rebalances=[], holdings=holding
-    )
+    # Two old sets on one fixed UTC day (no midnight straddle) plus a newer set on another day.
+    old_day = (now - timedelta(days=30)).replace(hour=0, minute=0, second=0, microsecond=0)
+    old_day_ms = int(old_day.timestamp() * 1000)
+    for at_ms in (old_day_ms + H, old_day_ms + 2 * H, now_ms - 20 * 24 * H):
+        await paper.commit(
+            portfolio_id="all", at_ms=at_ms, trades=[], rebalances=[], holdings=holding
+        )
     counts = await RetentionRepository(sessions).purge(
         snapshots_before=now - timedelta(days=7),
         evaluations_before=now - timedelta(days=30),
         episodes_before=now - timedelta(days=90),
     )
     assert counts["opportunity_episodes"] == 1  # closed and old; the open one is kept
-    assert counts["paper_balance_snapshots"] == 1  # the latest set always survives
+    assert counts["paper_balance_snapshots"] == 1  # old day thinned to its last set
     async with sessions() as session:
         assert await session.scalar(select(func.count()).select_from(OpportunityEpisodeRow)) == 1
+        kept = await session.scalar(
+            select(func.count(func.distinct(PaperBalanceSnapshotRow.captured_at)))
+        )
         latest = await session.scalar(select(func.max(PaperBalanceSnapshotRow.captured_at)))
+    assert kept == 2  # last set of the old day + the latest set
     assert latest == ms_to_datetime(now_ms - 20 * 24 * H)
