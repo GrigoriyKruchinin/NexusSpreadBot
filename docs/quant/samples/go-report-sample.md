@@ -17,6 +17,7 @@ Paper simulation only: no orders, transfers or keys are involved (ADR 0001). All
 - smallest period: 2.67 %/month after 35 % tax
 - ex-top-2 routes: 2.36 %/month; ex-top-2 coins: 2.29 %/month (after 35 % tax)
 - top-2 routes: ABC/USDT|binance>kucoin, DEF/USDT|binance>okx; top-2 coins: ABC, DEF
+- With the liquidation reserve at 2x (0.6 %), the holdout gives 3.16 % per month after 35 % tax (bar 2 %).
 
 **Gates on the holdout**
 
@@ -119,6 +120,7 @@ Common window 2026-11-09 00:00Z .. 2026-12-05 00:00Z, basis: **holdout**. The di
 | net %/mo after 35 % tax, without top-2 routes | 0.90 % |
 | net %/mo after 35 % tax, without top-2 coins (incl. MTM) | 0.61 % |
 | rebalance cost not attributable to any route | 0.00 |
+| window MTM / residual vs sum of per-coin MTM | -33.09 / -7.09 |
 
 ## Set `excl_conditional` (GO set)
 
@@ -192,6 +194,7 @@ Common window 2026-11-09 00:00Z .. 2026-12-05 00:00Z, basis: **holdout**. The di
 | net %/mo after 35 % tax, without top-2 routes | 2.36 % |
 | net %/mo after 35 % tax, without top-2 coins (incl. MTM) | 2.29 % |
 | rebalance cost not attributable to any route | 0.00 |
+| window MTM / residual vs sum of per-coin MTM | 8.89 / -1.51 |
 
 ## Disclosures
 

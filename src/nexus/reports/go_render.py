@@ -89,6 +89,14 @@ def _verdict_section(report: GoReport) -> list[str]:
         lines.append(f"- Flag{' (BLOCKING)' if flag.blocking else ''}: {flag.text}")
     lines += ["", "**What would refute it**", ""]
     lines += [f"- {line}" for line in v.refute]
+    go = next((a for a in report.analyses if a.name == v.set_name), None)
+    if go is not None:
+        doubled = after_tax(go.focus.total_liq - go.focus.liq_cost, GO_TAX_RATE)
+        lines.append(
+            f"- With the liquidation reserve at 2x ({report.liq_cost_pct * 2} %), the holdout "
+            f"gives {_pct(pct_per_month(doubled, go.focus.days, go.focus.capital))} per month "
+            f"after 35 % tax (bar {GO_BAR_PCT} %)."
+        )
     lines.append("")
     lines += _gate_table(v)
     return lines
@@ -182,7 +190,10 @@ def _set_section(report: GoReport, a: SetAnalysis) -> list[str]:
         ]
     )
     missing = ops.membership_missing if ops else None
-    ident.append(["membership_missing (N6)", NA if missing is None else str(missing)])
+    shown = NA if missing is None else str(missing)
+    if missing:
+        shown += " (FLAG: confidence reduced, N6 membership gaps)"
+    ident.append(["membership_missing (N6)", shown])
     lines += [*_table(["field", "value"], ident), ""]
 
     columns: list[tuple[str, WindowStats]] = [("full own window", a.full)]
@@ -252,13 +263,27 @@ def _concentration(a: SetAnalysis) -> list[str]:
             _pct(c.pct_ex_coins(GO_TAX_RATE)),
         ],
         ["rebalance cost not attributable to any route", f"{c.unattributed_rebal:,.2f}"],
+        [
+            "window MTM / residual vs sum of per-coin MTM",
+            f"{c.window_mtm:,.2f} / {c.mtm_residual:,.2f}",
+        ],
     ]
+    flag = (
+        [
+            f"> Flag: MTM residual {c.mtm_residual:,.2f} exceeds 25 % of window MTM; "
+            "the ex-top-2-coins test is coarse (keep denser snapshots).",
+            "",
+        ]
+        if abs(c.mtm_residual) > abs(c.window_mtm) / 4
+        else []
+    )
     return [
         f"**Concentration (B6), basis: {basis}** (strict rule: both ex-top-2 results must stay "
         f">= {GO_BAR_PCT} % after 35 % tax; filter inside one set, B14-style approximation)",
         "",
         *_table(["field", "value"], rows),
         "",
+        *flag,
     ]
 
 

@@ -296,3 +296,20 @@ def test_main_writes_files_or_prints(
 def test_namespace_type_is_argparse() -> None:
     assert isinstance(go_report.parse_args([]), argparse.Namespace)
     assert DAY_MS == 86_400_000
+
+
+def test_markdown_shows_reserve_2x_line_mtm_residual_and_membership_flag() -> None:
+    text = render_markdown(report())
+    assert "liquidation reserve at 2x" in text
+    assert "window MTM / residual" in text
+    ops = {"excl_conditional": OpsInputs(membership_missing=3)}
+    rep = build_report(
+        fixture_sets(),
+        until_ms=UNTIL,
+        go_set="excl_conditional",
+        gates=GateStatus(),
+        ops=ops,
+        fees=[],
+        liq_cost_pct=D("0.3"),
+    )
+    assert "FLAG: confidence reduced" in render_markdown(rep)

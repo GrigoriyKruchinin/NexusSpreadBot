@@ -591,6 +591,9 @@ class Concentration:
     mtm_of_top_coins: Decimal
     days: Decimal
     capital: Decimal
+    mtm_residual: Decimal = ZERO
+    """Window MTM minus the sum of per-coin MTM (snapshot-granularity error of the coin test)."""
+    window_mtm: Decimal = ZERO
 
     def pct_ex_routes(self, rate: Decimal | None) -> Decimal:
         """Monthly % after tax without the top-2 routes."""
@@ -688,6 +691,8 @@ def concentration(data: SetData, a_ms: int, b_ms: int, liq_cost_pct: Decimal) ->
         mtm_of_top_coins=mtm_top,
         days=stats.days,
         capital=stats.capital,
+        mtm_residual=stats.mtm - sum(mtm.values(), ZERO),
+        window_mtm=stats.mtm,
     )
 
 
