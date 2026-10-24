@@ -429,6 +429,70 @@ def test_backup_prunes_the_copy_with_same_retention(sb: Sandbox) -> None:
     )  # the local dir was not touched by copy prune
 
 
+def test_copy_failure_of_dump_leaves_no_sidecar_less_or_orphan_files(sb: Sandbox) -> None:
+    # cp works for the .counts sidecar, fails for the dump: nothing may remain in the copy dir.
+    cp = sb.fake_bin / "cp"
+    cp.write_text(
+        '#!/bin/sh\n[ "$1" = "--" ] && shift\ncase "$1" in *.dump) exit 1;; esac\n'
+        '/bin/cp "$1" "$2"\n'
+    )
+    cp.chmod(0o755)
+    result = sb.run([str(SCRIPTS / "backup.sh")])
+    assert result.returncode == 0, result.stderr
+    copy = sb.root / "copy"
+    assert not list(copy.glob("nexus-*"))
+    assert not list(copy.glob(".*partial"))
+    assert _status(sb.backups)["copied"] is False
+
+
+def test_copy_never_follows_a_planted_symlink(sb: Sandbox) -> None:
+    copy = sb.root / "copy"
+    copy.mkdir()
+    victim = sb.root / "victim"
+    victim.write_text("keep")
+    for name in (".nexus-x.dump.partial", ".nexus-x.counts.partial"):
+        (copy / name).symlink_to(victim)
+    assert sb.run([str(SCRIPTS / "backup.sh")]).returncode == 0
+    assert victim.read_text() == "keep"
+
+
+@pytest.mark.parametrize("where", ["same", "inside"])
+def test_status_dir_in_backup_dir_is_refused(sb: Sandbox, where: str) -> None:
+    target = sb.backups if where == "same" else sb.backups / "pub"
+    result = sb.run([str(SCRIPTS / "backup.sh")], BACKUP_STATUS_DIR=str(target))
+    assert result.returncode == 0, result.stderr
+    assert "BACKUP_STATUS_DIR" in result.stderr
+    if where == "same":
+        assert (sb.backups / "last_backup.json").stat().st_mode & 0o777 == 0o600  # not widened
+    else:
+        assert not (sb.backups / "pub" / "last_backup.json").exists()
+
+
+def test_status_dir_holding_dumps_is_refused(sb: Sandbox) -> None:
+    status = sb.root / "status"
+    status.mkdir()
+    (status / "nexus-20200101T000000Z.dump").write_text("x")
+    result = sb.run([str(SCRIPTS / "backup.sh")])
+    assert result.returncode == 0
+    assert "contains dumps" in result.stderr
+    assert not (status / "last_backup.json").exists()
+
+
+def test_archive_dump_is_never_pruned_and_leaves_status_alone(sb: Sandbox) -> None:
+    assert sb.run([str(SCRIPTS / "backup.sh")], BACKUP_ARCHIVE="1").returncode == 0
+    archive = list((sb.backups / "archive").glob("nexus-archive-*.dump"))
+    assert len(archive) == 1
+    assert archive[0].with_suffix(".counts").exists()
+    assert not (sb.backups / "last_backup.json").exists()
+    assert not (sb.root / "status").exists()
+    assert (sb.root / "copy" / archive[0].name).exists()
+    # Years of daily dumps later: prune of both dirs keeps the archive.
+    _make_dumps(sb.backups, 30, date(2026, 10, 1))
+    assert sb.run([str(SCRIPTS / "backup.sh")]).returncode == 0
+    assert archive[0].exists()
+    assert (sb.root / "copy" / archive[0].name).exists()
+
+
 def test_backup_failure_writes_status_not_ok(sb: Sandbox) -> None:
     result = sb.run([str(SCRIPTS / "backup.sh")], FAKE_DOCKER_EXIT="1")
     assert result.returncode != 0

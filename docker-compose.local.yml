@@ -94,26 +94,33 @@ services:
   scanner:
     <<: *image
     # D-01: key-policy refusal (exit 3) must NOT restart-loop (it would re-call the signed key
-    # introspection endpoints forever), every other failure must restart without a limit.
-    # Docker cannot filter by exit code, so the wrapper maps exit 3 -> exit 0, and `on-failure`
-    # (unlimited, built-in exponential backoff, reset after 10 s of uptime) restarts only non-zero
-    # exits. SIGTERM/SIGINT are forwarded to the scanner so the graceful shutdown still works.
-    # A clean stop (exit 0) is also not restarted, which is the wanted behaviour for `compose stop`.
+    # introspection endpoints forever), but the scanner must come back after a Docker/WSL restart.
+    # Docker cannot filter by exit code and `on-failure` containers are not restarted by the daemon
+    # after a restart, so: `unless-stopped`, and on exit 3 the wrapper PARKS (sleeps, container stays
+    # up/unhealthy, no API calls) until stopped. A daemon restart re-runs the scanner once, which
+    # re-evaluates the policy. SIGTERM/SIGINT are forwarded to the scanner (trap is set before the fork)
+    # and end the park immediately. Executable test: tests/unit/test_compose.py.
     command:
       - sh
       - -c
       - |
+        pid=""; stop=0
+        trap 'stop=1; [ -n "$$pid" ] && kill -TERM "$$pid" 2>/dev/null' TERM INT
         nexus scanner &
         pid=$$!
-        trap 'kill -TERM "$$pid" 2>/dev/null' TERM INT
+        [ "$$stop" -eq 0 ] || kill -TERM "$$pid" 2>/dev/null
         wait "$$pid"; rc=$$?
         while kill -0 "$$pid" 2>/dev/null; do wait "$$pid"; rc=$$?; done
-        if [ "$$rc" -eq 3 ]; then
-          echo "scanner refused the key policy (exit 3): not restarting; fix the keys and start it manually" >&2
+        if [ "$$rc" -eq 3 ] && [ "$$stop" -eq 0 ]; then
+          echo "scanner refused the key policy (exit 3): parked, not restarting; fix the keys, then restart it manually" >&2
+          sleep 2147483647 &
+          sp=$$!
+          trap 'kill "$$sp" 2>/dev/null; exit 0' TERM INT
+          wait "$$sp"
           exit 0
         fi
         exit "$$rc"
-    restart: on-failure
+    restart: unless-stopped
     stop_grace_period: 30s
     environment:
       <<: [*db-env, *celery-env, *scanner-env]
@@ -156,7 +163,8 @@ services:
       # Backup status for the liveness watchdog (S0b), read-only. NOT the 0700 dump dir (the container
       # uid cannot enter it and must not see dumps): backup.sh mirrors last_backup.json here.
       - ./config/nexus.toml:/app/config/nexus.toml:ro
-      - ${BACKUP_STATUS_DIR:-${HOME}/nexus-backup-status}:/backups:ro
+      # Fixed path (no BACKUP_STATUS_DIR variable: compose would read it from .env, make/cron from the shell).
+      - ${HOME}/nexus-backup-status:/backups:ro
     depends_on:
       migrator: {condition: service_completed_successfully}
       redis: {condition: service_healthy}

@@ -16,3 +16,19 @@ tests/unit/scripts/test_backup_scripts.py, tests/unit/test_compose.py):
 For S0b: read `/backups/last_backup.json`; fields as above; `ok=false`/`copied=false`/older than 26 h -> alert.
 Not run (by instruction): make backup, restore-drill, docker compose up. First real run of the copy is untested on /mnt/c.
 Pitfall: the full `make check` was red only on backend-lead's in-progress src/ files at the time of writing.
+
+## Round 2 (devops, tech-lead D-01/6/7/8, security S-2/S-3/S-4)
+- D-01: scanner `restart: unless-stopped`; inline wrapper in `docker-compose.local.yml` traps TERM/INT before
+  the fork, forwards to the scanner, and on exit 3 PARKS (sleep, exits 0 on TERM/INT). Executable tests run the
+  real wrapper (extracted from the YAML) against a fake `nexus` for exit 0/1/3 and SIGTERM during run and park
+  (`tests/unit/test_compose.py`).
+- TL6: `make backup-archive` (`BACKUP_ARCHIVE=1 scripts/backup.sh`, optional `SOURCE_DB=`) writes
+  `~/nexus-backups/archive/nexus-archive-<stamp>.dump`; never pruned (name + subdir), copied off-machine, no
+  status/heartbeat. Documented in the guide; use it for the fresh-stack step.
+- TL8: copy order is `.counts` first then dump; any failure removes the copied sidecar.
+- S-3: copy temp files are `mktemp` names in the copy dir (no fixed/symlinkable name).
+- S-4: status publish refused if the status dir == BACKUP_DIR, inside it, or holds `nexus-*.dump`. Compose and
+  Makefile now use the fixed `$HOME/nexus-backup-status` (no BACKUP_STATUS_DIR, no .env dependency); the script
+  override remains for tests only.
+- S-2: guide has the optional `icacls` step. TL7: card S0 item 3 records the mount deviation.
+- TL "optional 6/8" (gather_isolated nit) belongs to backend-lead.

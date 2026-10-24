@@ -70,6 +70,8 @@ table_counts() {
 BACKUP_COPY_DIR="${BACKUP_COPY_DIR-/mnt/c/nexus-backups}"
 # World-readable status dir (file names only, no secrets): BACKUP_DIR is 0700 and the container user
 # (uid 10001) could not traverse it, so the maintenance worker gets this directory read-only at /backups.
+# Compose mounts exactly $HOME/nexus-backup-status (no variable, no .env dependency); the override below
+# exists for tests only. Keep the default.
 BACKUP_STATUS_DIR="${BACKUP_STATUS_DIR:-$HOME/nexus-backup-status}"
 
 # Write the status JSON atomically (same-dir temp file + rename) to $1 with mode $2.
@@ -87,6 +89,17 @@ write_status() {
   write_status_file "$BACKUP_DIR/last_backup.json" 600 "$1" "$2" "$3" || log "WARNING: could not write status file"
   if [ ! -d "$BACKUP_STATUS_DIR" ]; then
     mkdir -m 755 -p -- "$BACKUP_STATUS_DIR" 2>/dev/null || { log "WARNING: cannot create status dir"; return 0; }
+  fi
+  # S-4: never publish into the dump dir, a dir inside it, or any dir that holds dumps.
+  local sreal
+  sreal="$(cd "$BACKUP_STATUS_DIR" 2>/dev/null && pwd -P)" || { log "WARNING: status dir unusable"; return 0; }
+  if [ "$sreal" = "$BACKUP_DIR" ]; then
+    log "WARNING: BACKUP_STATUS_DIR equals BACKUP_DIR; public status skipped"; return 0
+  fi
+  case "$sreal/" in "$BACKUP_DIR"/*)
+    log "WARNING: BACKUP_STATUS_DIR is inside BACKUP_DIR; public status skipped"; return 0 ;; esac
+  if [ -n "$(find "$sreal" -maxdepth 1 -name 'nexus-*.dump' -print -quit 2>/dev/null)" ]; then
+    log "WARNING: BACKUP_STATUS_DIR contains dumps; public status skipped"; return 0
   fi
   write_status_file "$BACKUP_STATUS_DIR/last_backup.json" 644 "$1" "$2" "$3" || log "WARNING: could not write public status file"
   return 0
@@ -113,15 +126,21 @@ copy_offsite() {
   real_src="$(cd "$(dirname "$dump")" && pwd -P)" || return 1
   if [ "$real_dst" = "$real_src" ]; then log "WARNING: BACKUP_COPY_DIR equals BACKUP_DIR; copy skipped"; return 1; fi
   case "$real_dst/" in "$REPO_ROOT"/*) log "WARNING: BACKUP_COPY_DIR is inside the repository; copy skipped"; return 1 ;; esac
-  for f in "$dump" "$counts"; do
+  # Sidecar first, dump last: a dump is never visible in the copy dir without its .counts (TL8).
+  # Temp files are fresh mktemp names in the copy dir (S-3: no fixed name, no symlink following).
+  for f in "$counts" "$dump"; do
     name="$(basename "$f")"
-    tmp="$real_dst/.$name.partial"
-    if ! cp -- "$f" "$tmp" 2>/dev/null; then rm -f -- "$tmp"; log "WARNING: copy of $name failed"; return 1; fi
+    tmp="$(mktemp -- "$real_dst/.$name.XXXXXX.partial" 2>/dev/null)" || {
+      log "WARNING: cannot create a temp file in the copy dir"; rm -f -- "$real_dst/$(basename "$counts")"; return 1; }
+    if ! cp -- "$f" "$tmp" 2>/dev/null; then
+      rm -f -- "$tmp" "$real_dst/$(basename "$counts")"; log "WARNING: copy of $name failed"; return 1
+    fi
     if [ "$(sha256sum < "$f")" != "$(sha256sum < "$tmp")" ]; then
-      rm -f -- "$tmp"; log "WARNING: checksum mismatch after copying $name"; return 1
+      rm -f -- "$tmp" "$real_dst/$(basename "$counts")"; log "WARNING: checksum mismatch after copying $name"; return 1
     fi
     chmod 600 -- "$tmp" 2>/dev/null || true   # best effort: NTFS mounts ignore modes
-    mv -f -- "$tmp" "$real_dst/$name" || { rm -f -- "$tmp"; log "WARNING: cannot finalize copy of $name"; return 1; }
+    mv -f -- "$tmp" "$real_dst/$name" || {
+      rm -f -- "$tmp" "$real_dst/$(basename "$counts")"; log "WARNING: cannot finalize copy of $name"; return 1; }
   done
   log "copied $(basename "$dump") and sidecar to the off-machine dir (checksums verified)"
   "$(dirname "${BASH_SOURCE[0]}")/backup_prune.sh" "$real_dst" || log "WARNING: pruning the copy dir failed"

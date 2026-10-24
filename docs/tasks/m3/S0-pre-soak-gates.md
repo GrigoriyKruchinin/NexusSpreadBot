@@ -21,7 +21,7 @@ soak runs on this PC (WSL, Windows sleep disabled by the user); off-machine dump
    prune copies with the same retention as local. Verify copy size/checksum.
 3. Status contract for liveness: `backup.sh` writes `$BACKUP_DIR/last_backup.json` atomically:
    `{"finished_at": ISO-UTC, "ok": bool, "dump": "<file name>", "copied": bool}` (no secrets, no paths with
-   user data beyond file names). Mount `$BACKUP_DIR` read-only into the maintenance worker at `/backups`.
+   user data beyond file names). Mount a world-readable status dir `~/nexus-backup-status` (fixed path; `backup.sh` mirrors `last_backup.json` there) read-only into the maintenance worker at `/backups`. Accepted deviation: `$BACKUP_DIR` itself is 0700 and is NOT mounted (the container uid cannot enter it and must not see dumps).
 4. Guide (Russian) `docs/guides/backups.md`: copy location, how to disable Windows sleep for the soak,
    how to check the status file.
 

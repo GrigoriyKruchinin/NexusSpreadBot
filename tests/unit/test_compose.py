@@ -132,16 +132,117 @@ def test_postgres_container_matches_toml_db_and_user(compose: str) -> None:
     assert env["POSTGRES_USER"] == toml["postgres"]["user"]
 
 
+def _wrapper_script(compose: str) -> str:
+    command = _load(compose)["services"]["scanner"]["command"]
+    assert command[:2] == ["sh", "-c"]
+    return str(command[2]).replace("$$", "$")  # compose escapes `$` as `$$`
+
+
 @pytest.mark.parametrize("compose", COMPOSE_FILES)
-def test_scanner_restart_policy_and_exit_3_handling(compose: str) -> None:
-    """D-01: unlimited restarts on failure, but a key-policy refusal (exit 3) must not loop."""
-    scanner = _load(compose)["services"]["scanner"]
-    assert scanner["restart"] == "on-failure"  # no ':N' cap, and exit 0 is never restarted
-    script = " ".join(scanner["command"])
-    assert "nexus scanner" in script
-    assert re.search(r'"\$\$rc" -eq 3 \]; then.*?exit 0', script, re.S), "exit 3 must map to exit 0"
-    assert re.search(r'exit "\$\$rc"', script), "other codes must propagate"
-    assert "trap" in script  # SIGTERM still reaches the scanner
+def test_scanner_restart_policy(compose: str) -> None:
+    """D-01: restarted after a daemon restart (unless-stopped); exit 3 is handled by parking."""
+    assert _load(compose)["services"]["scanner"]["restart"] == "unless-stopped"
+
+
+def _run_wrapper(
+    tmp_path: Path, scanner_body: str, signal_at: str | None = None
+) -> tuple[int | None, str]:
+    """Run the real wrapper with a fake `nexus`; optionally SIGTERM it while running or parked."""
+    import os
+    import signal
+    import subprocess
+    import time
+
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    fake = bindir / "nexus"
+    fake.write_text("#!/bin/sh\n" + scanner_body)
+    fake.chmod(0o755)
+    marker = tmp_path / "events"
+    env = {"PATH": f"{bindir}:/usr/bin:/bin", "MARKER": str(marker)}
+    proc = subprocess.Popen(  # noqa: S603
+        ["/bin/sh", "-c", _wrapper_script(COMPOSE_FILES[0])],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        if signal_at is not None:
+            deadline = time.monotonic() + 10
+            want = "started" if signal_at == "run" else "exit3"
+            while time.monotonic() < deadline and want not in (
+                marker.read_text() if marker.exists() else ""
+            ):
+                time.sleep(0.05)
+            time.sleep(0.5)  # let the wrapper reach wait/park
+            proc.send_signal(signal.SIGTERM)
+        out, err = proc.communicate(timeout=10 if signal_at else 20)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.communicate()
+        return None, "TIMEOUT"
+    finally:
+        if proc.poll() is None:
+            os.kill(proc.pid, signal.SIGKILL)
+    events = marker.read_text() if marker.exists() else ""
+    return proc.returncode, events + out + err
+
+
+def test_wrapper_exit_codes_propagate(tmp_path: Path) -> None:
+    rc, _ = _run_wrapper(tmp_path, "exit 1\n")
+    assert rc == 1
+
+
+def test_wrapper_clean_exit_is_zero(tmp_path: Path) -> None:
+    rc, _ = _run_wrapper(tmp_path, "exit 0\n")
+    assert rc == 0
+
+
+def test_wrapper_exit_3_parks_until_sigterm_then_exits_0(tmp_path: Path) -> None:
+    body = 'echo exit3 >> "$MARKER"\nexit 3\n'
+    rc, out = _run_wrapper(tmp_path, body, signal_at="park")
+    assert rc == 0, (
+        out
+    )  # parked (did not exit by itself within the wait) and ended promptly on TERM
+    assert "parked" in out
+
+
+def test_wrapper_exit_3_does_not_exit_by_itself(tmp_path: Path) -> None:
+    import subprocess
+
+    (tmp_path / "bin").mkdir()
+    fake = tmp_path / "bin" / "nexus"
+    fake.write_text("#!/bin/sh\nexit 3\n")
+    fake.chmod(0o755)
+    proc = subprocess.Popen(  # noqa: S603
+        ["/bin/sh", "-c", _wrapper_script(COMPOSE_FILES[0])],
+        env={"PATH": f"{tmp_path / 'bin'}:/usr/bin:/bin"},
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        with pytest.raises(subprocess.TimeoutExpired):
+            proc.wait(timeout=2)
+    finally:
+        proc.kill()
+        proc.wait()
+
+
+def test_wrapper_forwards_sigterm_to_the_running_scanner(tmp_path: Path) -> None:
+    body = (
+        "trap 'echo got-term >> \"$MARKER\"; exit 0' TERM\n"
+        'echo started >> "$MARKER"\n'
+        "while :; do sleep 0.1; done\n"
+    )
+    rc, out = _run_wrapper(tmp_path, body, signal_at="run")
+    assert rc == 0, out
+    assert "got-term" in out
+
+
+def test_wrapper_propagates_scanner_failure_after_sigterm(tmp_path: Path) -> None:
+    body = "trap 'exit 5' TERM\necho started >> \"$MARKER\"\nwhile :; do sleep 0.1; done\n"
+    rc, _ = _run_wrapper(tmp_path, body, signal_at="run")
+    assert rc == 5
 
 
 @pytest.mark.parametrize("compose", COMPOSE_FILES)

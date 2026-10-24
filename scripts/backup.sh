@@ -14,12 +14,23 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/_backup_common.sh"
 umask 077
 
+# BACKUP_ARCHIVE=1 (make backup-archive): a one-off archive dump (e.g. of the old DB before a fresh stack)
+# written to $BACKUP_DIR/archive/nexus-archive-<stamp>.dump. The name does not match the daily format and
+# the dir is a subdir, so backup_prune.sh never deletes it. No status file, no heartbeat; the off-machine
+# copy is still made (also never pruned). Set SOURCE_DB to archive another database.
+archive="${BACKUP_ARCHIVE:-0}"
 ensure_backup_dir "$BACKUP_DIR"
 BACKUP_DIR="$REAL_BACKUP_DIR"
+prefix="nexus"
+if [ "$archive" = "1" ]; then
+  ensure_backup_dir "$BACKUP_DIR/archive"
+  BACKUP_DIR="$REAL_BACKUP_DIR"
+  prefix="nexus-archive"
+fi
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-final="$BACKUP_DIR/nexus-$stamp.dump"
+final="$BACKUP_DIR/$prefix-$stamp.dump"
 partial="$final.partial"
-counts_final="$BACKUP_DIR/nexus-$stamp.counts"
+counts_final="$BACKUP_DIR/$prefix-$stamp.counts"
 counts_partial="$counts_final.partial"
 dump_name=""
 copied=false
@@ -27,7 +38,8 @@ on_exit() {
   local rc=$?
   rm -f -- "$partial" "$counts_partial"
   # Status for the liveness watchdog (S0b): written on success AND on failure; never changes the exit code.
-  if [ "$rc" -eq 0 ]; then write_status true "$dump_name" "$copied"; else write_status false "$dump_name" false; fi
+  if [ "$archive" = "1" ]; then :
+  elif [ "$rc" -eq 0 ]; then write_status true "$dump_name" "$copied"; else write_status false "$dump_name" false; fi
   exit "$rc"
 }
 trap on_exit EXIT
@@ -49,8 +61,13 @@ mv -- "$counts_partial" "$counts_final"
 [ "$(stat -c %a "$final")" = "600" ] || die "dump file mode is not 0600"
 log "wrote $(basename "$final") ($(stat -c %s "$final") bytes)"
 
-"$(dirname "${BASH_SOURCE[0]}")/backup_prune.sh" "$BACKUP_DIR"
 dump_name="$(basename "$final")"
+if [ "$archive" = "1" ]; then
+  copy_offsite "$final" || log "WARNING: off-machine copy of the archive NOT made"
+  log "archive dump written (never pruned): $final"
+  exit 0
+fi
+"$(dirname "${BASH_SOURCE[0]}")/backup_prune.sh" "$BACKUP_DIR"
 
 # Off-machine copy (D-02): a problem here is a WARNING, never a failed backup; the status file records it.
 if copy_offsite "$final"; then copied=true; else log "WARNING: off-machine copy NOT made (status copied=false)"; fi
