@@ -7,8 +7,10 @@ from nexus.config.groups import WatchdogSettings
 from nexus.domain.events import WatchdogAlert, WatchdogRecovered
 from nexus.interfaces.watchdog import (
     IBackupStatusSource,
+    IPaperSetActivity,
     IScannerActivity,
     IWatchdogState,
+    PaperSetActivity,
     WatchdogState,
 )
 from nexus.services.watchdog import LivenessWatchdog
@@ -304,3 +306,157 @@ async def test_alert_failure_while_check_is_broken_is_swallowed() -> None:
     actions = await rig.dog.run_once()
     assert actions["scanner"] == "error"
     assert rig.dispatcher.events == []
+
+
+# --- D-08: paper venue set freshness -----------------------------------------------------------
+
+HOUR = 60 * MIN
+
+
+class PaperSets(IPaperSetActivity):
+    def __init__(self) -> None:
+        self.sets: dict[str, PaperSetActivity] = {}
+        self.error: Exception | None = None
+
+    async def read(self) -> dict[str, PaperSetActivity]:
+        if self.error:
+            raise self.error
+        return dict(self.sets)
+
+
+class PaperRig(Rig):
+    def __init__(self) -> None:
+        super().__init__()
+        self.paper = PaperSets()
+        self.dog = LivenessWatchdog(
+            activity=self.activity,
+            backup=self.backup,
+            state=self.state,
+            dispatcher=self.dispatcher,
+            clock=self.clock,
+            settings=WatchdogSettings(paper_set_stale_h=3),
+            paper_sets=self.paper,
+        )
+
+    def set_hour(self, name: str, age_min: int, started_h_ago: int = 48) -> None:
+        self.paper.sets[name] = PaperSetActivity(
+            self.clock.now - started_h_ago * HOUR, self.clock.now - age_min * MIN
+        )
+
+    def advance(self, minutes: int) -> None:
+        super().advance(minutes)
+        self.healthy()  # keep the scanner and the backup healthy while time passes
+
+
+async def test_fresh_paper_set_is_ok() -> None:
+    rig = PaperRig()
+    rig.set_hour("all", 65)
+    assert await rig.dog.run_once() == {"scanner": "ok", "backup": "ok", "paper_set:all": "ok"}
+    assert rig.dispatcher.events == []
+
+
+async def test_stale_paper_set_alerts_once_after_grace_then_recovers_once() -> None:
+    rig = PaperRig()
+    rig.set_hour("core", 200)
+    rig.set_hour("all", 30)
+    assert (await rig.dog.run_once())["paper_set:core"] == "grace"
+    rig.advance(5)
+    rig.set_hour("core", 205)
+    assert (await rig.dog.run_once())["paper_set:core"] == "grace"
+    rig.advance(10)
+    rig.set_hour("core", 215)
+    assert (await rig.dog.run_once())["paper_set:core"] == "alert"
+    for _ in range(3):
+        rig.advance(5)
+        rig.set_hour("core", 230)
+        assert (await rig.dog.run_once())["paper_set:core"] == "firing"
+    assert rig.dispatcher.events == [WatchdogAlert("paper_set:core", "paper_set_stale", 215)]
+    rig.advance(5)
+    rig.set_hour("core", 10)
+    assert (await rig.dog.run_once())["paper_set:core"] == "recovered"
+    assert (await rig.dog.run_once())["paper_set:core"] == "ok"
+    assert isinstance(rig.dispatcher.events[1], WatchdogRecovered)
+    assert rig.dispatcher.events[1].check == "paper_set:core"
+    assert len(rig.dispatcher.events) == 2
+
+
+async def test_paper_set_that_never_wrote_stats_is_judged_from_its_run_start() -> None:
+    rig = PaperRig()
+    rig.paper.sets["fresh"] = PaperSetActivity(rig.clock.now - 2 * HOUR, None)
+    assert (await rig.dog.run_once())["paper_set:fresh"] == "ok"  # run is only 2 h old
+    rig.paper.sets["fresh"] = PaperSetActivity(rig.clock.now - 5 * HOUR, None)
+    assert (await rig.dog.run_once())["paper_set:fresh"] == "grace"
+    rig.advance(20)
+    rig.paper.sets["fresh"] = PaperSetActivity(rig.clock.now - 5 * HOUR - 20 * MIN, None)
+    assert (await rig.dog.run_once())["paper_set:fresh"] == "alert"
+    assert rig.dispatcher.events == [WatchdogAlert("paper_set:fresh", "paper_set_stale", 320)]
+
+
+async def test_short_paper_blip_inside_grace_sends_nothing() -> None:
+    rig = PaperRig()
+    rig.set_hour("all", 200)
+    assert (await rig.dog.run_once())["paper_set:all"] == "grace"
+    rig.advance(5)
+    rig.set_hour("all", 10)
+    assert (await rig.dog.run_once())["paper_set:all"] == "ok"
+    assert rig.dispatcher.events == []
+
+
+async def test_retired_paper_set_is_ignored() -> None:
+    rig = PaperRig()
+    rig.set_hour("old", 8 * 24 * 60, started_h_ago=24 * 30)
+    assert (await rig.dog.run_once())["paper_set:old"] == "ok"
+    assert rig.dispatcher.events == []
+
+
+async def test_paper_checks_are_suppressed_while_the_scanner_is_stale() -> None:
+    rig = PaperRig()
+    rig.set_hour("all", 400)
+    rig.activity.value = T0 - 30 * MIN
+    actions = await rig.dog.run_once()
+    assert actions["scanner"] == "alert"
+    assert "paper_set:all" not in actions
+    assert rig.dispatcher.events == [WatchdogAlert("scanner", "scanner_stale", 30)]
+
+
+async def test_paper_checks_are_suppressed_when_the_scanner_probe_fails() -> None:
+    rig = PaperRig()
+    rig.set_hour("all", 400)
+    rig.activity.error = OSError("db down")
+    actions = await rig.dog.run_once()
+    assert actions["scanner"] == "error"
+    assert "paper_set:all" not in actions
+
+
+async def test_paper_source_failure_is_a_check_error_after_grace() -> None:
+    rig = PaperRig()
+    rig.paper.error = OSError("db down")
+    assert (await rig.dog.run_once())["paper_sets"] == "error"
+    assert rig.dispatcher.events == []
+    rig.advance(20)
+    await rig.dog.run_once()
+    assert rig.dispatcher.events == [WatchdogAlert("paper_sets", "check_error", None)]
+
+
+async def test_dispatch_failure_for_a_paper_set_is_retried_next_run() -> None:
+    dispatcher = FailingDispatcher()
+    rig = PaperRig()
+    rig.dispatcher = dispatcher
+    rig.dog = LivenessWatchdog(
+        activity=rig.activity,
+        backup=rig.backup,
+        state=rig.state,
+        dispatcher=dispatcher,
+        clock=rig.clock,
+        settings=WatchdogSettings(paper_set_stale_h=3),
+        paper_sets=rig.paper,
+    )
+    rig.set_hour("all", 400)
+    await rig.dog.run_once()
+    rig.advance(20)
+    rig.set_hour("all", 420)
+    assert (await rig.dog.run_once())["paper_set:all"] == "error"
+    dispatcher.fail = False
+    rig.advance(5)
+    rig.set_hour("all", 425)
+    assert (await rig.dog.run_once())["paper_set:all"] == "alert"

@@ -16,21 +16,28 @@ from nexus.domain.events import WatchdogAlert, WatchdogRecovered
 from nexus.domain.watchdog import (
     CHECK_BACKUP,
     CHECK_ERROR,
+    CHECK_PAPER_SET_PREFIX,
     CHECK_SCANNER,
     MINUTE_MS,
     SCANNER_STALE,
     SEVERITY,
     Finding,
     check_backup,
+    check_paper_set,
     check_scanner,
 )
 from nexus.interfaces.coordination import IAlertDispatcher
 from nexus.interfaces.watchdog import (
     IBackupStatusSource,
+    IPaperSetActivity,
     IScannerActivity,
     IWatchdogState,
     WatchdogState,
 )
+
+#: Allowance for the cap-stats flush lag and a scanner that has just come back: a paper-set
+#: problem alerts only after persisting this long (see ``GRACE_REASONS``).
+PAPER_SET_GRACE_MS = 15 * MINUTE_MS
 
 log = structlog.get_logger(__name__)
 
@@ -47,6 +54,7 @@ class LivenessWatchdog:
         dispatcher: IAlertDispatcher,
         clock: Clock,
         settings: WatchdogSettings,
+        paper_sets: IPaperSetActivity | None = None,
     ) -> None:
         self._activity = activity
         self._backup = backup
@@ -54,15 +62,19 @@ class LivenessWatchdog:
         self._dispatcher = dispatcher
         self._clock = clock
         self._settings = settings
+        self._paper_sets = paper_sets
 
     async def run_once(self) -> dict[str, str]:
-        """Evaluate both checks; returns ``{check: action}`` (``alert``/``recovered``/...).
+        """Evaluate all checks; returns ``{check: action}`` (``alert``/``recovered``/...).
 
         A failure inside one check (database, Redis, broker) is logged and does not skip the
-        other check.
+        other checks. The per-set paper checks (``paper_set:<set>``) run only while the scanner
+        check is healthy: a stopped scanner already raised its own alert and every set would
+        otherwise repeat it.
         """
         now = self._clock.now_ms()
         actions: dict[str, str] = {}
+        scanner_healthy = False
         for check, probe in (
             (CHECK_SCANNER, self._probe_scanner),
             (CHECK_BACKUP, self._probe_backup),
@@ -78,6 +90,33 @@ class LivenessWatchdog:
             except Exception as error:
                 log.error("watchdog_check_failed", check=check, error=type(error).__name__)
                 actions[check] = "error"
+            else:
+                scanner_healthy = scanner_healthy or (check == CHECK_SCANNER and finding.ok)
+        if self._paper_sets is not None and scanner_healthy:
+            actions.update(await self._run_paper_sets(self._paper_sets, now))
+        return actions
+
+    async def _run_paper_sets(self, source: IPaperSetActivity, now: int) -> dict[str, str]:
+        try:
+            sets = await source.read()
+        except Exception as error:
+            log.error("watchdog_check_failed", check="paper_sets", error=type(error).__name__)
+            return {"paper_sets": await self._probe_failed("paper_sets", now)}
+        actions: dict[str, str] = {}
+        for name, seen in sorted(sets.items()):
+            finding = check_paper_set(
+                name,
+                seen.started_ms,
+                seen.newest_hour_ms,
+                now,
+                self._settings.paper_set_stale_h,
+                self._settings.paper_set_retire_h,
+            )
+            try:
+                actions[finding.check] = await self._apply(finding, now)
+            except Exception as error:
+                log.error("watchdog_check_failed", check=finding.check, error=type(error).__name__)
+                actions[finding.check] = "error"
         return actions
 
     async def _probe_failed(self, check: str, now_ms: int) -> str:
@@ -99,6 +138,8 @@ class LivenessWatchdog:
     def _grace_ms(self, check: str) -> int:
         if check == CHECK_SCANNER:
             return self._settings.scanner_stale_min * MINUTE_MS
+        if check.startswith(CHECK_PAPER_SET_PREFIX) or check == "paper_sets":
+            return PAPER_SET_GRACE_MS
         return self._settings.backup_max_age_h * 60 * MINUTE_MS
 
     async def _apply(self, finding: Finding, now_ms: int) -> str:

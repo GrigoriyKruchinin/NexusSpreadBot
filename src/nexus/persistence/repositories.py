@@ -57,7 +57,7 @@ from nexus.interfaces.repositories import (
     PortfolioRun,
     RunDefinition,
 )
-from nexus.interfaces.watchdog import IScannerActivity
+from nexus.interfaces.watchdog import IPaperSetActivity, IScannerActivity, PaperSetActivity
 from nexus.persistence.models import (
     AlertLogRow,
     ExchangeHealthRow,
@@ -1240,3 +1240,33 @@ class ScannerActivityRepository(_Repository, IScannerActivity):
                 select(ExchangeHealthRow.checked_at).order_by(ExchangeHealthRow.id.desc()).limit(1)
             )
         return None if checked_at is None else datetime_to_ms(checked_at)
+
+
+class PaperSetActivityRepository(_Repository, IPaperSetActivity):
+    """Venue sets from the run registry with their newest ``paper_cap_stats`` hour (read-only)."""
+
+    async def read(self) -> dict[str, PaperSetActivity]:
+        """Current run start and newest stats hour per registered set (two small aggregates)."""
+        async with self._sessions() as session:
+            runs = (
+                await session.execute(
+                    select(
+                        PaperPortfolioRow.portfolio_id, func.max(PaperPortfolioRow.started_at)
+                    ).group_by(PaperPortfolioRow.portfolio_id)
+                )
+            ).all()
+            hour_rows = (
+                await session.execute(
+                    select(PaperCapStatsRow.portfolio_id, func.max(PaperCapStatsRow.hour)).group_by(
+                        PaperCapStatsRow.portfolio_id
+                    )
+                )
+            ).all()
+            hours = dict(hour_rows)
+        return {
+            pid: PaperSetActivity(
+                datetime_to_ms(started),
+                None if (hour := hours.get(pid)) is None else datetime_to_ms(hour),
+            )
+            for pid, started in runs
+        }

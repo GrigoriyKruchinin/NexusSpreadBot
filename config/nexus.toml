@@ -143,3 +143,8 @@ backup_max_age_h = 26
 coverage_min_sweeps_per_hour = 60
 # Nominal sweeps per hour (3600 / ticker_interval_s); downtime in the digest is measured against it
 expected_sweeps_per_hour = 360
+# Alert when a paper venue set has no paper_cap_stats hour newer than this (measured from the hour
+# start, so a healthy set already shows ~1 h 5 min with the flush lag)
+paper_set_stale_h = 3
+# A set silent longer than this is treated as removed from PAPER_VENUE_SETS (no alert)
+paper_set_retire_h = 168

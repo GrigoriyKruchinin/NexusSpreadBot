@@ -486,6 +486,12 @@ class WatchdogSettings(NexusBaseSettings):
     expected_sweeps_per_hour: int = Field(default=360, ge=1)
     """Nominal sweeps per hour (3600 / scanner.ticker_interval_s); digest downtime baseline."""
 
+    paper_set_stale_h: int = Field(default=3, ge=2)
+    """Alert when a paper venue set has no ``paper_cap_stats`` hour newer than this. Measured
+    from the hour start, so a healthy set already shows ~1 h 5 min (hour + flush lag)."""
+    paper_set_retire_h: int = Field(default=168, ge=3)
+    """A set silent for longer than this counts as removed from PAPER_VENUE_SETS (no alert)."""
+
     @field_validator("backup_status_path")
     @classmethod
     def _absolute_path(cls, value: str) -> str:

@@ -41,6 +41,7 @@ from nexus.persistence.repositories import (
     MarketRepository,
     MetadataStatsRepository,
     PaperRepository,
+    PaperSetActivityRepository,
     QuarantineRepository,
     RetentionRepository,
     ScannerActivityRepository,
@@ -320,6 +321,7 @@ async def watchdog_scope(settings: MaintenanceWorkerSettings) -> AsyncIterator[L
             dispatcher=CeleryAlertDispatcher(create_celery_app(settings.celery)),
             clock=SystemClock(),
             settings=settings.watchdog,
+            paper_sets=PaperSetActivityRepository(create_session_factory(engine)),
         )
     finally:
         await redis.aclose()

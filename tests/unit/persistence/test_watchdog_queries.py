@@ -7,6 +7,7 @@ from typing import Any
 
 from nexus.persistence.repositories import (
     DigestRepository,
+    PaperSetActivityRepository,
     ScannerActivityRepository,
     datetime_to_ms,
 )
@@ -63,3 +64,13 @@ async def test_set_coverage_from_hourly_sweeps() -> None:
         1,
         60,
     )
+
+
+async def test_paper_set_activity_joins_registry_and_newest_hour() -> None:
+    runs = [("all", H0), ("core", H0)]
+    stats = [("all", datetime.fromtimestamp(datetime_to_ms(H0) / 1000 + 7200, tz=UTC))]
+    repo = PaperSetActivityRepository(_sessions(_Session(results=[runs, stats])))
+    seen = await repo.read()
+    assert seen["all"].started_ms == datetime_to_ms(H0)
+    assert seen["all"].newest_hour_ms == datetime_to_ms(H0) + 2 * HOUR
+    assert seen["core"].newest_hour_ms is None

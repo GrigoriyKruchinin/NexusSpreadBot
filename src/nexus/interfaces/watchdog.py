@@ -43,3 +43,21 @@ class IBackupStatusSource(ABC):
     @abstractmethod
     async def read(self) -> str | None:
         """Raw file text, ``None`` when the file does not exist."""
+
+
+@dataclass(frozen=True, slots=True)
+class PaperSetActivity:
+    """Freshness of one venue set's data."""
+
+    started_ms: int
+    """Start of the set's current run (registry; never purged)."""
+    newest_hour_ms: int | None
+    """Start of the newest ``paper_cap_stats`` hour, ``None`` when the set has no row."""
+
+
+class IPaperSetActivity(ABC):
+    """Read-only view of the paper venue sets' data freshness."""
+
+    @abstractmethod
+    async def read(self) -> dict[str, PaperSetActivity]:
+        """Registered venue sets (current run each) with their newest stats hour."""

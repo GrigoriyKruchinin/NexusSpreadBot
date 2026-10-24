@@ -42,3 +42,14 @@ soak runs on this PC (WSL, Windows sleep disabled by the user); off-machine dump
 ## Acceptance
 `make check` not worse (>= 900 tests, branch >= 89 %), CI green (7 jobs), no secrets, ADR 0001 unchanged,
 never reads `.env`, no live DB access. Card + todo updated.
+
+## D-08 follow-up (watchdog: paper set stale)
+New check `paper_set:<name>` per venue set (state key per set, one alert / one recovery, same severity and
+`check_error` handling). Sets come from the run registry (`paper_portfolios`, latest run per name): the
+maintenance worker has no `PAPER_VENUE_SETS`, and a set that never registered cannot be seen (limitation).
+Freshness = newest `paper_cap_stats` hour, age from the hour start (a healthy set shows up to ~65 min), a
+set with no row is judged from its run start. Settings `watchdog.paper_set_stale_h = 3` and
+`paper_set_retire_h = 168` (silent longer = treated as removed from config, no alert), both in
+`TOML_ALLOWED`. A 15 min grace absorbs the flush lag after a scanner restart. Paper checks are skipped
+while the scanner check is stale / no-data / failing (no double alerts; they resume after recovery).
+Alert text: fixed Russian template + set name only. Read-only queries, no migration.

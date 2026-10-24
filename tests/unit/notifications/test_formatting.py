@@ -292,3 +292,18 @@ def test_watchdog_alert_texts_are_russian_and_escaped(reason: str) -> None:
     assert "&lt;b&gt;backup" in text
     assert "<b>backup</b>" not in text
     assert "{minutes}" not in text
+
+
+def test_paper_set_alert_and_recovery_name_only_the_set() -> None:
+    from nexus.domain.events import WatchdogAlert, WatchdogRecovered
+    from nexus.notifications.formatting import SystemEventFormatter
+
+    fmt = SystemEventFormatter()
+    alert = fmt.render(WatchdogAlert("paper_set:core", "paper_set_stale", 215))
+    assert "Paper-набор core" in alert
+    assert "215" in alert
+    assert "{minutes}" not in alert
+    assert "Paper-набор core: проблема устранена" in fmt.render(
+        WatchdogRecovered("paper_set:core", 30)
+    )
+    assert "Paper-наборы" in fmt.render(WatchdogAlert("paper_sets", "check_error", None))
