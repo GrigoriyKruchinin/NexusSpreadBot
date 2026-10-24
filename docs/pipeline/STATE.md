@@ -23,7 +23,7 @@
 - Vision: GO bar after tax; GO-HOLD outcome (ADR 0008); Bybit + gateio = conditional venues.
 
 ## In flight / next (in order)
-1. After 2026-10-24 03:15: check backup.log + new dump with `.counts` sidecar; ask user U4 OK to re-run
+1. (superseded by fresh-stack decision; drill runs on the new DB after its first nightly dump) After 2026-10-24 03:15: check backup.log + new dump with `.counts` sidecar; ask user U4 OK to re-run
    `make restore-drill` on it (old dump has no sidecar, drill refuses it); record in restore-drill.md.
 2. (done) A5a reviews + leftovers.
 3. (done) Stage-end Track 0 + B14: regression clean (`docs/reports/regression-track0-B14.md`), delta audit
@@ -36,6 +36,7 @@
 7. Then soak (needs B15 + backups running), quant, GO/NO-GO.
 
 ## User decisions (2026-10-23)
+- Soak starts on a FRESH stack + clean `nexus` DB once the final version is ready (B15 part 1, A7, pre-soak gates). Old data/logs/backups treated as obsolete. Plan (needs explicit U4 at execution): final archive dump of old DB -> new empty DB/volume (no `down -v`; old volume kept until soak verified, then removed with user OK) -> migrator from zero -> stack up -> first nightly dump + restore drill on the new DB (D-03). Stack stays stopped until then; nightly 03:15 backup will fail meanwhile (expected).
 - A7: non-secret settings move to committed `config/nexus.toml`; `.env` keeps only secrets (after B15 part 1).
 - B15 concentration rule (strict): GO requires >= 2 %/month after tax even without the top-2 routes and, separately, without the top-2 coins.
 - Soak runs 4 venue sets: all, excl_conditional, excl_bybit, excl_gateio.
