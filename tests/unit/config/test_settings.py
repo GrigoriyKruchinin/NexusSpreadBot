@@ -142,7 +142,13 @@ def test_migrator_needs_only_database(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_scheduler_has_no_secrets_groups() -> None:
     settings = SchedulerSettings.load()  # no env at all is enough
-    assert set(SchedulerSettings.model_fields) == {"celery", "maintenance", "digest", "logging"}
+    assert set(SchedulerSettings.model_fields) == {
+        "celery",
+        "maintenance",
+        "digest",
+        "watchdog",
+        "logging",
+    }
     assert settings.maintenance.cleanup_interval_s > 0
 
 

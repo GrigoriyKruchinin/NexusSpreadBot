@@ -28,6 +28,7 @@ from nexus.workers.app import (
     TASK_SEND_DIGEST,
     TASK_SEND_EVENT,
     TASK_SEND_OPPORTUNITY,
+    TASK_WATCHDOG,
     celery_app,
 )
 
@@ -153,5 +154,17 @@ def purge_old_rows() -> dict[str, int]:
     async def run() -> dict[str, int]:
         async with retention_scope(_maintenance_settings()) as service:
             return await service.purge(datetime.now(tz=UTC))
+
+    return asyncio.run(run())
+
+
+@celery_app.task(name=TASK_WATCHDOG, max_retries=0)
+def liveness_watchdog() -> dict[str, str]:
+    """Check scanner activity and backup status; alert once per incident."""
+    from nexus.container import watchdog_scope
+
+    async def run() -> dict[str, str]:
+        async with watchdog_scope(_maintenance_settings()) as service:
+            return await service.run_once()
 
     return asyncio.run(run())

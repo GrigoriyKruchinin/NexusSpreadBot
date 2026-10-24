@@ -30,6 +30,7 @@ from nexus.config.groups import (
     ScannerSettings,
     SpreadSettings,
     TelegramSettings,
+    WatchdogSettings,
 )
 from nexus.config.venue_sets import resolve_venue_sets
 
@@ -58,6 +59,7 @@ class SchedulerSettings(_RoleSettings):
     celery: CelerySettings
     maintenance: MaintenanceSettings
     digest: DigestSettings
+    watchdog: WatchdogSettings
     logging: LoggingSettings
 
     @classmethod
@@ -67,6 +69,7 @@ class SchedulerSettings(_RoleSettings):
             celery=CelerySettings(),
             maintenance=MaintenanceSettings(),
             digest=DigestSettings(),
+            watchdog=WatchdogSettings(),
             logging=LoggingSettings(),
         )
 
@@ -165,6 +168,7 @@ class AlertsWorkerSettings(_RoleSettings):
     celery: CelerySettings
     telegram: TelegramSettings
     conditional: ConditionalVenuesSettings = Field(default_factory=ConditionalVenuesSettings)
+    watchdog: WatchdogSettings = Field(default_factory=WatchdogSettings)
     logging: LoggingSettings
 
     @classmethod
@@ -175,6 +179,7 @@ class AlertsWorkerSettings(_RoleSettings):
             celery=CelerySettings(),
             telegram=TelegramSettings(),
             conditional=ConditionalVenuesSettings(),
+            watchdog=WatchdogSettings(),
             logging=LoggingSettings(),
         )
 
@@ -185,6 +190,7 @@ class MaintenanceWorkerSettings(_RoleSettings):
     database: DatabaseSettings
     celery: CelerySettings
     maintenance: MaintenanceSettings
+    watchdog: WatchdogSettings = Field(default_factory=WatchdogSettings)
     logging: LoggingSettings
 
     @classmethod
@@ -194,5 +200,6 @@ class MaintenanceWorkerSettings(_RoleSettings):
             database=DatabaseSettings(),
             celery=CelerySettings(),
             maintenance=MaintenanceSettings(),
+            watchdog=WatchdogSettings(),
             logging=LoggingSettings(),
         )

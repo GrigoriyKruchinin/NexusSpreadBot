@@ -246,3 +246,49 @@ def test_alert_marker_only_for_conditional_routes() -> None:
     assert "⚠️ условные биржи (Bybit, Gate.io)" in both.split("\n")[0]
     assert "условн" not in OpportunityFormatter().render(make_evaluation(sell_exchange="bybit"))
     assert len(both) < 4096
+
+
+def test_watchdog_events_roundtrip_and_render() -> None:
+    from nexus.domain.events import (
+        WatchdogAlert,
+        WatchdogRecovered,
+        event_from_payload,
+        event_to_payload,
+    )
+    from nexus.notifications.formatting import SystemEventFormatter
+
+    formatter = SystemEventFormatter()
+    alert = WatchdogAlert("scanner", "scanner_stale", 25)
+    assert event_from_payload(event_to_payload(alert)) == alert
+    assert formatter.render(alert) == (
+        "🚨 <b>Сканер: нужна проверка</b>\n"
+        "<blockquote>сканер не записывает данные уже 25 мин: проверьте контейнер scanner"
+        "</blockquote>"
+    )
+    recovered = WatchdogRecovered("backup", 95)
+    assert event_from_payload(event_to_payload(recovered)) == recovered
+    assert formatter.render(recovered) == (
+        "✅ <b>Резервная копия: проблема устранена</b>\nДлилась около <b>1 ч 35 мин</b>"
+    )
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "scanner_no_data",
+        "backup_missing",
+        "backup_unreadable",
+        "backup_failed",
+        "backup_not_copied",
+        "backup_stale",
+        "something_new",
+    ],
+)
+def test_watchdog_alert_texts_are_russian_and_escaped(reason: str) -> None:
+    from nexus.domain.events import WatchdogAlert
+    from nexus.notifications.formatting import SystemEventFormatter
+
+    text = SystemEventFormatter().render(WatchdogAlert("<b>backup</b>", reason, None))
+    assert "&lt;b&gt;backup" in text
+    assert "<b>backup</b>" not in text
+    assert "{minutes}" not in text

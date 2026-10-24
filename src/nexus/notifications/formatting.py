@@ -22,6 +22,8 @@ from nexus.domain.events import (
     ScannerStarted,
     ScannerStopped,
     SystemEvent,
+    WatchdogAlert,
+    WatchdogRecovered,
 )
 from nexus.domain.spread import SpreadEvaluation, TransferStatus
 
@@ -48,6 +50,19 @@ EPISODE_CLOSE_REASONS: Final[dict[str, str]] = {
     "gap": "спред исчез",
     "quarantined": "связка отправлена в карантин",
     "restart": "сканер перезапускался",
+}
+WATCHDOG_TITLES: Final[dict[str, str]] = {
+    "scanner": "Сканер",
+    "backup": "Резервная копия",
+}
+WATCHDOG_REASONS: Final[dict[str, str]] = {
+    "scanner_stale": "сканер не записывает данные уже {minutes} мин: проверьте контейнер scanner",
+    "scanner_no_data": "в базе нет записей работы сканера",
+    "backup_missing": "файл статуса резервного копирования не найден",
+    "backup_unreadable": "файл статуса резервного копирования нечитаем",
+    "backup_failed": "последняя резервная копия завершилась ошибкой ({minutes} мин назад)",
+    "backup_not_copied": "копия дампа не сохранена вне контейнера (диск не подключён?)",
+    "backup_stale": "последняя резервная копия была {minutes} мин назад",
 }
 STOP_REASONS: Final[dict[str, str]] = {
     "shutdown": "сканер остановлен или перезапускается (docker stop / make down-local)",
@@ -247,6 +262,21 @@ class SystemEventFormatter:
                 return self._episode_closed(event)
             case RoutesQuarantined():
                 return self._quarantined(event)
+            case WatchdogAlert():
+                return self._watchdog_alert(event)
+            case WatchdogRecovered():
+                title = WATCHDOG_TITLES.get(event.check, event.check)
+                return (
+                    f"✅ <b>{esc(title)}: проблема устранена</b>\n"
+                    f"Длилась около <b>{fmt_duration(event.downtime_min * 60)}</b>"
+                )
+
+    @staticmethod
+    def _watchdog_alert(event: WatchdogAlert) -> str:
+        title = WATCHDOG_TITLES.get(event.check, event.check)
+        template = WATCHDOG_REASONS.get(event.reason, "неизвестная причина: {minutes}")
+        text = template.format(minutes="?" if event.minutes is None else event.minutes)
+        return f"🚨 <b>{esc(title)}: нужна проверка</b>\n<blockquote>{esc(text)}</blockquote>"
 
     @staticmethod
     def _quarantined(event: RoutesQuarantined) -> str:

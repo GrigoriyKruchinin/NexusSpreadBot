@@ -291,3 +291,29 @@ def test_digest_without_extra_portfolios_has_no_set_block() -> None:
     assert "Наборы бирж" not in text
     assert "копятся" not in text
     assert "Наборы бирж" not in DigestFormatter().render(_cond_data(("bybit",)), "UTC")
+
+
+def test_digest_coverage_block_marks_gaps() -> None:
+    from nexus.domain.digest import SetCoverage
+
+    data = replace(
+        _data(),
+        coverage=(SetCoverage("all", 23, 0, 0), SetCoverage("excl_bybit", 23, 2, 90)),
+    )
+    lines = DigestFormatter().render(data, "UTC").splitlines()
+    assert "🩺 <b>Непрерывность работы сканера</b> (по полным часам)" in lines
+    assert "✅ <code>all</code>: 23 из 23 ч · простой ≈ 0 с" in lines
+    assert "⚠️ <code>excl_bybit</code>: 21 из 23 ч · простой ≈ 1 ч 30 мин" in lines
+
+
+def test_digest_coverage_for_a_set_without_a_full_hour() -> None:
+    from nexus.domain.digest import SetCoverage
+
+    data = replace(_data(), coverage=(SetCoverage("new", 0, 0, 0),))
+    assert "• <code>new</code>: данных за полный час ещё нет" in DigestFormatter().render(
+        data, "UTC"
+    )
+
+
+def test_digest_without_coverage_has_no_block() -> None:
+    assert "Непрерывность" not in DigestFormatter().render(_data(), "UTC")

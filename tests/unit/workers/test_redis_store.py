@@ -57,3 +57,33 @@ async def test_quarantine_store_skips_expired_and_malformed() -> None:
     await redis.set("nexus:quarantine:bad", "{not json")
     await redis.set("nexus:quarantine:bad2", '{"symbol": "X"}')
     assert await store.active() == {}
+
+
+async def test_watchdog_state_roundtrip_and_clear() -> None:
+    from nexus.infra.redis_store import RedisWatchdogState
+    from nexus.interfaces.watchdog import WatchdogState
+
+    redis = fakeredis.FakeAsyncRedis(decode_responses=True)
+    store = RedisWatchdogState(redis)
+    assert await store.get("scanner") == WatchdogState()
+    state = WatchdogState(firing=True, since_ms=123, reason="scanner_stale")
+    await store.save("scanner", state)
+    assert await store.get("scanner") == state
+    assert await redis.ttl("nexus:watchdog:scanner") == -1  # incidents can last for days
+    await store.save("scanner", WatchdogState())
+    assert await redis.get("nexus:watchdog:scanner") is None
+
+
+async def test_watchdog_state_ignores_garbage() -> None:
+    from nexus.infra.redis_store import RedisWatchdogState
+    from nexus.interfaces.watchdog import WatchdogState
+
+    redis = fakeredis.FakeAsyncRedis(decode_responses=True)
+    store = RedisWatchdogState(redis)
+    for raw in ("not json", "[]", '{"firing": true, "since_ms": "x", "reason": 5}'):
+        await redis.set("nexus:watchdog:backup", raw)
+        state = await store.get("backup")
+        assert state.since_ms is None
+        assert state.reason is None
+    await redis.set("nexus:watchdog:backup", "not json")
+    assert await store.get("backup") == WatchdogState()

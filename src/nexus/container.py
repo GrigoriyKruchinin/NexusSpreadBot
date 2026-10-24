@@ -21,7 +21,13 @@ from nexus.config.roles import (
 from nexus.domain.clock import Clock, SystemClock
 from nexus.engine.candidates import CandidateFilter, CandidateFinder
 from nexus.engine.estimator import EstimatorConfig, NetSpreadEstimator
-from nexus.infra.redis_store import RedisCooldownStore, RedisHeartbeat, RedisQuarantineStore
+from nexus.infra.backup_status import FileBackupStatus
+from nexus.infra.redis_store import (
+    RedisCooldownStore,
+    RedisHeartbeat,
+    RedisQuarantineStore,
+    RedisWatchdogState,
+)
 from nexus.interfaces.market_data import BaseExchangeAdapter
 from nexus.notifications.formatting import OpportunityFormatter
 from nexus.notifications.telegram import TelegramNotifier
@@ -37,6 +43,7 @@ from nexus.persistence.repositories import (
     PaperRepository,
     QuarantineRepository,
     RetentionRepository,
+    ScannerActivityRepository,
     SnapshotRepository,
 )
 from nexus.scanner.capstats import CapStatsBuffer
@@ -50,6 +57,7 @@ from nexus.scanner.universe import UniverseFilter
 from nexus.services.alerts import AlertService
 from nexus.services.digest import DigestService
 from nexus.services.maintenance import RetentionService
+from nexus.services.watchdog import LivenessWatchdog
 from nexus.simulation.portfolio import PaperConfig, allocate_capital
 from nexus.workers.dispatch import CeleryAlertDispatcher
 
@@ -268,7 +276,9 @@ async def digest_scope(settings: AlertsWorkerSettings) -> AsyncIterator[DigestSe
     try:
         yield DigestService(
             DigestRepository(
-                create_session_factory(engine), conditional_venues=settings.conditional.venues
+                create_session_factory(engine),
+                conditional_venues=settings.conditional.venues,
+                coverage_min_sweeps_per_hour=settings.watchdog.coverage_min_sweeps_per_hour,
             ),
             notifier,
             SystemClock(),
@@ -287,4 +297,29 @@ async def retention_scope(settings: MaintenanceWorkerSettings) -> AsyncIterator[
             RetentionRepository(create_session_factory(engine)), settings.maintenance
         )
     finally:
+        await engine.dispose()
+
+
+@asynccontextmanager
+async def watchdog_scope(settings: MaintenanceWorkerSettings) -> AsyncIterator[LivenessWatchdog]:
+    """Liveness watchdog for one Celery task.
+
+    Incident state uses the broker's Redis (the maintenance worker has no cache URL, and the
+    state must outlive the worker); alerts go out through the ``alerts`` queue as system events.
+    """
+    from nexus.workers.app import create_celery_app
+
+    engine = create_engine(settings.database, pooled=False)
+    redis = redis_client(settings.celery.broker_url.get_secret_value(), 5.0)
+    try:
+        yield LivenessWatchdog(
+            activity=ScannerActivityRepository(create_session_factory(engine)),
+            backup=FileBackupStatus(settings.watchdog.backup_status_path),
+            state=RedisWatchdogState(redis),
+            dispatcher=CeleryAlertDispatcher(create_celery_app(settings.celery)),
+            clock=SystemClock(),
+            settings=settings.watchdog,
+        )
+    finally:
+        await redis.aclose()
         await engine.dispose()

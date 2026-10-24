@@ -8,7 +8,13 @@ from decimal import Decimal
 from typing import Final
 from zoneinfo import ZoneInfo
 
-from nexus.domain.digest import DigestData, EpisodeStats, PaperStats, PortfolioSummary
+from nexus.domain.digest import (
+    DigestData,
+    EpisodeStats,
+    PaperStats,
+    PortfolioSummary,
+    SetCoverage,
+)
 from nexus.notifications.formatting import (
     QUARANTINE_REASONS,
     SEPARATOR,
@@ -56,6 +62,7 @@ class DigestFormatter:
             *self._paper(data.paper),
             *self._restarts(data.portfolios, local),
             *self._portfolios(data.portfolios, local),
+            *self._coverage(data.coverage),
             SEPARATOR,
             *self._quarantine(data),
             SEPARATOR,
@@ -126,6 +133,24 @@ class DigestFormatter:
             "без истории назад. Строки «фильтр» выше - оценка по уже записанным сделкам."
             "</blockquote>"
         )
+        return lines
+
+    @staticmethod
+    def _coverage(coverage: tuple[SetCoverage, ...]) -> list[str]:
+        """Scanner continuity per set (gap = hours with too few recorded sweeps)."""
+        if not coverage:
+            return []
+        lines = [SEPARATOR, "🩺 <b>Непрерывность работы сканера</b> (по полным часам)"]
+        for c in coverage:
+            if c.hours_expected == 0:
+                lines.append(f"• <code>{esc(c.portfolio_id)}</code>: данных за полный час ещё нет")
+                continue
+            ok = c.hours_expected - c.hours_gap
+            mark = "✅" if c.hours_gap == 0 else "⚠️"
+            lines.append(
+                f"{mark} <code>{esc(c.portfolio_id)}</code>: {ok} из {c.hours_expected} ч"
+                f" · простой ≈ {fmt_duration(c.downtime_min * 60)}"
+            )
         return lines
 
     @staticmethod

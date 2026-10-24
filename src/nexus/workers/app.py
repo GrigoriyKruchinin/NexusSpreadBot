@@ -14,7 +14,12 @@ from celery import Celery
 from celery.schedules import crontab
 from celery.signals import beat_init
 
-from nexus.config.groups import CelerySettings, DigestSettings, MaintenanceSettings
+from nexus.config.groups import (
+    CelerySettings,
+    DigestSettings,
+    MaintenanceSettings,
+    WatchdogSettings,
+)
 from nexus.config.provenance import log_settings_provenance
 
 ALERTS_QUEUE = "alerts"
@@ -24,6 +29,7 @@ TASK_SEND_OPPORTUNITY = "nexus.alerts.send_opportunity"
 TASK_SEND_EVENT = "nexus.alerts.send_event"
 TASK_PURGE = "nexus.maintenance.purge"
 TASK_SEND_DIGEST = "nexus.alerts.send_digest"
+TASK_WATCHDOG = "nexus.maintenance.watchdog"
 
 
 class LocalNow:
@@ -59,14 +65,18 @@ def create_celery_app(
     celery_settings: CelerySettings | None = None,
     maintenance_settings: MaintenanceSettings | None = None,
     digest_settings: DigestSettings | None = None,
+    watchdog_settings: WatchdogSettings | None = None,
 ) -> Celery:
     """Build the Celery app with routing and the beat schedule."""
     settings = celery_settings or CelerySettings()
     maintenance = maintenance_settings or MaintenanceSettings()
     digest = digest_settings or DigestSettings()
+    watchdog = watchdog_settings or WatchdogSettings()
     schedule: dict[str, Any] = {
         "purge-old-rows": {"task": TASK_PURGE, "schedule": maintenance.cleanup_interval_s},
     }
+    if watchdog.enabled:
+        schedule["liveness-watchdog"] = {"task": TASK_WATCHDOG, "schedule": watchdog.interval_s}
     if digest.enabled:
         schedule["daily-digest"] = digest_schedule(digest)
     app = Celery("nexus", broker=settings.broker_url.get_secret_value())

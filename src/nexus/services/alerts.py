@@ -12,6 +12,7 @@ from nexus.domain.events import (
     AlertContext,
     EpisodeClosed,
     ExchangeRecovered,
+    WatchdogRecovered,
     event_from_payload,
 )
 from nexus.interfaces.notifications import INotifier, OutgoingMessage
@@ -111,7 +112,7 @@ class AlertService:
             if age_ms > self._event_max_age_ms:
                 log.warning("event_expired", kind=event.kind, age_ms=age_ms)
                 return AlertOutcome.EXPIRED
-        silent = isinstance(event, ExchangeRecovered | EpisodeClosed)
+        silent = isinstance(event, ExchangeRecovered | EpisodeClosed | WatchdogRecovered)
         await self._notifier.send(OutgoingMessage(text=self._events.render(event), silent=silent))
         log.info("event_sent", kind=event.kind)
         return AlertOutcome.SENT

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 
 from nexus.domain.models import ZERO
 
 HUNDRED = Decimal(100)
+HOUR_MS = 3_600_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,6 +116,44 @@ class PortfolioSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class SetCoverage:
+    """How continuously the scanner swept one shadow portfolio (venue set) in the window.
+
+    Only complete hours after the set's first record are judged; the partial first and last
+    hours are skipped, so a set added today is never blamed for the time before it existed.
+    """
+
+    portfolio_id: str
+    hours_expected: int
+    hours_gap: int
+    """Hours with fewer sweeps than the configured minimum (includes hours with no row)."""
+    downtime_min: int
+    """Missing share of the minimum sweep count per hour, as minutes (60 = hour fully dark)."""
+
+
+def compute_set_coverage(
+    sweeps_by_hour: Mapping[str, Mapping[int, int]],
+    first_seen_ms: Mapping[str, int],
+    window_start_ms: int,
+    window_end_ms: int,
+    min_sweeps_per_hour: int,
+) -> tuple[SetCoverage, ...]:
+    """Per-set gap accounting from ``paper_cap_stats.sweeps`` (hour start ms -> sweeps)."""
+    first_full = -(-window_start_ms // HOUR_MS) * HOUR_MS  # ceil to a whole hour
+    last_end = window_end_ms - window_end_ms % HOUR_MS
+    result: list[SetCoverage] = []
+    for pid, first_seen in sorted(first_seen_ms.items()):
+        start = max(first_full, first_seen - first_seen % HOUR_MS + HOUR_MS)
+        hours = range(start, last_end, HOUR_MS)
+        counts = sweeps_by_hour.get(pid, {})
+        gaps = [h for h in hours if counts.get(h, 0) < min_sweeps_per_hour]
+        missing = sum(round(60 * (1 - counts.get(h, 0) / min_sweeps_per_hour)) for h in gaps)
+        result.append(SetCoverage(pid, len(hours), len(gaps), missing))
+    result.sort(key=lambda c: (c.portfolio_id != "all", c.portfolio_id))
+    return tuple(result)
+
+
+@dataclass(frozen=True, slots=True)
 class QuarantineSummary:
     """A quarantine started in the window."""
 
@@ -143,3 +183,5 @@ class DigestData:
     """Qualifying evaluations that were not alerted for lack of a verified transfer path."""
     portfolios: tuple[PortfolioSummary, ...] = ()
     """Shadow portfolios that have records (``all`` first)."""
+    coverage: tuple[SetCoverage, ...] = ()
+    """Per-set scanner coverage / downtime in the window (empty = nothing recorded)."""

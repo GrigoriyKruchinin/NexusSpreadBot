@@ -465,3 +465,29 @@ class MaintenanceSettings(NexusBaseSettings):
     episode_retention_days: int = Field(default=90, ge=1)
     """Closed opportunity episodes and the quarantine history (digest analytics)."""
     cleanup_interval_s: int = Field(default=3_600, ge=60)
+
+
+class WatchdogSettings(NexusBaseSettings):
+    """Liveness watchdog and coverage accounting (``WATCHDOG_*``)."""
+
+    model_config = SettingsConfigDict(env_prefix="WATCHDOG_")
+
+    enabled: bool = True
+    interval_s: int = Field(default=300, ge=60)
+    """Period of the beat task that checks the scanner and the backup status."""
+    scanner_stale_min: int = Field(default=10, ge=2)
+    """Alert when the scanner recorded no exchange call for this many minutes."""
+    backup_status_path: str = "/backups/last_backup.json"
+    """Status file written by ``scripts/backup.sh`` (mounted read-only into the worker)."""
+    backup_max_age_h: int = Field(default=26, ge=1)
+    """Alert when the last backup finished longer ago than this (daily cron + slack)."""
+    coverage_min_sweeps_per_hour: int = Field(default=60, ge=1)
+    """An hour with fewer recorded sweeps of a set counts as a scanner gap in the digest."""
+
+    @field_validator("backup_status_path")
+    @classmethod
+    def _absolute_path(cls, value: str) -> str:
+        if not value.strip().startswith("/"):
+            msg = "WATCHDOG_BACKUP_STATUS_PATH must be an absolute path"
+            raise ValueError(msg)
+        return value.strip()

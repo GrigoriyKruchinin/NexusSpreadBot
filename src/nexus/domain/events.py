@@ -17,6 +17,8 @@ EventKind = Literal[
     "exchange_recovered",
     "episode_closed",
     "routes_quarantined",
+    "watchdog_alert",
+    "watchdog_recovered",
 ]
 
 
@@ -107,6 +109,28 @@ class RoutesQuarantined:
     duration_h: int
 
 
+@dataclass(frozen=True, slots=True)
+class WatchdogAlert:
+    """A liveness check failed (once per incident). Carries codes and numbers only."""
+
+    kind: ClassVar[EventKind] = "watchdog_alert"
+    check: str
+    """``scanner`` or ``backup``."""
+    reason: str
+    """Reason code, rendered to Russian text by the notifier."""
+    minutes: int | None = None
+    """Age of the last sign of life / last backup, in minutes (``None`` = unknown)."""
+
+
+@dataclass(frozen=True, slots=True)
+class WatchdogRecovered:
+    """The failed check is healthy again (sent once after a :class:`WatchdogAlert`)."""
+
+    kind: ClassVar[EventKind] = "watchdog_recovered"
+    check: str
+    downtime_min: int
+
+
 SystemEvent = (
     ScannerStarted
     | ScannerStopped
@@ -114,6 +138,8 @@ SystemEvent = (
     | ExchangeRecovered
     | EpisodeClosed
     | RoutesQuarantined
+    | WatchdogAlert
+    | WatchdogRecovered
 )
 
 _EVENT_TYPES: dict[str, type[Any]] = {
@@ -125,6 +151,8 @@ _EVENT_TYPES: dict[str, type[Any]] = {
         ExchangeRecovered,
         EpisodeClosed,
         RoutesQuarantined,
+        WatchdogAlert,
+        WatchdogRecovered,
     )
 }
 
@@ -198,6 +226,8 @@ __all__ = [
     "ScannerStarted",
     "ScannerStopped",
     "SystemEvent",
+    "WatchdogAlert",
+    "WatchdogRecovered",
     "decimal_str",
     "event_from_payload",
     "event_to_payload",

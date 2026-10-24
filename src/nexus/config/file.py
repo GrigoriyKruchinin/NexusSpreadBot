@@ -106,6 +106,12 @@ TOML_ALLOWED: frozenset[str] = frozenset(
         "DIGEST_ENABLED",
         "DIGEST_TIME",
         "DIGEST_TZ",
+        "WATCHDOG_ENABLED",
+        "WATCHDOG_INTERVAL_S",
+        "WATCHDOG_SCANNER_STALE_MIN",
+        "WATCHDOG_BACKUP_STATUS_PATH",
+        "WATCHDOG_BACKUP_MAX_AGE_H",
+        "WATCHDOG_COVERAGE_MIN_SWEEPS_PER_HOUR",
     }
 )
 

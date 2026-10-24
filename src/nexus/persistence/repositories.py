@@ -16,12 +16,15 @@ from sqlalchemy.orm import aliased
 
 from nexus.domain.conditional import touches_conditional
 from nexus.domain.digest import (
+    HOUR_MS,
     DigestData,
     EpisodeStats,
     EpisodeSummary,
     PaperStats,
     PortfolioSummary,
     QuarantineSummary,
+    SetCoverage,
+    compute_set_coverage,
 )
 from nexus.domain.episodes import EpisodeCloseReason, OpportunityEpisode
 from nexus.domain.models import MarketInfo
@@ -54,6 +57,7 @@ from nexus.interfaces.repositories import (
     PortfolioRun,
     RunDefinition,
 )
+from nexus.interfaces.watchdog import IScannerActivity
 from nexus.persistence.models import (
     AlertLogRow,
     ExchangeHealthRow,
@@ -773,9 +777,15 @@ def rebalance_free_clause(conditional: Collection[str]) -> ColumnElement[bool]:
 class DigestRepository(_Repository, IDigestRepository):
     """Read-only aggregates for the daily digest."""
 
-    def __init__(self, sessions: Sessions, conditional_venues: Collection[str] = ()) -> None:
+    def __init__(
+        self,
+        sessions: Sessions,
+        conditional_venues: Collection[str] = (),
+        coverage_min_sweeps_per_hour: int = 60,
+    ) -> None:
         super().__init__(sessions)
         self._conditional = tuple(conditional_venues)
+        self._min_sweeps = coverage_min_sweeps_per_hour
 
     async def collect(self, since_ms: int, until_ms: int) -> DigestData:
         """Aggregate the window ``[since_ms, until_ms)``."""
@@ -794,6 +804,7 @@ class DigestRepository(_Repository, IDigestRepository):
             quarantines, active = await self._quarantines(session, since, until)
             uptime = await self._uptime(session, since, until)
             coverage = await self._coverage(session, until)
+            set_coverage = await self._set_coverage(session, since_ms, until_ms)
         return DigestData(
             window_start_ms=since_ms,
             window_end_ms=until_ms,
@@ -806,7 +817,32 @@ class DigestRepository(_Repository, IDigestRepository):
             conditional_venues=self._conditional,
             unverified_evaluations=int(unverified or 0),
             portfolios=portfolios,
+            coverage=set_coverage,
         )
+
+    async def _set_coverage(
+        self, session: AsyncSession, since_ms: int, until_ms: int
+    ) -> tuple[SetCoverage, ...]:
+        """Scanner downtime per venue set from the hourly ``paper_cap_stats.sweeps`` counters."""
+        stats = PaperCapStatsRow
+        first_seen = {
+            pid: datetime_to_ms(first)
+            for pid, first in (
+                await session.execute(
+                    select(stats.portfolio_id, func.min(stats.hour)).group_by(stats.portfolio_id)
+                )
+            ).all()
+        }
+        by_hour: dict[str, dict[int, int]] = {}
+        rows = await session.execute(
+            select(stats.portfolio_id, stats.hour, stats.sweeps).where(
+                stats.hour >= ms_to_datetime(since_ms - HOUR_MS),
+                stats.hour < ms_to_datetime(until_ms),
+            )
+        )
+        for pid, hour, sweeps in rows.all():
+            by_hour.setdefault(pid, {})[datetime_to_ms(hour)] = int(sweeps)
+        return compute_set_coverage(by_hour, first_seen, since_ms, until_ms, self._min_sweeps)
 
     @staticmethod
     async def _portfolios(
@@ -1188,3 +1224,15 @@ __all__ = [
     "evaluation_to_row",
     "row_to_evaluation",
 ]
+
+
+class ScannerActivityRepository(_Repository, IScannerActivity):
+    """Latest recorded exchange call = the scanner is sweeping (primary-key index, O(1))."""
+
+    async def last_activity_ms(self) -> int | None:
+        """Epoch ms of the newest ``exchange_health`` row, ``None`` if the table is empty."""
+        async with self._sessions() as session:
+            checked_at = await session.scalar(
+                select(ExchangeHealthRow.checked_at).order_by(ExchangeHealthRow.id.desc()).limit(1)
+            )
+        return None if checked_at is None else datetime_to_ms(checked_at)

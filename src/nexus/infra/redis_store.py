@@ -10,6 +10,7 @@ from redis.asyncio import Redis
 from nexus.domain.clock import Clock
 from nexus.domain.quarantine import QuarantineReason, RouteQuarantine
 from nexus.interfaces.coordination import ICooldownStore, IHeartbeat, IQuarantineStore
+from nexus.interfaces.watchdog import IWatchdogState, WatchdogState
 
 log = structlog.get_logger(__name__)
 
@@ -113,3 +114,36 @@ class RedisQuarantineStore(IQuarantineStore):
     async def lift(self, route_key: str) -> bool:
         """End a quarantine early."""
         return bool(await self._redis.delete(f"{self._KEY}{route_key}"))
+
+
+class RedisWatchdogState(IWatchdogState):
+    """Incident state per check as one JSON value (no expiry: an incident can last for days)."""
+
+    def __init__(self, redis: Redis) -> None:
+        self._redis = redis
+
+    async def get(self, check: str) -> WatchdogState:
+        """Stored state; unreadable or missing values mean "no incident"."""
+        raw = await self._redis.get(f"{_PREFIX}watchdog:{check}")
+        if raw is None:
+            return WatchdogState()
+        try:
+            data = json.loads(raw)
+            since = data.get("since_ms")
+            reason = data.get("reason")
+            return WatchdogState(
+                firing=bool(data.get("firing")),
+                since_ms=since if isinstance(since, int) else None,
+                reason=reason if isinstance(reason, str) else None,
+            )
+        except (ValueError, AttributeError):
+            return WatchdogState()
+
+    async def save(self, check: str, state: WatchdogState) -> None:
+        """Replace the stored state (an empty state deletes the key)."""
+        key = f"{_PREFIX}watchdog:{check}"
+        if not state.firing and state.since_ms is None:
+            await self._redis.delete(key)
+            return
+        payload = {"firing": state.firing, "since_ms": state.since_ms, "reason": state.reason}
+        await self._redis.set(key, json.dumps(payload))
