@@ -37,6 +37,10 @@ test-integration: ## Run integration tests (requires `make up-local`)
 
 check: lint typecheck test ## Lint + typecheck + unit tests
 
+.PHONY: go-report
+go-report: ## GO report (Markdown+JSON) from the paper portfolios; read-only DB role; ARGS="--go-set excl_conditional --until 2026-11-14"
+	uv run python -m nexus.reports.go_report $(ARGS)
+
 # ---------------------------------------------------------------- docker (local)
 .PHONY: check-env-settings up-local down-local ps-local logs migrate revision
 check-env-settings: ## Print NAMES of setting lines left in .env (values never shown)
