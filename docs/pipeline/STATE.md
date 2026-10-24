@@ -1,6 +1,12 @@
 # STATE (updated 2026-10-24)
 
 ## Where we are
+- **User decision 2026-10-24 ~15:45Z: WAIT MODE.** No more work on reboot auto-recovery for now. User keeps the PC on and
+  restarts containers himself (or asks the orchestrator: `docker compose start`, no recreate) if they are down. Gaps in
+  soak data are acceptable; analysis uses whatever data exists. D-01 re-check and the auto-recovery guide steps are
+  OPTIONAL (not blocking). User returns in ~1 week (~2026-10-31) to request the soak analysis.
+  On return: check `docker ps`, count gaps (downtime) in scanner data, D-08 digests, then soak analysis (B15 GO report,
+  4 venue sets). Retention fix (paper snapshots thinned to 1/day, not deleted) is deployed in all app containers.
 - Trajectory M. Branch `chore/agent-pipeline-adoption` (pushed; CI with 7 jobs, green on the last recorded run).
   Not merged to `main` (only with user consent).
 - Quality ratchet: 1041 unit tests, branch coverage 91.5 %, ruff 0, mypy --strict 0 (floor 89 %).
