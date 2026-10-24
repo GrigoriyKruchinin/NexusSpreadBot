@@ -33,6 +33,18 @@ from nexus.domain.errors import (
     ReadOnlyViolationError,
 )
 
+
+@pytest.fixture(autouse=True)
+def _key_policy_env_off_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A developer's local .env may set KEY_POLICY_*; process env wins over dotenv."""
+    for name in (
+        "KEY_POLICY_IP_BINDING_WAIVED",
+        "KEY_POLICY_KUCOIN_IP_ATTESTED",
+        "KEY_POLICY_GATEIO_PERMISSIONS_ATTESTED",
+    ):
+        monkeypatch.setenv(name, "false")
+
+
 FAKE_KEY = "AKIA-FAKE-KEY-1234"
 FAKE_UID = "uid-99887766"
 FAKE_LABEL = "my-secret-label"
@@ -71,7 +83,9 @@ KUCOIN_OK: dict[str, Any] = {
     "data": {"permission": "General", "apiKey": FAKE_KEY, "uid": FAKE_UID, "remark": FAKE_LABEL},
 }
 GATEIO_OK: dict[str, Any] = {"user_id": FAKE_UID, "ip_whitelist": ["203.0.113.7"], "tier": 1}
-ATTESTED = KeyPolicySettings(kucoin_ip_attested=True, gateio_permissions_attested=True)
+ATTESTED = KeyPolicySettings(
+    kucoin_ip_attested=True, gateio_permissions_attested=True, ip_binding_waived=False
+)
 OK = {
     "binance": BINANCE_OK,
     "bybit": BYBIT_OK,
@@ -303,7 +317,9 @@ def test_attestation_flags_come_from_env(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 # ---------------------------------------------------------------- IP binding waiver
-WAIVED = KeyPolicySettings(ip_binding_waived=True)
+WAIVED = KeyPolicySettings(
+    ip_binding_waived=True, kucoin_ip_attested=False, gateio_permissions_attested=False
+)
 
 
 def test_waiver_default_off_and_same_as_before() -> None:

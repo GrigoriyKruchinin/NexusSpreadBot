@@ -274,3 +274,15 @@ def test_bootstrap_roles_target_is_safe() -> None:
     assert not re.search(
         r"(?im)^[^-\n]*\bPASSWORD\b", sql
     )  # roles are socket-only, no secret to supply
+
+
+@pytest.mark.parametrize("compose", COMPOSE_FILES)
+def test_ip_binding_waiver_reaches_only_the_scanner(compose: str) -> None:
+    """KP-W / F-1: the env-only waiver is wired to the scanner and to no other service."""
+    services = _load(compose)["services"]
+    holders = {
+        name
+        for name, svc in services.items()
+        if "KEY_POLICY_IP_BINDING_WAIVED" in (svc.get("environment") or {})
+    }
+    assert holders == {"scanner"}

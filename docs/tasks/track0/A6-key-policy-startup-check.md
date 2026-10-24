@@ -43,6 +43,9 @@ rules stay fatal. `verify_key_policies` returns the sorted IP-unbound venue name
 message. There is no environment/deploy-name setting in the code, so the "refuse on server/prod" guard
 does not exist yet: **A5d must add it** (fail closed when the waiver is set on a VPS/prod deployment);
 tracked in `todo.md` under A5d. Until then the guard is the user's own discipline plus guide wording.
+Compose wiring (security F-1/F-2): `KEY_POLICY_IP_BINDING_WAIVED` is passed to the scanner only, via
+`x-scanner-env` in `docker-compose.local.yml` (default empty = off); it is documented in `.env.example`
+(`false`). No production compose file exists yet; when A5d adds one it must NOT pass this variable.
 
 ## Out of scope
 Real-key verification of [U] items (done at U3 with the user), gateio `main_keys` probe, runtime
