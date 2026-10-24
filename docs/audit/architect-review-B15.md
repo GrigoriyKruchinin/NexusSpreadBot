@@ -103,3 +103,71 @@ needs a second migration.
 ## Re-review
 
 Points 1-3 only. Expect one short round.
+
+## Round 2 (fix commit c61b060)
+
+- reviewer: architect
+- date: 2026-10-23
+- scope: migration `b15a7c3e91d2` (now also `paper_portfolios`, `paper_cap_stats`),
+  `models.py` (`PaperPortfolioRow`, `PaperCapStatsRow`), `PaperRepository.ensure_run` /
+  `load_state` / `add_cap_stats`, `DigestRepository._portfolios`, `RetentionRepository.purge`,
+  `scanner/paper.py` `start()`, `tests/integration/test_migration_b15.py`,
+  `tests/integration/test_paper_portfolios.py`. Static review only; no DB touched.
+
+### Verdict: ACCEPT
+
+### Round 1 points
+
+1. **Closed.** `since` = `paper_portfolios.started_at` of the current run (latest `id` per name).
+   The registry is never purged, and `load_state` and `_portfolios` read it. The integration test
+   `test_since_survives_snapshot_retention` covers it.
+2. **Closed, with a different design that I accept.** On a definition change the code starts a
+   fresh run instead of failing closed. A run is a `(portfolio_id, started_at)` window, and every
+   run-scoped read binds `>= started_at` (snapshots, in-flight rebalances, realized, costs, digest
+   trades and fees). So rows of the old and new definitions never mix in state or summaries. The
+   hash covers venues, capital and the sizing/rebalancing parameters, so a silent redefinition is
+   no longer possible. The cost: a config tweak resets that set's `since` (see R2-N1).
+3. **Closed.** Every touched table is seeded (trades included). The test asserts `[("all",)]`
+   exactly, NOT NULL / default `'all'` / length 32, the index sets after upgrade and after
+   downgrade (`pg_indexes`), the legacy-run backfill (earliest row across the three tables), the
+   empty-table case with no legacy run, the rolling-deploy insert, per-table counts equal to
+   `before` after downgrade, the new tables dropped, and an idempotent re-upgrade.
+
+### New tables
+
+- **`paper_portfolios`**: BIGINT surrogate PK (BIGSERIAL), with no unique key on `portfolio_id`.
+  That is right for a run history. Columns match the model (`Money` = `Numeric()`, `String(32)`,
+  `String(64)` fits a sha256 hex string). The backfill is correct: `least()` ignores NULLs,
+  `WHERE first_at IS NOT NULL` skips empty DBs, and hash `'legacy'` never matches a real
+  definition, so `all` starts fresh at the configured capital. Size is a few rows. It is outside
+  retention, which is correct.
+- **`paper_cap_stats`**: natural PK `(portfolio_id, hour)` serves the additive
+  `ON CONFLICT DO UPDATE` upsert. Counter defaults match the model. Growth is 24 rows/day per set
+  (about 100/day for 4 sets), so leaving it outside retention is fine: it is soak evidence.
+- **Retention interaction**: purge keeps the latest snapshot set per `portfolio_id`, which is the
+  current run's. Old runs' snapshots age out as intended. Old runs' trades and rebalances are not
+  purged (same as before B15).
+- **Downgrade**: drops both tables first, then the round-1 behaviour (shadow rows deleted, indexes
+  and column restored). A re-upgrade rebuilds one legacy run from the surviving `all` rows. Any
+  post-B15 `all` run history then folds into "legacy". That is acceptable, because downgrade on
+  live is gated on a fresh A5a dump (round 1, N4).
+- **Live-apply safety**: unchanged from round 1. It is one transaction, the new tables are
+  created empty, the legacy INSERT is three `min()` aggregates over small tables, and the order is
+  backup -> restore drill -> stop scanner -> migrator -> start. Expected duration is well under 10 s.
+
+### Non-blocking (track, do not hold B15)
+
+- R2-N1. A new run for a name that already had one resets that set's `since`, including `all`
+  (the GO baseline). Today this is only `log.info("paper_run_started")`. Raise it to WARNING and
+  show it in the digest ("run restarted at X, reason: definition changed"). The part-2 GO report
+  must compare sets only over the window where their runs overlap.
+- R2-N2. Run membership is time-based (`>= started_at`, app clock), not a `run_id` column on the
+  rows. This is exact under the single-writer rule (scanner stopped during deploy). It would mix
+  rows if two scanners ever ran at once, or if a row's `at_ms` came before `now_ms()` at start. If
+  either becomes possible, add a `run_id` FK column on the three paper tables. That is cheapest
+  before U4.
+- R2-N3. `ensure_run` has no guard against two concurrent starters (no unique constraint, no
+  advisory lock). It is harmless while there is one scanner, because the latest `id` wins.
+  `ix_paper_portfolios_portfolio_started_at` does not serve `ORDER BY id`. `(portfolio_id, id)`
+  would, but the table is tiny, so leave it.
+- Round-1 N1-N4 remain open as tracked.
