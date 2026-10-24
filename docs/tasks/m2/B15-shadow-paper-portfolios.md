@@ -6,7 +6,7 @@
 - reviewers: tech-lead (diff), quant-analyst (semantics, report), architect (schema/migration)
 - complexity: high (paper-simulation state per set, DB migration, concurrency of N portfolios, report math)
 - depends_on: B14 (done, returned fixes must be closed), A5a (backups + verified restore drill into `nexus_test`), user OK (U4) before the migration touches the live DB
-- status: part 1 done (Scope 1-4, digest, R2-1; AC 1-5, 7, 8; part 1 commits f9ac581, c61b060, 2854904, 8ffb9c3 (+F1/F3); TL r3 ACCEPT), part 2 pending (Scope 5 quant GO report, AC 6; spec `docs/quant/b15-review-and-report-spec.md`)
+- status: part 1 done (Scope 1-4, digest, R2-1; AC 1-5, 7, 8; part 1 commits f9ac581, c61b060, 2854904, 8ffb9c3 (+F1/F3); TL r3 ACCEPT), part 2 implemented, review pending (Scope 5 quant GO report, AC 5-6; integration test runs in CI only; spec `docs/quant/b15-review-and-report-spec.md`)
 - Config note (2026-10-24): venue sets now live in `config/nexus.toml` as `[paper] venue_sets` (env `PAPER_VENUE_SETS` overrides). The soak runs 4 sets: all, excl_conditional, excl_bybit, excl_gateio.
 
 ## Goal
@@ -95,6 +95,6 @@ appears -> `NEEDS_USER` (raise limits / lower cap / fewer sets). Prometheus metr
 a follow-up. Also read `paper_cap_stats` (per-set heartbeat and cap effect) at the same checkpoint.
 
 ## Part 2 items (from tech-lead round 3)
-- [ ] F2: runtime-fetched per-venue fees are NOT part of the run hash (fee tiers are exchange-side
+- [x] F2 (disclosed in the report, per-trade breakdown relied on): runtime-fetched per-venue fees are NOT part of the run hash (fee tiers are exchange-side
   facts). Disclose in the GO report: fee source = live exchange metadata, applied per trade;
   record a fee-table snapshot at run start (or rely on the per-trade breakdown).
