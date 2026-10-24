@@ -28,10 +28,11 @@
 2. (done) A5a reviews + leftovers.
 3. (done) Stage-end Track 0 + B14: regression clean (`docs/reports/regression-track0-B14.md`), delta audit
    `docs/audit/delta-track0-B14.md` (R-01/05/06/07 closed; new D-01..D-07; pre-soak gates in todo M3).
-4. **B15** (in progress: part 1 = config/sim/migration with backend-lead; part 2 = GO report with quant) shadow paper portfolios (needs migration; A5a gate passed; user U4 OK required before
+4. **B15** (part 1 ACCEPTED by architect/quant/tech-lead; part 2 = GO report, can run in parallel with the soak) shadow paper portfolios (needs migration; A5a gate passed; user U4 OK required before
    applying to live `nexus`; capital $10,000 per set; includes R2-1 fix).
 5. **B16** public-only probe of batch 1 per legal verdicts: BingX, XT, Toobit OK; Bitfinex, Phemex
    public only. Batch 2: WEEX after DNI; DigiFinex, Deepcoin public only; Poloniex, LBank do not register.
+5a. (done) A7 config file `config/nexus.toml`, `.env` = secrets + ENV-ONLY; 4 soak sets set in TOML. User must run `make check-env-settings` and move non-default values from `.env` before the fresh stack.
 6. Remaining Track 0: A5b Redis auth, A5c DB roles, A5d (deferred to VPS), A6 follow-ups.
 7. Then soak (needs B15 + backups running), quant, GO/NO-GO.
 

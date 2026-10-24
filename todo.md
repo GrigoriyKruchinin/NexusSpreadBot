@@ -30,7 +30,8 @@ Ticks only after verification and commit.
 - [x] B1a remove MEXC_*/BITGET_* key vars from scanner env + `.env.example` (G5; low) — card `docs/tasks/track0/B1a-remove-unused-key-vars.md`
 - [ ] LICENSE decision (user)
 
-- [ ] A7 non-secret settings to committed `config/nexus.toml`, `.env` = secrets only (user decision 2026-10-23; after B15 part 1; security split pre-check; backend-lead; medium) — card `docs/tasks/track0/A7-config-file.md`
+- [x] A7 non-secret settings to committed `config/nexus.toml`, `.env` = secrets only (user decision 2026-10-23; after B15 part 1; security split pre-check; backend-lead; medium) — card `docs/tasks/track0/A7-config-file.md`. Accepted: security r1, tech-lead r2.
+  - [ ] A7 follow-ups: check-env-settings clean error on bad .env encoding (TL R2-1), louder warning in up-local (R2-2), gitleaks `api-key` hyphen (R2-3) — `docs/audit/tech-lead-review-A7.md` Round 2
 
 ## Track 1 — Retro-verification
 - [ ] `/audit`-style review for items 1.5.6 and 1.5.11 (security + tech-lead)
@@ -51,7 +52,7 @@ Ticks only after verification and commit.
 - [ ] B12 reaper for stale `SENDING` alert rows + payload version `v` (backend-lead, L)
 - [ ] B13 WS fixes: `_give_up` unwatches, stream errors feed health tracker (backend-lead, L)
 - [x] B14 (5ba4f07 + e23024d; tech-lead round 2: accepted) `CONDITIONAL_VENUES` (default bybit,gateio): every aggregate shows the list and combined totals ALL vs EXCLUDING conditional venues; marker on alerts (backend-lead + observability-engineer; medium) — card `docs/tasks/m2/B14-conditional-venues-reporting.md`
-- [ ] B15 shadow paper portfolios per venue set (config `PAPER_VENUE_SETS`, default `all` + `excl_conditional`, own inventory/rebalancing/top-N cap, same fixed capital; migration `portfolio_id` needs A5a restore drill + user OK U4; data accrues from the moment a set is added; quant GO report reads per-set results; backend-lead + quant-analyst; high) — card `docs/tasks/m2/B15-shadow-paper-portfolios.md`
+- [ ] B15 shadow paper portfolios (part 1 config/sim/persistence/migration DONE: architect r2, quant r2, tech-lead r3 ACCEPT + F1/F3; part 2 GO report generator per `docs/quant/b15-review-and-report-spec.md` incl. F2 fee disclosure: todo) per venue set (config `PAPER_VENUE_SETS`, default `all` + `excl_conditional`, own inventory/rebalancing/top-N cap, same fixed capital; migration `portfolio_id` needs A5a restore drill + user OK U4; data accrues from the moment a set is added; quant GO report reads per-set results; backend-lead + quant-analyst; high) — card `docs/tasks/m2/B15-shadow-paper-portfolios.md`
 - [ ] B16 public-only probe of expansion batch 1 (BingX, XT, Toobit, Bitfinex, Phemex; no keys, conditional by default, per-venue lawyer ToS gate, report in `docs/reports/`; backend-lead + crypto-specialist; medium) — card `docs/tasks/m2/B16-public-probe-expansion-batch1.md`
 - [ ] C0 characterization pack for `Scanner.sweep`/`run` before the split (tester, L-M; after R-02/B3/B4)
 - [ ] Backlog, no card (user idea G2): optional per-exchange proxy setting in adapters (ccxt proxy), off by default, proxy URL is a secret; gated by lawyer ToS check per core exchange on proxy/VPN use; design with the user when a server is discussed
