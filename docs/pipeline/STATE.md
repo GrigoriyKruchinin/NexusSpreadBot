@@ -3,11 +3,13 @@
 ## Where we are
 - Trajectory M. Branch `chore/agent-pipeline-adoption` (pushed; CI with 7 jobs, green on the last recorded run).
   Not merged to `main` (only with user consent).
-- Quality ratchet: 1028 unit tests, branch coverage 91.5 %, ruff 0, mypy --strict 0 (floor 89 %).
+- Quality ratchet: 1041 unit tests, branch coverage 91.5 %, ruff 0, mypy --strict 0 (floor 89 %).
 - Fresh stack UP since 2026-10-24 13:32Z on volumes `nexus-local_*-soak1` (old volumes kept; archive dump
   `nexus-archive-20261024T132431Z` in ~/nexus-backups/archive + C:). Migrations at head b15a7c3e91d2, roles bootstrapped.
-  BLOCKER (U3): scanner parked by A6 key policy: binance/okx `ip_not_restricted`, kucoin `attestation_required:ip_binding`,
-  gateio auth failed. User fixes keys (IP whitelist + attestation flags in .env), then `make up-local` to recreate scanner.
+  SOAK RUNNING since 2026-10-24 14:05Z (scanner healthy, 4 paper runs started). Keys: binance/okx/kucoin pass
+  with IP-binding waiver (KP-W); bybit and gateio public mode (gateio key rejected with auth error twice; user
+  commented it out; Gate support question stays in go-gates-checklist). D-03 first dump + restore drill PASSED
+  14:06Z. Pending: D-01 live restart check (restart Docker/WSL once), first digest check (D-08), 24 h checkpoint.
 
 ## Stage S0 (pre-soak gates) closed
 - Accepted: B15 part 1 (TL r3), A7 (security r1, TL r2), S0 (TL r2 `343df63`, security r2 `1fb8d60`), tester regression,
