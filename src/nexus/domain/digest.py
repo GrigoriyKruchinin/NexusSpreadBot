@@ -108,6 +108,9 @@ class PortfolioSummary:
     trades: int
     hedged_pnl_usd: Decimal
     """Realized arbitrage minus virtual transfer fees since ``since_ms``."""
+    restarted: bool = False
+    """The run began inside the digest window although an earlier run of this set existed
+    (its definition changed): the set restarted with full capital and this new ``since``."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -7,6 +7,7 @@ from decimal import Decimal as D
 from types import SimpleNamespace
 
 import pytest
+from structlog.testing import capture_logs
 
 from nexus.domain.spread import TransferQuote, TransferStatus
 from nexus.engine.candidates import SetSweepStats
@@ -407,3 +408,107 @@ async def test_exceptions_are_isolated_and_logged_with_traceback() -> None:
 
     book.trader("ab").on_sweep = boom  # type: ignore[method-assign]
     await book.on_sweep(lambda *_: UNKNOWN)  # does not raise
+
+
+def test_strategy_parameters_are_part_of_the_run_hash() -> None:
+    clock, repo = ManualClock(), MemoryPaper()
+    base = _trader(repo, "ab", AB, clock)
+    est = base._estimator.config
+    cfg = base._config
+
+    def other(
+        estimator: EstimatorConfig | None = None, strategy: dict[str, str] | None = None
+    ) -> PaperTrader:
+        return PaperTrader(
+            cfg,
+            repo,
+            NetSpreadEstimator(estimator or est, clock),
+            clock,
+            portfolio_id="ab",
+            venues=AB,
+            strategy=strategy,
+        )
+
+    reference = other(strategy={"latency_ms": "2000", "max_candidates_per_sweep": "30"})
+    assert (
+        reference.definition()
+        == other(strategy={"max_candidates_per_sweep": "30", "latency_ms": "2000"}).definition()
+    )
+    changed = (
+        other(replace(est, min_net_profit_pct=D("0.5")), reference._strategy),
+        other(replace(est, min_net_profit_usd=D(9)), reference._strategy),
+        other(replace(est, max_orderbook_age_ms=1000), reference._strategy),
+        other(replace(est, max_gross_spread_pct=D(10)), reference._strategy),
+        other(strategy={"latency_ms": "500", "max_candidates_per_sweep": "30"}),
+        other(strategy={"latency_ms": "2000", "max_candidates_per_sweep": "60"}),
+        other(strategy={"latency_ms": "2000"}),
+    )
+    for trader in changed:
+        assert trader.definition().config_hash != reference.definition().config_hash
+
+
+async def test_changed_strategy_starts_a_fresh_run_and_warns() -> None:
+    clock, repo = ManualClock(), MemoryPaper()
+    first = _trader(repo, "ab", AB, clock)
+    await first.start()
+    assert first.run is not None
+    assert first.run.created
+    clock.now += 60_000
+    changed = PaperTrader(
+        first._config,
+        repo,
+        first._estimator,
+        clock,
+        portfolio_id="ab",
+        venues=AB,
+        strategy={"latency_ms": "100"},
+    )
+    with capture_logs() as logs:
+        await changed.start()
+    assert changed.run is not None
+    assert changed.run.created
+    assert changed.run.started_at_ms == clock.now
+    [event] = [e for e in logs if e["event"] == "paper_run_restarted"]
+    assert event["log_level"] == "warning"
+    assert event["portfolio"] == "ab"
+    assert event["since_ms"] == clock.now
+    assert event["previous_hash"] == first.definition().config_hash[:12]
+    assert event["config_hash"] == changed.definition().config_hash[:12]
+    assert not any(e["event"] == "paper_run_started" for e in logs)
+
+
+async def test_cap_stats_flush_times_out_without_losing_counters() -> None:
+    repo = MemoryPaper()
+    buf = CapStatsBuffer(repo, flush_interval_ms=1000, flush_timeout_s=0.05)
+    buf.add_sweep(HOUR_MS, {"all": SetSweepStats(eligible=4, selected=2)})
+    ok_add = repo.add_cap_stats
+
+    async def hang(deltas: list[CapStatsDelta]) -> None:
+        await asyncio.sleep(10)
+
+    repo.add_cap_stats = hang  # type: ignore[method-assign,assignment]
+    await buf.flush(HOUR_MS, force=True)  # returns after the timeout, does not raise
+    assert repo.cap_stats == []
+    repo.add_cap_stats = ok_add  # type: ignore[method-assign]
+    await buf.flush(HOUR_MS + 10, force=True)
+    assert [(d.portfolio_id, d.sweeps, d.dropped_routes) for d in repo.cap_stats] == [("all", 1, 2)]
+
+
+async def test_cap_stats_flush_cancellation_keeps_counters() -> None:
+    repo = MemoryPaper()
+    buf = CapStatsBuffer(repo, flush_timeout_s=30)
+    buf.add_sweep(HOUR_MS, {"all": SetSweepStats(eligible=1, selected=1)})
+    ok_add = repo.add_cap_stats
+
+    async def hang(deltas: list[CapStatsDelta]) -> None:
+        await asyncio.sleep(10)
+
+    repo.add_cap_stats = hang  # type: ignore[method-assign,assignment]
+    task = asyncio.create_task(buf.flush(HOUR_MS, force=True))
+    await asyncio.sleep(0.01)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    repo.add_cap_stats = ok_add  # type: ignore[method-assign]
+    await buf.flush(HOUR_MS + 10, force=True)
+    assert [d.sweeps for d in repo.cap_stats] == [1]

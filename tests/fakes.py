@@ -375,7 +375,15 @@ class MemoryPaper(IPaperRepository):
         if runs and runs[-1].definition.config_hash == definition.config_hash:
             return replace(runs[-1], created=False)
         self._next_run_id += 1
-        run = PortfolioRun(portfolio_id, self._next_run_id, now_ms, definition, created=True)
+        previous = runs[-1].definition.config_hash if runs else None
+        run = PortfolioRun(
+            portfolio_id,
+            self._next_run_id,
+            now_ms,
+            definition,
+            created=True,
+            previous_hash=previous,
+        )
         runs.append(run)
         return run
 

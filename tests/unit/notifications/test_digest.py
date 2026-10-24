@@ -259,6 +259,32 @@ def test_digest_portfolio_lines_and_accrual_footer() -> None:
     assert len(text) < 4096
 
 
+def test_digest_since_is_rendered_in_the_digest_timezone() -> None:
+    data = replace(
+        _cond_data(("bybit", "gateio")),
+        portfolios=(
+            PortfolioSummary("all", T0 - 5 * DAY, 120, D("41.20")),
+            PortfolioSummary("ab", T0 - DAY, 40, D("-3.50")),
+        ),
+    )
+    text = DigestFormatter().render(data, "Asia/Tokyo")  # UTC+9, no DST
+    assert "• <code>all</code> с 13 Oct 15:00: сделок 120" in text
+    assert "• <code>ab</code> с 17 Oct 15:00: сделок 40" in text
+    assert "13 Oct 06:00" not in text
+
+
+def test_digest_says_when_a_set_restarted_with_its_new_since() -> None:
+    data = replace(
+        _cond_data(("bybit", "gateio")),
+        portfolios=(PortfolioSummary("all", T0 - DAY, 5, D(1), restarted=True),),
+    )
+    text = DigestFormatter().render(data, "UTC")  # one set only: no set block, still the notice
+    assert "Набор <code>all</code> перезапущен 17 Oct 06:00" in text
+    assert "полным капиталом" in text
+    quiet = replace(data, portfolios=(PortfolioSummary("all", T0 - DAY, 5, D(1)),))
+    assert "перезапущен" not in DigestFormatter().render(quiet, "UTC")
+
+
 def test_digest_without_extra_portfolios_has_no_set_block() -> None:
     only_all = replace(_cond_data(("bybit",)), portfolios=(PortfolioSummary("all", T0, 3, D("1")),))
     text = DigestFormatter().render(only_all, "UTC")

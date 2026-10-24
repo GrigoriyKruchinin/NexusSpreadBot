@@ -54,6 +54,7 @@ class DigestFormatter:
             *self._episodes(data.episodes),
             SEPARATOR,
             *self._paper(data.paper),
+            *self._restarts(data.portfolios, local),
             *self._portfolios(data.portfolios, local),
             SEPARATOR,
             *self._quarantine(data),
@@ -92,6 +93,18 @@ class DigestFormatter:
                 if paper
                 else "н/д"
             ),
+        ]
+
+    @staticmethod
+    def _restarts(
+        portfolios: tuple[PortfolioSummary, ...], local: Callable[[int], str]
+    ) -> list[str]:
+        """A set whose definition changed restarted its soak window: say so, with the new start."""
+        return [
+            f"⚠️ Набор <code>{esc(p.portfolio_id)}</code> перезапущен {local(p.since_ms)}: "
+            "параметры изменились, новый прогон с полным капиталом, учёт с этой даты"
+            for p in portfolios
+            if p.restarted
         ]
 
     @staticmethod

@@ -194,3 +194,16 @@ async def test_digest_paper_block_ignores_rows_of_earlier_runs(sessions: Session
     assert paper.rebalances == 1
     assert paper.capital_usd == D(100)
     assert paper.equity_usd == D(100)  # the old IN_FLIGHT 900 USDT is not added
+
+
+async def test_digest_flags_a_set_restarted_inside_the_window(sessions: Sessions) -> None:
+    repo = PaperRepository(sessions)
+    await repo.ensure_run("all", _definition(), T0)
+    await repo.ensure_run("all", _definition("5000"), T0 + 2 * H)  # definition changed
+    await repo.ensure_run("kept", _definition(), T0)
+    digest = DigestRepository(sessions)
+    inside = await digest.collect(T0 + H, T0 + 5 * H)
+    assert {p.portfolio_id: p.restarted for p in inside.portfolios} == {"all": True, "kept": False}
+    assert {p.portfolio_id: p.since_ms for p in inside.portfolios}["all"] == T0 + 2 * H
+    later = await digest.collect(T0 + 3 * H, T0 + 5 * H)  # restart is older than the window
+    assert not any(p.restarted for p in later.portfolios)

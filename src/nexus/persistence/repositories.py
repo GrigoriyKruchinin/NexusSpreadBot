@@ -555,7 +555,14 @@ class PaperRepository(_Repository, IPaperRepository):
             )
             session.add(row)
             await session.flush()
-            return PortfolioRun(portfolio_id, row.id, now_ms, definition, created=True)
+            return PortfolioRun(
+                portfolio_id,
+                row.id,
+                now_ms,
+                definition,
+                created=True,
+                previous_hash=latest.config_hash if latest is not None else None,
+            )
 
     async def add_cap_stats(self, deltas: Sequence[CapStatsDelta]) -> None:
         """Additive upsert of the hourly cap-binding counters."""
@@ -783,7 +790,7 @@ class DigestRepository(_Repository, IDigestRepository):
                 )
             )
             paper = await self._paper(session, since, until, self._conditional)
-            portfolios = await self._portfolios(session, until)
+            portfolios = await self._portfolios(session, since, until)
             quarantines, active = await self._quarantines(session, since, until)
             uptime = await self._uptime(session, since, until)
             coverage = await self._coverage(session, until)
@@ -802,15 +809,19 @@ class DigestRepository(_Repository, IDigestRepository):
         )
 
     @staticmethod
-    async def _portfolios(session: AsyncSession, until: datetime) -> tuple[PortfolioSummary, ...]:
+    async def _portfolios(
+        session: AsyncSession, since: datetime, until: datetime
+    ) -> tuple[PortfolioSummary, ...]:
         """Per shadow portfolio: current run start (``since``, from the registry, never from the
         purged snapshots), trade count and hedged P&L of that run."""
         run, trade, rebal = PaperPortfolioRow, PaperTradeRow, PaperRebalanceRow
         runs: dict[str, PaperPortfolioRow] = {}
+        run_counts: dict[str, int] = {}
         for row in (
             await session.scalars(select(run).where(run.started_at < until).order_by(run.id))
         ).all():
             runs[row.portfolio_id] = row  # the latest run of a name wins
+            run_counts[row.portfolio_id] = run_counts.get(row.portfolio_id, 0) + 1
         summaries = []
         for pid, current in runs.items():
             count, net = (
@@ -837,6 +848,7 @@ class DigestRepository(_Repository, IDigestRepository):
                     since_ms=datetime_to_ms(current.started_at),
                     trades=int(count),
                     hedged_pnl_usd=Decimal(net or 0) - Decimal(fees or 0),
+                    restarted=run_counts[pid] > 1 and current.started_at >= since,
                 )
             )
         summaries.sort(key=lambda p: (p.portfolio_id != DEFAULT_PORTFOLIO_ID, p.portfolio_id))

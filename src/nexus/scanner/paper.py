@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import dataclasses
 import hashlib
 import json
 import statistics
@@ -67,6 +68,7 @@ class PaperTrader:
         *,
         portfolio_id: str = DEFAULT_PORTFOLIO_ID,
         venues: frozenset[str] | None = None,
+        strategy: Mapping[str, str] | None = None,
     ) -> None:
         """``estimator`` prices trades: trade notional, no per-trade transfer cost.
 
@@ -78,6 +80,7 @@ class PaperTrader:
             msg = "paper estimator must not charge transfer costs per trade (rebalancing does)"
             raise ValueError(msg)
         self._config = config
+        self._strategy = dict(strategy or {})
         self._repo = repository
         self._estimator = estimator
         self._clock = clock
@@ -109,9 +112,24 @@ class PaperTrader:
             "transfer_tax_pct": {k: _dec(v) for k, v in sorted(cfg.transfer_tax_pct.items())},
             "coin_idle_release_ms": cfg.coin_idle_release_ms,
             "conversion_cost_pct": _dec(cfg.conversion_cost_pct),
+            "strategy": self._strategy_payload(),
         }
         digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
         return RunDefinition(venues=venues, capital_usd=capital, config_hash=digest)
+
+    def _strategy_payload(self) -> dict[str, object]:
+        """Parameters that decide WHICH trades happen (spread thresholds, fees, ages, latency,
+        candidate cap, cooldowns): changing one starts a fresh run, so the report never mixes
+        windows traded under different strategies (no silent in-sample tuning)."""
+        est = {
+            name: _stable(value)
+            for name, value in dataclasses.asdict(self._estimator.config).items()
+        }
+        return {
+            "estimator": est,
+            "route_trade_cooldown_ms": ROUTE_TRADE_COOLDOWN_MS,
+            "extra": {k: self._strategy[k] for k in sorted(self._strategy)},
+        }
 
     async def start(self) -> None:
         """Resume the current run, or start a FRESH run when the definition changed.
@@ -125,13 +143,22 @@ class PaperTrader:
             self.portfolio_id, self.definition(), self._clock.now_ms()
         )
         if self.run.created:
-            log.info(
-                "paper_run_started",
-                portfolio=self.portfolio_id,
-                run_id=self.run.run_id,
-                config_hash=self.run.definition.config_hash[:12],
-                capital_usd=str(self.run.definition.capital_usd),
-            )
+            fields = {
+                "portfolio": self.portfolio_id,
+                "run_id": self.run.run_id,
+                "config_hash": self.run.definition.config_hash[:12],
+                "capital_usd": str(self.run.definition.capital_usd),
+                "since_ms": self.run.started_at_ms,
+            }
+            if self.run.previous_hash is None:
+                log.info("paper_run_started", **fields)
+            else:  # the soak window of this set restarts: never silent
+                log.warning(
+                    "paper_run_restarted",
+                    previous_hash=self.run.previous_hash[:12],
+                    reason="definition_changed",
+                    **fields,
+                )
             return
         state = await self._repo.load_state(self.portfolio_id, self.run.started_at_ms)
         if state is None:
@@ -558,6 +585,15 @@ class PaperBook:
                     error=type(result).__name__,
                     exc_info=result,
                 )
+
+
+def _stable(value: object) -> object:
+    """JSON-stable form of a config value (Decimals normalized, mappings sorted)."""
+    if isinstance(value, Decimal):
+        return _dec(value)
+    if isinstance(value, Mapping):
+        return {str(k): _stable(v) for k, v in sorted(value.items())}
+    return value
 
 
 def _dec(value: Decimal) -> str:

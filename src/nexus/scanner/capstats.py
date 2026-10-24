@@ -6,6 +6,7 @@ waits for the database; a crash loses at most one flush interval of counters.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Collection, Mapping
 
 import structlog
@@ -17,15 +18,21 @@ log = structlog.get_logger(__name__)
 
 HOUR_MS = 3_600_000
 FLUSH_INTERVAL_MS = 5 * 60_000
+FLUSH_TIMEOUT_S = 3.0
+"""A hanging database must not stall the sweep: the flush gives up and keeps the counters."""
 
 
 class CapStatsBuffer:
     """Accumulates sweep / excluded-alert counters per ``(set, hour)``."""
 
     def __init__(
-        self, repository: IPaperRepository, flush_interval_ms: int = FLUSH_INTERVAL_MS
+        self,
+        repository: IPaperRepository,
+        flush_interval_ms: int = FLUSH_INTERVAL_MS,
+        flush_timeout_s: float = FLUSH_TIMEOUT_S,
     ) -> None:
         self._repo = repository
+        self._timeout_s = flush_timeout_s
         self._interval = flush_interval_ms
         self._buckets: dict[tuple[str, int], CapStatsDelta] = {}
         self._last_flush_ms: int | None = None
@@ -65,12 +72,23 @@ class CapStatsBuffer:
         pending, self._buckets = self._buckets, {}
         self._last_flush_ms = now_ms
         try:
-            await self._repo.add_cap_stats(list(pending.values()))
-        except Exception:
-            log.exception("paper_cap_stats_flush_failed")
-            for key, lost in pending.items():
-                cur = self._buckets.get(key)
-                self._buckets[key] = lost if cur is None else _merge(lost, cur)
+            async with asyncio.timeout(self._timeout_s):
+                await self._repo.add_cap_stats(list(pending.values()))
+        except Exception as error:  # incl. TimeoutError: counters stay for the next try
+            log.warning(
+                "paper_cap_stats_flush_failed",
+                timed_out=isinstance(error, TimeoutError),
+                error=type(error).__name__,
+            )
+            self._put_back(pending)
+        except BaseException:  # cancellation: never lose the swapped-out counters
+            self._put_back(pending)
+            raise
+
+    def _put_back(self, pending: dict[tuple[str, int], CapStatsDelta]) -> None:
+        for key, lost in pending.items():
+            cur = self._buckets.get(key)
+            self._buckets[key] = lost if cur is None else _merge(lost, cur)
 
     def _bucket(self, pid: str, now_ms: int) -> CapStatsDelta:
         hour = now_ms - now_ms % HOUR_MS

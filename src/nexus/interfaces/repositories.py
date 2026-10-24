@@ -137,6 +137,8 @@ class PortfolioRun:
     definition: RunDefinition
     created: bool = False
     """True when this call started the run (fresh capital); False = resumed the stored one."""
+    previous_hash: str | None = None
+    """Definition hash of the run this one replaced (``None`` = first run of the name)."""
 
 
 @dataclass(frozen=True, slots=True)

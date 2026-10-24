@@ -104,6 +104,17 @@ def build_paper_book(
             clock,
             portfolio_id=name,
             venues=frozenset(venues),
+            strategy={
+                "latency_ms": str(paper.latency_ms),
+                "max_candidates_per_sweep": str(settings.scanner.max_candidates_per_sweep),
+                "alert_cooldown_s": str(settings.spread.alert_cooldown_s),
+                "realert_growth_pct": str(settings.alerts.realert_growth_pct),
+                "default_taker_fee_pct": str(settings.spread.default_taker_fee_pct),
+                "max_unverified_gross_spread_pct": str(
+                    settings.spread.max_unverified_gross_spread_pct
+                ),
+                "min_quote_volume_usd": str(settings.scanner.min_quote_volume_usd),
+            },
         )
         log.info(
             "paper_portfolio_configured",
