@@ -192,5 +192,11 @@ services:
       start_period: 20s
 
 volumes:
+  # Soak 2026-10: fresh volumes (pinned names). The previous data stays untouched in the volumes
+  # "nexus-local_postgres-data" and "nexus-local_redis-data" (archive dump taken, step 3.1).
+  # Rollback: delete the `name:` line (or set the old name) and recreate the stack. Note: a fresh volume
+  # takes POSTGRES_PASSWORD from .env at initdb time; the old volume keeps its old password.
   postgres-data:
+    name: nexus-local_postgres-data-soak1
   redis-data:
+    name: nexus-local_redis-data-soak1

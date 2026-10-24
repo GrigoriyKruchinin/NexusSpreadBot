@@ -254,3 +254,23 @@ def test_maintenance_worker_mounts_backup_status_read_only(compose: str) -> None
     for name, svc in services.items():
         if name != "worker-maintenance":
             assert not any(":/backups" in v for v in svc.get("volumes", [])), name
+
+
+@pytest.mark.parametrize("compose", COMPOSE_FILES)
+def test_soak_volumes_are_pinned_fresh_and_distinct_from_old(compose: str) -> None:
+    volumes = _load(compose)["volumes"]
+    assert volumes["postgres-data"]["name"] == "nexus-local_postgres-data-soak1"
+    assert volumes["redis-data"]["name"] == "nexus-local_redis-data-soak1"
+
+
+def test_bootstrap_roles_target_is_safe() -> None:
+    makefile = (ROOT / "Makefile").read_text()
+    recipe = makefile.split("\nbootstrap-roles:", 1)[1]
+    assert "grep -qx postgres" in recipe  # fails clearly when postgres is not running
+    assert "-v ON_ERROR_STOP=1" in recipe
+    assert "< scripts/sql/bootstrap_backup_roles.sql" in recipe
+    assert "PASSWORD" not in recipe.upper()
+    sql = (ROOT / "scripts/sql/bootstrap_backup_roles.sql").read_text()
+    assert not re.search(
+        r"(?im)^[^-\n]*\bPASSWORD\b", sql
+    )  # roles are socket-only, no secret to supply

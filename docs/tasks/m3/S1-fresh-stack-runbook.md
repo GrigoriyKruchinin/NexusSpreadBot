@@ -1,6 +1,6 @@
 # S1 - fresh-stack runbook (steps 3.1 and 3.2 of docs/guides/soak-fresh-stack.md)
 
-Status: PLAN ONLY (nothing executed). Author: devops, 2026-10-24. Each state-changing command needs the user's
+Status: 3.1 DONE; 3.2 (compose pin) and 3.3b (`make bootstrap-roles`) APPLIED in code 2026-10-24, not yet run against Docker. Author: devops, 2026-10-24. Each state-changing command needs the user's
 approval at the orchestrator (permission prompt). No secrets are read or printed in any step.
 
 ## 1. Current state (read-only checks, 2026-10-24)
@@ -144,3 +144,13 @@ command to rename/remove it (`volume rm`, `down -v` denied) and `-p`/`--project-
 1. Approve the compose edit with a pinned dated name (recommended) vs. a project rename (more invasive).
 2. Redis: fresh volume (recommended, stale queue clean) or keep.
 3. Who runs the role bootstrap SQL (exec is denied): the user manually, or add an ask-listed `make bootstrap-roles` target.
+
+## 5. Applied 2026-10-24 (user decisions)
+- 3.2 applied: `docker-compose.local.yml` pins `postgres-data` -> `nexus-local_postgres-data-soak1` and `redis-data` ->
+  `nexus-local_redis-data-soak1`. Old volumes untouched; rollback = remove the `name:` lines.
+- 3.3b: `make bootstrap-roles` (ask-listed by orchestrator) pipes `scripts/sql/bootstrap_backup_roles.sql` into postgres via
+  `exec -T`; idempotent; no password or variable needed (roles have LOGIN without password, unix-socket trust only; backup.sh and
+  restore_drill.sh authenticate the same way via `exec psql -U nexus_ro / nexus_test_owner`). Fails with a clear message if postgres is
+  not running. Run it AFTER migrations (3.3) and BEFORE `make backup` / `make restore-drill`.
+- Sequence: 3.3 `make migrate` (migrator depends on postgres healthy, so it starts postgres on the new volume; note
+  `run` does not start redis) -> 3.3b `make bootstrap-roles` -> 3.4 `make up-local` -> D-03 `make backup`, `make restore-drill`.
