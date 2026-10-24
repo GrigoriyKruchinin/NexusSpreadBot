@@ -37,6 +37,7 @@
 7. Then soak (needs B15 + backups running), quant, GO/NO-GO.
 
 ## User decisions (2026-10-23)
+- Soak runs on this PC (WSL; user disables Windows sleep). Off-machine dump copy: `C:\nexus-backups` (/mnt/c/nexus-backups, outside OneDrive). Pre-soak gates in card S0.
 - Soak starts on a FRESH stack + clean `nexus` DB once the final version is ready (B15 part 1, A7, pre-soak gates). Old data/logs/backups treated as obsolete. Plan (needs explicit U4 at execution): final archive dump of old DB -> new empty DB/volume (no `down -v`; old volume kept until soak verified, then removed with user OK) -> migrator from zero -> stack up -> first nightly dump + restore drill on the new DB (D-03). Stack stays stopped until then; nightly 03:15 backup will fail meanwhile (expected).
 - A7: non-secret settings move to committed `config/nexus.toml`; `.env` keeps only secrets (after B15 part 1).
 - B15 concentration rule (strict): GO requires >= 2 %/month after tax even without the top-2 routes and, separately, without the top-2 coins.
