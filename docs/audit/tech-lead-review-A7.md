@@ -75,3 +75,63 @@
 
 ## Next
 backend-lead fixes 1-2 (and 3-4 if cheap), then round 2 here. Max 3 rounds.
+
+---
+
+# Round 2 (HEAD f58ba53; fixes 3e3f34d, 7ce6af8)
+
+- Reviewer: tech-lead, 2026-10-23. Mapping: `docs/handoffs/A7-to-review.md` "Round 2".
+- Checks: `make check` green — 900 unit tests passed (round 1: 867), ruff 0, mypy --strict 0. CI green
+  on all 7 jobs (per orchestrator). No integration, no DB, `.env` never read.
+
+## Verdict: ACCEPT
+
+## Round 1 points
+| # | Status | Evidence |
+|---|---|---|
+| TL1 dict deep-merge | closed | `NexusTomlSource` drops a table key whose full name is in `present_env_names()` (env, or `.env` outside containers; empty values ignored = `env_ignore_empty`). Tests: env dict / `.env` dict / env list replace TOML; container ignores `.env`; empty env keeps TOML (`test_config_round2.py`). |
+| TL2 stale `.env` | closed | Guide rewritten (docker ignores, host overrides, move values into TOML, no merge for lists/dicts); host helper `make check-env-settings`, run by `make up-local`. Soak venue sets moved into the TOML as a separate commit (replaces the todo gate I asked for). |
+| TL3 hash | closed | Decimals normalized (`20` = `20.0` = `2E+1`), `POSTGRES_/REDIS_/LOG_` excluded; tests for location independence, spelling, and still tracking strategy values. |
+| TL4 tests | closed | Telegram in defaults-equality, bare keys vs denylist, `not_settings` derived from `_DENY_EXACT`. |
+| TL5 provenance | closed | beat (`beat_init`) and migrator (`migrations/env.py`) log `settings_loaded`; tested. |
+
+## Security L1 / L2 / L5 re-check
+- **L1 closed.** `_refuse` passes table and key through `_printable` (`[A-Za-z0-9_-]{1,64}` and not
+  credential-shaped, else `<unprintable key>`); line number kept; tests cover both branches.
+- **L2 closed.** Probed the new rule with Python `re` (gitleaks uses RE2; the pattern has no
+  constructs that differ): `config/nexus.toml` -> 0 matches on both rules (no false positive, incl. the
+  new `venue_sets = "...=-bybit;...=-gateio"` and `transfer_tax_pct = {LUNC=1.5, ...}`). Matches inline
+  tables `telegram = {bot_token = ...}`, `x = { a = 1, password = "p" }`, `{ chat_id = ... }`, quoted and
+  dotted keys; commented lines skipped (`[^#\n]` cannot cross `#`); `HTTPS://u:p@h` caught. Side effect:
+  any value containing a keyword followed by `=` matches — fail-safe direction, acceptable.
+- **L5 closed.** `isolated_env` clears `KEY_POLICY_*` and `NEXUS_WORKER_ROLE`.
+
+## `make check-env-settings` (static review + fake-file probes in the scratchpad)
+- Code: `dotenv_values(".env")` -> keep keys with non-empty values -> intersect with `TOML_ALLOWED` ->
+  print sorted names. Values are never stored beyond the parse dict, never printed, never written to
+  disk or logs; a junk key cannot be printed unless it equals an allowed SETTING name. Secret names
+  (e.g. `TELEGRAM_BOT_TOKEN`) are not in `TOML_ALLOWED`, so they are never listed.
+- Probes (fake `.env` in a scratch dir, every value tagged `LEAK`): `export X=...`, lower-case names,
+  line without `=`, `NAME` alone, `=value`, quoted multi-line value, `'a\nVALUE=b'`, JSON dict value,
+  whitespace-only value, `KEY  =  v`, malformed `bad = = "...` -> output contained **0** value
+  fragments; python-dotenv parse warnings print only "could not parse statement starting at line N".
+  Exit 0 in all these cases.
+- Non-UTF-8 `.env`: `UnicodeDecodeError` traceback, exit 1 (aborts `make up-local`). Message holds
+  one byte value and position only, no line content — no leak. See point R2-1.
+
+## Soak venue sets (7ce6af8)
+Correct: `venue_sets = "all;excl_conditional;excl_bybit=-bybit;excl_gateio=-gateio"` matches the
+STATE.md decision (4 sets). `test_soak_venue_sets_resolve_with_default_venues` resolves them strictly
+with default `EXCHANGES_ENABLED` / `CONDITIONAL_VENUES`. A TOML value counts as "explicitly set"
+(`model_fields_set`), so `strict=True` applies: narrowing `EXCHANGES_ENABLED` to drop bybit/gateio fails
+closed with a named error — intended. The defaults-equality test allows exactly this one deviation.
+B15 paper `config_hash` changes for the new portfolios — fine, the soak starts on a fresh stack.
+
+## Remaining points (non-blocking, may be ticketed)
+1. **R2-1 LOW** — helper: catch `UnicodeDecodeError`/`OSError` and print a one-line message
+   (".env is not readable UTF-8; check skipped/failed") instead of a traceback.
+2. **R2-2 NIT** — helper always exits 0 when names are found; the warning can scroll away in the
+   `docker compose build` output. Consider printing it again after `up -d`, or a non-zero exit with an
+   override flag. Design choice, user-facing only.
+3. **R2-3 NIT** — gitleaks key rule does not match hyphenated `api-key`/`private-key`; the runtime guard
+   covers it (defence in depth only).
