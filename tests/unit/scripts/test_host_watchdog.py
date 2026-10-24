@@ -6,7 +6,10 @@ fake `docker` / `curl` first on PATH. The fakes record argv and stdin; no daemon
 
 from __future__ import annotations
 
+import fcntl
+import os
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -37,6 +40,13 @@ echo "curl $*" >> "$FAKE_LOG"
 cat >> "$FAKE_LOG.curl-stdin"
 printf '%s' "${FAKE_HTTP:-200}"
 exit "${FAKE_CURL_EXIT:-0}"
+"""
+
+# Records only the duration it was given, then runs the wrapped command.
+FAKE_TIMEOUT = """#!/bin/sh
+echo "timeout-arg $1" >> "$FAKE_LOG"
+shift
+exec "$@"
 """
 
 HEALTHY = """beat running healthy
@@ -106,7 +116,7 @@ def sb(tmp_path: Path) -> Sb:
     (tmp_path / "home").mkdir()
     bindir = tmp_path / "bin"
     bindir.mkdir()
-    for name, body in (("docker", FAKE_DOCKER), ("curl", FAKE_CURL)):
+    for name, body in (("docker", FAKE_DOCKER), ("curl", FAKE_CURL), ("timeout", FAKE_TIMEOUT)):
         f = bindir / name
         f.write_text(body)
         f.chmod(0o755)
@@ -255,3 +265,84 @@ def test_pause_file_disables_everything(sb: Sb) -> None:
     proc = sb.run()
     assert proc.returncode == 0
     assert sb.calls() == []
+
+
+def test_start_uses_its_own_longer_timeout(sb: Sb) -> None:
+    sb.set_ps(HEALTHY.replace("scanner running healthy", "scanner exited"), after=HEALTHY)
+    sb.run()
+    args = [c.split()[1] for c in sb.calls() if c.startswith("timeout-arg")]
+    assert args == ["20", "60", "240", "20", "60"]  # info, ps, start, info, ps
+
+
+def test_failed_start_does_not_claim_success(sb: Sb) -> None:
+    still_down = HEALTHY.replace("scanner running healthy", "scanner exited")
+    sb.set_ps(still_down, after=still_down)
+    proc = sb.run(FAKE_START_EXIT="1")
+    assert proc.returncode == 0
+    assert any(" start " in c for c in sb.calls())
+    assert not sb.telegram_texts()  # below the alert threshold, and no "restarted" message
+    assert sb.state.read_text().split()[:2] == ["1", "0"]
+
+
+def test_concurrent_run_is_skipped_by_the_lock(sb: Sb) -> None:
+    sb.set_ps(HEALTHY.replace("scanner running healthy", "scanner exited"))
+    state_dir = sb.state.parent
+    state_dir.mkdir(parents=True, mode=0o700)
+    with (state_dir / "lock").open("w") as held:
+        fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        proc = sb.run()
+    assert proc.returncode == 0
+    assert "another run is active" in proc.stderr
+    assert sb.calls() == []
+
+
+def test_single_message_when_recovery_follows_an_alert(sb: Sb) -> None:
+    down = HEALTHY.replace("scanner running healthy", "scanner exited")
+    sb.set_ps(down, after=down)
+    sb.run(WATCHDOG_FAIL_THRESHOLD="1")
+    assert len(sb.telegram_texts()) == 1  # ALERT
+    sb.set_ps(down, after=HEALTHY)
+    (sb.root / "calls.log.started").unlink()  # fake docker: `ps` serves "before" again
+    sb.run(WATCHDOG_FAIL_THRESHOLD="1")
+    texts = sb.telegram_texts()
+    assert len(texts) == 2
+    assert "restarted" in texts[-1]
+    assert sb.state.read_text().split()[:2] == ["0", "0"]
+
+
+def test_old_pause_file_sends_one_reminder(sb: Sb) -> None:
+    pause = sb.root / "home" / ".nexus-watchdog-pause"
+    pause.write_text("")
+    old = time.time() - 13 * 3600
+    os.utime(pause, (old, old))
+    sb.run()
+    sb.run()  # second run inside the reminder period: silent
+    texts = sb.telegram_texts()
+    assert len(texts) == 1
+    assert "PAUSED" in texts[0]
+    assert not any(c.startswith("docker") for c in sb.calls())
+
+
+def test_fresh_pause_file_sends_no_reminder(sb: Sb) -> None:
+    (sb.root / "home" / ".nexus-watchdog-pause").write_text("")
+    sb.run()
+    assert sb.calls() == []
+
+
+def test_state_dir_and_log_are_tightened_and_log_is_capped(sb: Sb) -> None:
+    state_dir = sb.state.parent
+    state_dir.mkdir(parents=True, mode=0o755)
+    state_dir.chmod(0o755)
+    log = state_dir / "watchdog.log"
+    log.write_text("x" * 2000)
+    log.chmod(0o644)
+    sb.run(WATCHDOG_LOG_MAX_BYTES="1000")
+    assert (state_dir.stat().st_mode & 0o777) == 0o700
+    assert not log.exists()  # rotated away (cron's `>>` re-creates it)
+    rotated = state_dir / "watchdog.log.1"
+    assert rotated.exists()
+    assert (rotated.stat().st_mode & 0o777) == 0o600
+    log.write_text("small")
+    log.chmod(0o644)
+    sb.run(WATCHDOG_LOG_MAX_BYTES="1000")
+    assert (log.stat().st_mode & 0o777) == 0o600
