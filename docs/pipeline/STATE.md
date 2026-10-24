@@ -24,12 +24,15 @@
 3. First-day checks: D-03 (manual dump + restore drill on `nexus_test`), D-10 (migrator exit 0, `alembic current` = head),
    D-01 (scanner back `Up` after a restart), D-08 (all 4 sets in the first digest; a 100 % idle set is reported).
 4. 24 h soak checkpoint (card B15): union/cap p95 > 1.3, sweep duration +25 %, any 429 ban -> NEEDS_USER.
-5. In parallel with the soak: B15 part 2 GO report generator (`docs/quant/b15-review-and-report-spec.md`, incl. F2 fee
+5. B15 part 2 IMPLEMENTED (2c82c7f, 8c1cc16, 9673351; retention fix d81811b); quant + tech-lead review r1 running.
+   Then: scanner rebuild/restart (user OK given, deadline 2026-10-31 14:05Z) + D-01 check. Original item: B15 part 2 GO report generator (`docs/quant/b15-review-and-report-spec.md`, incl. F2 fee
    disclosure). Quant pre-soak condition C1 (strategy params in run hash) is DONE in 8ffb9c3 (tech-lead B15 r3).
 6. Then: B16 public probe, A5b Redis auth, A5c DB roles, A6/A7 follow-ups, A5d at VPS.
 7. Stage summary to the user for S0 (`docs/reports/stage-S0-summary.md`) if not yet written.
 
 ## User decisions (2026-10-23)
+- 2026-10-24: rebuild + restart the scanner with retention fix d81811b BEFORE 2026-10-31 14:05Z (day 8 of soak, old 7-day
+  retention would delete paper snapshots), only AFTER tech-lead accepts d81811b. The restart doubles as the D-01 live check.
 - 2026-10-24: IP whitelist on exchange keys NOT required for the local soak (keys read-only, no withdrawals). Mandatory again
   on server/VPS (A5d) and before any trading permission. Implemented as explicit env-only waiver flag (task KP-W).
 - Soak runs on this PC (WSL; Windows sleep disabled). Off-machine dump copy: `C:\nexus-backups` (outside OneDrive).
