@@ -168,7 +168,14 @@ services:
       # The ONLY remaining distro bind mount: if it is not ready after a WSL restart this one container
       # fails to start; scripts/host_watchdog.sh then runs `docker compose start` within minutes (D-01b).
       # Fixed path (no BACKUP_STATUS_DIR variable: compose would read it from .env, make/cron from the shell).
-      - ${HOME}/nexus-backup-status:/backups:ro
+      # Long syntax with create_host_path: false: a missing source FAILS the start instead of Docker
+      # silently creating an empty host dir (which would blind the in-stack backup liveness check).
+      - type: bind
+        source: ${HOME}/nexus-backup-status
+        target: /backups
+        read_only: true
+        bind:
+          create_host_path: false
     depends_on:
       migrator: {condition: service_completed_successfully}
       redis: {condition: service_healthy}

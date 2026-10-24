@@ -121,10 +121,14 @@ def test_config_file_is_baked_into_the_image_not_bind_mounted(compose: str) -> N
     services = _load(compose)["services"]
     for name in APP_SERVICES:
         for volume in services[name].get("volumes", []):
-            assert "nexus.toml" not in volume, name
+            assert "nexus.toml" not in str(volume), name
     # Only the backup-status dir may remain a host bind mount (worker-maintenance, see its comment).
     binds = {
-        name: [v for v in svc.get("volumes", []) if v.startswith(("./", "/", "$"))]
+        name: [
+            v
+            for v in svc.get("volumes", [])
+            if isinstance(v, dict) or v.startswith(("./", "/", "$"))
+        ]
         for name, svc in services.items()
     }
     assert {k: v for k, v in binds.items() if v and k != "worker-maintenance"} == {}
@@ -258,12 +262,20 @@ def test_wrapper_propagates_scanner_failure_after_sigterm(tmp_path: Path) -> Non
 @pytest.mark.parametrize("compose", COMPOSE_FILES)
 def test_maintenance_worker_mounts_backup_status_read_only(compose: str) -> None:
     services = _load(compose)["services"]
-    mounts = [v for v in services["worker-maintenance"]["volumes"] if v.endswith(":/backups:ro")]
-    assert len(mounts) == 1
-    assert "nexus-backup-status" in mounts[0]  # status dir, never the 0700 dump dir
+    mounts = [
+        v
+        for v in services["worker-maintenance"]["volumes"]
+        if isinstance(v, dict) and v.get("target") == "/backups"
+    ]
+    assert len(mounts) == 1  # long syntax only: short syntax cannot forbid host-path creation
+    mount = mounts[0]
+    assert mount["type"] == "bind"
+    assert mount["source"].endswith("/nexus-backup-status")  # status dir, never the 0700 dump dir
+    assert mount["read_only"] is True
+    assert mount["bind"]["create_host_path"] is False  # missing source must fail, not start empty
     for name, svc in services.items():
         if name != "worker-maintenance":
-            assert not any(":/backups" in v for v in svc.get("volumes", [])), name
+            assert not any("/backups" in str(v) for v in svc.get("volumes", [])), name
 
 
 @pytest.mark.parametrize("compose", COMPOSE_FILES)
