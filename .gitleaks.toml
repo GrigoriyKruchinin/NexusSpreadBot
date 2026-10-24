@@ -22,10 +22,10 @@ regexes = [
 id = "nexus-config-toml-secret-key"
 description = "Secret-like key with a value in committed config TOML"
 path = '''^config/.*\.toml$'''
-regex = '''(?im)^\s*[a-z0-9_]*(password|passwd|secret|token|passphrase|api_key|private_key|attested|_url|dsn)[a-z0-9_]*\s*=\s*\S+'''
+regex = '''(?im)^\s*[^#\n]*?(password|passwd|secret|token|passphrase|api_key|private_key|attested|_url|dsn|chat_id)[^=\n]*=\s*\S+'''
 
 [[rules]]
 id = "nexus-config-toml-credential-url"
 description = "URL with embedded credentials in committed config TOML"
 path = '''^config/.*\.toml$'''
-regex = '''[a-z][a-z0-9+.-]*://[^/\s:@]*:[^/\s@]+@'''
+regex = '''(?i)[a-z][a-z0-9+.-]*://[^/\s:@]*:[^/\s@]+@'''

@@ -12,8 +12,10 @@ from zoneinfo import ZoneInfo
 
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import beat_init
 
 from nexus.config.groups import CelerySettings, DigestSettings, MaintenanceSettings
+from nexus.config.provenance import log_settings_provenance
 
 ALERTS_QUEUE = "alerts"
 MAINTENANCE_QUEUE = "maintenance"
@@ -45,6 +47,12 @@ def digest_schedule(digest: DigestSettings) -> dict[str, Any]:
         "schedule": crontab(minute=digest.minute, hour=digest.hour, nowfun=LocalNow(digest.tz)),
         "args": [digest.tz],
     }
+
+
+@beat_init.connect
+def _log_beat_settings(**_: Any) -> None:
+    """Provenance of the settings the scheduler runs with (same event as scanner/workers)."""
+    log_settings_provenance("beat")
 
 
 def create_celery_app(

@@ -6,6 +6,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy.engine import Connection
 
+from nexus.config.provenance import log_settings_provenance
 from nexus.config.roles import MigratorSettings
 from nexus.persistence.db import create_engine, database_url
 from nexus.persistence.models import Base
@@ -40,6 +41,7 @@ def _run(connection: Connection) -> None:
 async def run_migrations_online() -> None:
     """Run migrations against the configured database."""
     settings = MigratorSettings.load()
+    log_settings_provenance("migrator")
     engine = create_engine(settings.database, pooled=False)
     async with engine.connect() as connection:
         await connection.run_sync(_run)

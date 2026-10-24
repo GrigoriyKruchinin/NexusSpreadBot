@@ -38,8 +38,11 @@ test-integration: ## Run integration tests (requires `make up-local`)
 check: lint typecheck test ## Lint + typecheck + unit tests
 
 # ---------------------------------------------------------------- docker (local)
-.PHONY: up-local down-local ps-local logs migrate revision
-up-local: ## Build and start the local stack
+.PHONY: check-env-settings up-local down-local ps-local logs migrate revision
+check-env-settings: ## Print NAMES of setting lines left in .env (values never shown)
+	@uv run python -m nexus.config.provenance
+
+up-local: check-env-settings ## Build and start the local stack
 	$(COMPOSE_LOCAL) up -d --build
 
 down-local: ## Stop the local stack (volumes are kept)

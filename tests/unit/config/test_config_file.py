@@ -5,6 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from pydantic import SecretStr
 from structlog.testing import capture_logs
 
 from nexus.config import (
@@ -14,6 +15,7 @@ from nexus.config import (
     LoggingSettings,
     MigratorSettings,
     SpreadSettings,
+    TelegramSettings,
 )
 from nexus.config import groups as groups_module
 from nexus.config.base import NexusBaseSettings
@@ -102,10 +104,15 @@ def test_repo_toml_equals_code_defaults(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setenv("POSTGRES_PASSWORD", PW)
     skipped = {"TelegramSettings", "ExchangeCredentials", "KeyPolicySettings"}
     classes = [cls for cls in _groups() if cls.__name__ not in skipped]
+
+    def dump() -> list[dict[str, object]]:
+        telegram = TelegramSettings(bot_token=SecretStr("0:" + "a" * 20), chat_id="0")
+        return [telegram.model_dump(), *(cls().model_dump() for cls in classes)]
+
     monkeypatch.setenv("NEXUS_CONFIG_FILE", str(REPO_TOML))
-    with_file = [cls().model_dump() for cls in classes]
+    with_file = dump()
     monkeypatch.delenv("NEXUS_CONFIG_FILE")  # default path in the empty tmp cwd: absent
-    without_file = [cls().model_dump() for cls in classes]
+    without_file = dump()
     assert with_file == without_file
 
 
@@ -114,15 +121,7 @@ def test_repo_toml_completeness_and_classification() -> None:
     present = {f"{t}_{k}".upper() for t, body in data.items() for k in body}
     assert present == TOML_ALLOWED
     # Every settings field is either in the file or deliberately SECRET / ENV-ONLY.
-    not_settings = {
-        "POSTGRES_PASSWORD",
-        "REDIS_URL",
-        "CELERY_BROKER_URL",
-        "CELERY_RESULT_BACKEND",
-        "TELEGRAM_BOT_TOKEN",
-        "TELEGRAM_CHAT_ID",
-        "TELEGRAM_API_BASE_URL",
-    }
+    not_settings = {name for name in _DENY_EXACT if not name.startswith("NEXUS_")}
     for cls in _groups():
         prefix = str(cls.model_config.get("env_prefix", ""))
         if prefix.startswith(("KEY_POLICY_", "NEXUS_UNBOUND")):
@@ -134,6 +133,13 @@ def test_repo_toml_completeness_and_classification() -> None:
 
 def test_allowed_names_never_hit_the_denylist() -> None:
     assert [n for n in sorted(TOML_ALLOWED) if _denied(n)] == []
+
+
+def test_allowed_bare_keys_never_hit_the_denylist() -> None:
+    """The guard also checks the bare key (without the table), so every allowed one must pass."""
+    data = tomllib.loads(REPO_TOML.read_text())
+    bare = {key for body in data.values() for key in body}
+    assert [k for k in sorted(bare) if _denied(k)] == []
 
 
 # ------------------------------------------------------------------ missing file

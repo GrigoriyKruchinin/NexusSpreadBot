@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import structlog
+from dotenv import dotenv_values
 from pydantic_settings import (
     InitSettingsSource,
     PydanticBaseSettingsSource,
@@ -186,9 +187,20 @@ def _value_is_credential(value: Any) -> bool:
     return False
 
 
+_SAFE_NAME_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
+UNPRINTABLE_NAME = "<unprintable key>"
+
+
+def _printable(name: str) -> str:
+    """Echo a key/table name only when it looks like an ordinary identifier (never a secret)."""
+    if _SAFE_NAME_RE.fullmatch(name) and not _value_is_credential(name):
+        return name
+    return UNPRINTABLE_NAME
+
+
 def _refuse(path: Path, table: str, key: str, line: int | None, reason: str) -> ConfigFileError:
     where = f"{path}:{line}" if line is not None else str(path)
-    return ConfigFileError(f"{where}: [{table}] {key}: {reason}")
+    return ConfigFileError(f"{where}: [{_printable(table)}] {_printable(key)}: {reason}")
 
 
 def validate_config(path: Path, data: dict[str, Any], text: str = "") -> None:
@@ -207,6 +219,18 @@ def validate_config(path: Path, data: dict[str, Any], text: str = "") -> None:
                 raise _refuse(path, table, key, line, REASON_UNKNOWN)
             if _value_is_credential(value):
                 raise _refuse(path, table, key, line, REASON_VALUE)
+
+
+def present_env_names() -> set[str]:
+    """Upper-case names set (non-empty) in the process env or, outside containers, in ``.env``.
+
+    Names only: values are never kept. These are exactly the variables that win over the TOML file
+    (``env_ignore_empty`` makes an empty value count as unset).
+    """
+    present = {k.upper() for k, v in os.environ.items() if v.strip()}
+    if not _is_container() and Path(".env").is_file():
+        present |= {k.upper() for k, v in dotenv_values(".env").items() if v and v.strip()}
+    return present
 
 
 def read_config_tables() -> dict[str, dict[str, Any]]:
@@ -245,6 +269,10 @@ class NexusTomlSource(TomlConfigSettingsSource):
         tables = read_config_tables()
         prefix = str(settings_cls.model_config.get("env_prefix", "")).rstrip("_").lower()
         table = tables.get(prefix, {}) if prefix else {}
+        # Env replaces the file per key. Without this, pydantic-settings deep-merges dict values
+        # across sources (an env dict could never remove a key the file defines).
+        overridden = present_env_names()
+        table = {k: v for k, v in table.items() if f"{prefix}_{k}".upper() not in overridden}
         InitSettingsSource.__init__(self, settings_cls, table)
 
 
