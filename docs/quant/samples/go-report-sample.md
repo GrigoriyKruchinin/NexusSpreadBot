@@ -13,28 +13,28 @@ Paper simulation only: no orders, transfers or keys are involved (ADR 0001). All
 
 **What would refute it**
 
-- 35 % tax line: holdout 3.21 %/month (bar 2 %)
-- smallest period: 2.74 %/month after 35 % tax
-- ex-top-2 routes: 2.39 %/month; ex-top-2 coins: 2.31 %/month (after 35 % tax)
+- 35 % tax line: holdout 3.18 %/month (bar 2 %)
+- smallest period: 2.67 %/month after 35 % tax
+- ex-top-2 routes: 2.36 %/month; ex-top-2 coins: 2.29 %/month (after 35 % tax)
 - top-2 routes: ABC/USDT|binance>kucoin, DEF/USDT|binance>okx; top-2 coins: ABC, DEF
 
 **Gates on the holdout**
 
 | gate | 35 % tax | 15 % tax |
 |---|---|---|
-| holdout net %/month >= 2.0 | PASS (3.21 %) | PASS (4.19 %) |
-| every period > 0 | PASS (3.98 %, 2.74 %, 2.90 %) | PASS (5.20 %, 3.58 %, 3.79 %) |
+| holdout net %/month >= 2.0 | PASS (3.18 %) | PASS (4.16 %) |
+| every period > 0 | PASS (3.91 %, 2.67 %, 2.83 %) | PASS (5.12 %, 3.49 %, 3.70 %) |
 | periods >= 2.0 (ceil(k/2)) | PASS (3 of 2 needed) | PASS (3 of 2 needed) |
-| no period > 60 % of positive net | PASS (max 41 %) | PASS (max 41 %) |
-| ex-top-2 routes >= 2.0 | PASS (2.39 %) | PASS (3.12 %) |
-| ex-top-2 coins >= 2.0 | PASS (2.31 %) | PASS (3.02 %) |
+| no period > 60 % of positive net | PASS (max 42 %) | PASS (max 42 %) |
+| ex-top-2 routes >= 2.0 | PASS (2.36 %) | PASS (3.09 %) |
+| ex-top-2 coins >= 2.0 | PASS (2.29 %) | PASS (2.99 %) |
 
 ## Overview
 
 | set | since | days | basis | trades | pre-tax %/mo | 15 % %/mo | 35 % %/mo | 35 % $/mo | MTM-dom. |
 |---|---|---|---|---|---|---|---|---|---|
-| `all` | 2026-10-26 09:30Z | 39.6 | holdout | 130 | 4.78 % | 4.06 % | 3.11 % | 310.83 | no |
-| `excl_conditional` | 2026-10-24 14:05Z | 41.4 | holdout | 216 | 4.93 % | 4.19 % | 3.21 % | 320.53 | no |
+| `all` | 2026-10-26 09:30Z | 39.6 | holdout | 130 | 4.75 % | 4.03 % | 3.08 % | 308.46 | no |
+| `excl_conditional` | 2026-10-24 14:05Z | 41.4 | holdout | 216 | 4.90 % | 4.16 % | 3.18 % | 318.29 | no |
 
 ## Venue-access value on the common window
 
@@ -42,8 +42,8 @@ Common window 2026-11-09 00:00Z .. 2026-12-05 00:00Z, basis: **holdout**. The di
 
 | set | trades | pre-tax %/mo | 15 % | 35 % | 35 % minus `all` |
 |---|---|---|---|---|---|
-| `all` | 130 | 4.78 % | 4.06 % | 3.11 % | n/a |
-| `excl_conditional` | 208 | 4.56 % | 3.88 % | 2.96 % | -0.14 % |
+| `all` | 130 | 4.75 % | 4.03 % | 3.08 % | n/a |
+| `excl_conditional` | 208 | 4.52 % | 3.84 % | 2.94 % | -0.15 % |
 
 ## Set `all` (context only, no best-of selection)
 
@@ -78,15 +78,15 @@ Common window 2026-11-09 00:00Z .. 2026-12-05 00:00Z, basis: **holdout**. The di
 | rebalances blocked | 0 | 0 | 0 |
 | hedged P&L (realized - rebal; reference only) | 678.50 | 237.00 | 441.50 |
 | MTM (price effect on inventory) | -8.02 | 25.07 | -33.09 |
-| liquidation reserve (exit cost, subtracted) | 3.04 | 3.12 | -0.08 |
+| liquidation reserve (exit cost, subtracted) | 3.04 | 3.12 | 3.04 |
 | total P&L (equity change) | 670.48 | 262.07 | 408.41 |
-| total after liquidation reserve | 667.44 | 258.95 | 408.49 |
-| net $/month pre-tax | 513.05 | 579.67 | 478.20 |
-| net $/month after 15 % tax | 436.09 | 492.72 | 406.47 |
-| net $/month after 35 % tax | 333.48 | 376.78 | 310.83 |
-| net %/month pre-tax | 5.13 % | 5.80 % | 4.78 % |
-| net %/month after 15 % tax | 4.36 % | 4.93 % | 4.06 % |
-| net %/month after 35 % tax | 3.33 % | 3.77 % | 3.11 % |
+| total after liquidation reserve | 667.44 | 258.95 | 405.37 |
+| net $/month pre-tax | 513.05 | 579.67 | 474.55 |
+| net $/month after 15 % tax | 436.09 | 492.72 | 403.37 |
+| net $/month after 35 % tax | 333.48 | 376.78 | 308.46 |
+| net %/month pre-tax | 5.13 % | 5.80 % | 4.75 % |
+| net %/month after 15 % tax | 4.36 % | 4.93 % | 4.03 % |
+| net %/month after 35 % tax | 3.33 % | 3.77 % | 3.08 % |
 | MTM share \|mtm\| / (\|realized-rebal\| + \|mtm\|) | 0.012 | 0.096 | 0.070 |
 | MTM-dominated (> 0.5) | no | no | no |
 | max drawdown of daily equity, % of capital | 0.14 % | 0.10 % | 0.14 % |
@@ -103,9 +103,9 @@ Common window 2026-11-09 00:00Z .. 2026-12-05 00:00Z, basis: **holdout**. The di
 
 | period | dates | days | total after liq $ | pre-tax %/mo | 15 % | 35 % |
 |---|---|---|---|---|---|---|
-| 1 | 2026-11-09 .. 2026-11-17 | 8.0 | 139.31 | 5.30 % | 4.51 % | 3.45 % |
-| 2 | 2026-11-17 .. 2026-11-26 | 9.0 | 135.37 | 4.58 % | 3.89 % | 2.98 % |
-| 3 | 2026-11-26 .. 2026-12-05 | 9.0 | 133.80 | 4.53 % | 3.85 % | 2.94 % |
+| 1 | 2026-11-09 .. 2026-11-17 | 8.0 | 136.19 | 5.18 % | 4.40 % | 3.37 % |
+| 2 | 2026-11-17 .. 2026-11-26 | 9.0 | 132.24 | 4.47 % | 3.80 % | 2.91 % |
+| 3 | 2026-11-26 .. 2026-12-05 | 9.0 | 130.71 | 4.42 % | 3.76 % | 2.87 % |
 
 **Concentration (B6), basis: holdout** (strict rule: both ex-top-2 results must stay >= 2 % after 35 % tax; filter inside one set, B14-style approximation)
 
@@ -116,8 +116,8 @@ Common window 2026-11-09 00:00Z .. 2026-12-05 00:00Z, basis: **holdout**. The di
 | HHI over routes | 0.335 |
 | top-2 routes | `ABC/USDT\|bybit>kucoin`, `ABC/USDT\|binance>kucoin` |
 | top-2 coins | ABC, JKL |
-| net %/mo after 35 % tax, without top-2 routes | 0.93 % |
-| net %/mo after 35 % tax, without top-2 coins (incl. MTM) | 0.63 % |
+| net %/mo after 35 % tax, without top-2 routes | 0.90 % |
+| net %/mo after 35 % tax, without top-2 coins (incl. MTM) | 0.61 % |
 | rebalance cost not attributable to any route | 0.00 |
 
 ## Set `excl_conditional` (GO set)
@@ -151,15 +151,15 @@ Common window 2026-11-09 00:00Z .. 2026-12-05 00:00Z, basis: **holdout**. The di
 | rebalances blocked | 0 | 0 | 0 |
 | hedged P&L (realized - rebal; reference only) | 654.81 | 226.24 | 428.57 |
 | MTM (price effect on inventory) | 22.05 | 13.16 | 8.89 |
-| liquidation reserve (exit cost, subtracted) | 3.09 | 3.06 | 0.03 |
+| liquidation reserve (exit cost, subtracted) | 3.09 | 3.06 | 3.09 |
 | total P&L (equity change) | 676.86 | 239.40 | 437.46 |
-| total after liquidation reserve | 673.77 | 236.34 | 437.43 |
-| net $/month pre-tax | 495.20 | 499.10 | 493.12 |
-| net $/month after 15 % tax | 420.92 | 424.24 | 419.16 |
-| net $/month after 35 % tax | 321.88 | 324.42 | 320.53 |
-| net %/month pre-tax | 4.95 % | 4.99 % | 4.93 % |
-| net %/month after 15 % tax | 4.21 % | 4.24 % | 4.19 % |
-| net %/month after 35 % tax | 3.22 % | 3.24 % | 3.21 % |
+| total after liquidation reserve | 673.77 | 236.34 | 434.37 |
+| net $/month pre-tax | 495.20 | 499.10 | 489.68 |
+| net $/month after 15 % tax | 420.92 | 424.24 | 416.23 |
+| net $/month after 35 % tax | 321.88 | 324.42 | 318.29 |
+| net %/month pre-tax | 4.95 % | 4.99 % | 4.90 % |
+| net %/month after 15 % tax | 4.21 % | 4.24 % | 4.16 % |
+| net %/month after 35 % tax | 3.22 % | 3.24 % | 3.18 % |
 | MTM share \|mtm\| / (\|realized-rebal\| + \|mtm\|) | 0.033 | 0.055 | 0.020 |
 | MTM-dominated (> 0.5) | no | no | no |
 | max drawdown of daily equity, % of capital | 0.16 % | 0.12 % | 0.16 % |
@@ -176,9 +176,9 @@ Common window 2026-11-09 00:00Z .. 2026-12-05 00:00Z, basis: **holdout**. The di
 
 | period | dates | days | total after liq $ | pre-tax %/mo | 15 % | 35 % |
 |---|---|---|---|---|---|---|
-| 1 | 2026-11-08 .. 2026-11-17 | 9.0 | 181.01 | 6.12 % | 5.20 % | 3.98 % |
-| 2 | 2026-11-17 .. 2026-11-26 | 9.0 | 124.42 | 4.21 % | 3.58 % | 2.74 % |
-| 3 | 2026-11-26 .. 2026-12-05 | 9.0 | 132.00 | 4.46 % | 3.79 % | 2.90 % |
+| 1 | 2026-11-08 .. 2026-11-17 | 9.0 | 177.95 | 6.02 % | 5.12 % | 3.91 % |
+| 2 | 2026-11-17 .. 2026-11-26 | 9.0 | 121.24 | 4.10 % | 3.49 % | 2.67 % |
+| 3 | 2026-11-26 .. 2026-12-05 | 9.0 | 128.87 | 4.36 % | 3.70 % | 2.83 % |
 
 **Concentration (B6), basis: holdout** (strict rule: both ex-top-2 results must stay >= 2 % after 35 % tax; filter inside one set, B14-style approximation)
 
@@ -189,8 +189,8 @@ Common window 2026-11-09 00:00Z .. 2026-12-05 00:00Z, basis: **holdout**. The di
 | HHI over routes | 0.125 |
 | top-2 routes | `ABC/USDT\|binance>kucoin`, `DEF/USDT\|binance>okx` |
 | top-2 coins | ABC, DEF |
-| net %/mo after 35 % tax, without top-2 routes | 2.39 % |
-| net %/mo after 35 % tax, without top-2 coins (incl. MTM) | 2.31 % |
+| net %/mo after 35 % tax, without top-2 routes | 2.36 % |
+| net %/mo after 35 % tax, without top-2 coins (incl. MTM) | 2.29 % |
 | rebalance cost not attributable to any route | 0.00 |
 
 ## Disclosures
@@ -207,7 +207,7 @@ Common window 2026-11-09 00:00Z .. 2026-12-05 00:00Z, basis: **holdout**. The di
 - **Parameters**: only the run hash is stored, not the parameter values; the dates of parameter changes are the run starts listed per set. Any parameter chosen by looking at data may only use the tuning part (holdout restarts from a change).
 - **Tuning vs holdout**: chronological, tuning = first third (min 7 days), holdout = rest (min 14 days, k = floor(holdout/7) <= 4 equal periods); boundaries are rounded up to UTC midnights so that equity at an edge is an end-of-day state. GO numbers are holdout only.
 - **Tax model**: tax = rate x max(window total, 0), losses are not refunded; rates 15 % and 35 % shown, the verdict uses 35 %. Final tax position is open (G3, accountant).
-- **Liquidation reserve**: non-USDT inventory is charged a flat 0.3 % exit cost (taker fee + half spread approximation, same as the paper conversion cost, N11); venue-specific spreads are not stored. It is subtracted from the headline.
+- **Liquidation reserve**: non-USDT inventory is charged a flat 0.3 % exit cost (taker fee + half spread approximation, same as the paper conversion cost, N11); venue-specific spreads are not stored. Every window (holdout, each period) pays the exit cost of the inventory held at ITS end, so periods do not sum to the holdout.
 - **Hedge**: no hedge cost is modelled; `hedged` is a reference, never the headline.
 - **N1 shared alert gating**: paper trades fire on shared alerts; a route that opened its episode while only a smaller set held it in its top-N is not re-alerted for `all` (downward bias on `all` only; bounded by `alerts cap-excluded`).
 - **N2 shared evaluation deadline**: timeouts hit all sets; the share is read from logs (supplied via the ops file), not from the database.

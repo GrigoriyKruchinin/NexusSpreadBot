@@ -172,6 +172,20 @@ def test_daily_times_and_drawdown() -> None:
 # ------------------------------------------------------------------ window stats
 
 
+def test_liquidation_reserve_is_the_exit_cost_of_inventory_at_window_end() -> None:
+    inventory = (usdt("binance", "600", "500"), abc("kucoin", "100", "2", "1.5"))
+    snaps = (SnapshotSet(S + HOUR_MS, inventory), SnapshotSet(S + 2 * HOUR_MS, inventory))
+    data = SetData("t", run(), snapshots=snaps)
+    held = window_stats(data, S + HOUR_MS, S + 3 * HOUR_MS, LIQ)  # 200 held at start AND end
+    assert held.liq_cost == D("0.6")  # the old delta rule charged 0
+    falling = (
+        SnapshotSet(S + HOUR_MS, inventory),
+        SnapshotSet(S + 2 * HOUR_MS, (usdt("binance", "800", "500"),)),
+    )
+    sold = window_stats(SetData("t", run(), snapshots=falling), S + HOUR_MS, S + 3 * HOUR_MS, LIQ)
+    assert sold.liq_cost == D(0)  # never a credit when the inventory shrinks
+
+
 def test_window_stats_hand_computed() -> None:
     s = window_stats(tiny(), S, S + DAY_MS, LIQ)
     assert s.trades_executed == 2

@@ -358,7 +358,7 @@ class WindowStats:
     hedged: Decimal
     mtm: Decimal
     liq_cost: Decimal
-    """Change of the exit-cost reserve over the window (subtracted from the headline)."""
+    """Exit cost of the non-USDT inventory held at the window end (subtracted from the headline)."""
     total: Decimal
     total_liq: Decimal
     equity_start: Decimal
@@ -450,7 +450,8 @@ def window_stats(data: SetData, a_ms: int, b_ms: int, liq_cost_pct: Decimal) -> 
     rebal = conversion + transfer
     start, end = valuation_at(data, a_ms), valuation_at(data, b_ms)
     total = end.equity - start.equity
-    liq_cost = (end.non_usdt - start.non_usdt) * liq_cost_pct / HUNDRED
+    # spec B3: the window starts as if in cash and ends with a liquidation of what it holds
+    liq_cost = end.non_usdt * liq_cost_pct / HUNDRED
     mtm = total - realized + rebal
     spread_part = abs(realized - rebal)
     magnitude = spread_part + abs(mtm)

@@ -344,7 +344,8 @@ def _disclosures(report: GoReport) -> list[str]:
         "15 % and 35 % shown, the verdict uses 35 %. Final tax position is open (G3, accountant).",
         f"- **Liquidation reserve**: non-USDT inventory is charged a flat {report.liq_cost_pct} % "
         "exit cost (taker fee + half spread approximation, same as the paper conversion cost, "
-        "N11); venue-specific spreads are not stored. It is subtracted from the headline.",
+        "N11); venue-specific spreads are not stored. Every window (holdout, each period) pays "
+        "the exit cost of the inventory held at ITS end, so periods do not sum to the holdout.",
         "- **Hedge**: no hedge cost is modelled; `hedged` is a reference, never the headline.",
         "- **N1 shared alert gating**: paper trades fire on shared alerts; a route that opened "
         "its episode while only a smaller set held it in its top-N is not re-alerted for `all` "
