@@ -105,7 +105,7 @@ max_episodes = 5
 [paper]
 enabled = true
 # Shadow portfolios, ";"-separated (see nexus.config.venue_sets)
-venue_sets = "all;excl_conditional"
+venue_sets = "all;excl_conditional;excl_bybit=-bybit;excl_gateio=-gateio"
 # Fixed virtual capital of EVERY venue set (nothing real moves)
 capital_usd = 10000
 usdt_share_pct = 50
