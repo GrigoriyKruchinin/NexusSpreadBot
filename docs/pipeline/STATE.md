@@ -4,7 +4,10 @@
 - Trajectory M. Branch `chore/agent-pipeline-adoption` (pushed; CI with 7 jobs, green on the last recorded run).
   Not merged to `main` (only with user consent).
 - Quality ratchet: 1028 unit tests, branch coverage 91.5 %, ruff 0, mypy --strict 0 (floor 89 %).
-- Local stack STOPPED on purpose until the fresh-stack plan; nightly 03:15 backup fails meanwhile (expected).
+- Fresh stack UP since 2026-10-24 13:32Z on volumes `nexus-local_*-soak1` (old volumes kept; archive dump
+  `nexus-archive-20261024T132431Z` in ~/nexus-backups/archive + C:). Migrations at head b15a7c3e91d2, roles bootstrapped.
+  BLOCKER (U3): scanner parked by A6 key policy: binance/okx `ip_not_restricted`, kucoin `attestation_required:ip_binding`,
+  gateio auth failed. User fixes keys (IP whitelist + attestation flags in .env), then `make up-local` to recreate scanner.
 
 ## Stage S0 (pre-soak gates) closed
 - Accepted: B15 part 1 (TL r3), A7 (security r1, TL r2), S0 (TL r2 `343df63`, security r2 `1fb8d60`), tester regression,
