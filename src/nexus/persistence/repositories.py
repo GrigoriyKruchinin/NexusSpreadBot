@@ -893,10 +893,25 @@ class DigestRepository(_Repository, IDigestRepository):
     async def _paper(
         session: AsyncSession, since: datetime, until: datetime, conditional: Collection[str]
     ) -> PaperStats | None:
+        # Every query is bounded by the current run of the default set: rows of an earlier
+        # definition (incl. a never-restored IN_FLIGHT rebalance) must not leak into the totals.
+        run_start = await session.scalar(
+            select(PaperPortfolioRow.started_at)
+            .where(
+                PaperPortfolioRow.portfolio_id == DEFAULT_PORTFOLIO_ID,
+                PaperPortfolioRow.started_at < until,
+            )
+            .order_by(PaperPortfolioRow.id.desc())
+            .limit(1)
+        )
+        if run_start is None:
+            run_start = datetime.min.replace(tzinfo=UTC)
+        since = max(since, run_start)
         latest = await session.scalar(
             select(func.max(PaperBalanceSnapshotRow.captured_at)).where(
                 PaperBalanceSnapshotRow.portfolio_id == DEFAULT_PORTFOLIO_ID,
                 PaperBalanceSnapshotRow.captured_at < until,
+                PaperBalanceSnapshotRow.captured_at >= run_start,
             )
         )
         if latest is None:
@@ -926,6 +941,7 @@ class DigestRepository(_Repository, IDigestRepository):
                 select(PaperRebalanceRow).where(
                     PaperRebalanceRow.portfolio_id == DEFAULT_PORTFOLIO_ID,
                     PaperRebalanceRow.status == RebalanceStatus.IN_FLIGHT.value,
+                    PaperRebalanceRow.started_at >= run_start,
                 )
             )
         ).all()
@@ -963,9 +979,12 @@ class DigestRepository(_Repository, IDigestRepository):
         moved = and_(
             PaperRebalanceRow.portfolio_id == DEFAULT_PORTFOLIO_ID,
             PaperRebalanceRow.status != RebalanceStatus.BLOCKED.value,
+            PaperRebalanceRow.started_at >= run_start,
         )
         own_trades = and_(
-            PaperTradeRow.portfolio_id == DEFAULT_PORTFOLIO_ID, PaperTradeRow.executed.is_(True)
+            PaperTradeRow.portfolio_id == DEFAULT_PORTFOLIO_ID,
+            PaperTradeRow.executed.is_(True),
+            PaperTradeRow.executed_at >= run_start,
         )
         rebalance_usd = await session.scalar(
             select(func.coalesce(func.sum(PaperRebalanceRow.fee_usd), 0)).where(

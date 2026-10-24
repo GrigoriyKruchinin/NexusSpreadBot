@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from nexus.interfaces.repositories import CapStatsDelta, PaperHolding, RunDefinition
 from nexus.persistence.repositories import DigestRepository, PaperRepository, RetentionRepository
-from nexus.simulation.portfolio import Rebalance, RebalanceStatus, TradeOutcome
+from nexus.simulation.portfolio import Rebalance, RebalanceStatus, Seed, TradeOutcome
 from tests.support import make_breakdown
 
 pytestmark = pytest.mark.integration
@@ -160,3 +160,37 @@ async def test_cap_stats_are_added_per_set_and_hour(sessions: Sessions) -> None:
             )
         ).all()
     assert [tuple(r) for r in rows] == [("ab", 5, 0, 0, 2), ("all", 15, 5, 15, 1)]
+
+
+async def test_digest_paper_block_ignores_rows_of_earlier_runs(sessions: Sessions) -> None:
+    repo = PaperRepository(sessions)
+    old_flight = Rebalance(
+        "USDT", "binance", "bybit", D(900), D(1), D(50), "TRC20", T0 + H, T0 + 9 * H,
+        RebalanceStatus.IN_FLIGHT,
+    )  # fmt: skip
+    await repo.commit(  # an earlier definition of "all", never restored by the new run
+        portfolio_id="all",
+        at_ms=T0 + H,
+        trades=[(_trade("binance", "bybit"), None)] * 4,
+        rebalances=[_rebalance("binance", "bybit", 40), old_flight],
+        holdings=[PaperHolding("binance", "USDT", D(5000), Seed(D(5000), D(1)), D(1))],
+    )
+    await repo.ensure_run("all", _definition(), T0 + 2 * H)
+    await repo.commit(
+        portfolio_id="all",
+        at_ms=T0 + 3 * H,
+        trades=[(_trade("binance", "kucoin"), None)],
+        rebalances=[_rebalance("binance", "kucoin", 3)],
+        holdings=[PaperHolding("binance", "USDT", D(100), Seed(D(100), D(1)), D(1))],
+    )
+    data = await DigestRepository(sessions).collect(T0, T0 + 5 * H)
+    paper = data.paper
+    assert paper is not None
+    assert paper.trades == 1
+    assert paper.realized_total_usd == NET
+    assert paper.realized_total_excl_conditional_usd == NET
+    assert paper.rebalance_total_usd == D(3)
+    assert paper.rebalance_total_excl_conditional_usd == D(3)
+    assert paper.rebalances == 1
+    assert paper.capital_usd == D(100)
+    assert paper.equity_usd == D(100)  # the old IN_FLIGHT 900 USDT is not added

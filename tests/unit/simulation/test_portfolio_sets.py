@@ -160,7 +160,7 @@ def test_idle_slot_is_converted_back_to_usdt_and_reused() -> None:
     assert ("b", "CCC") in p.seeds
     assert ("b", "BBB") in p.seeds
     # 25 AAA at 12 = 300 USD gross, 0.5 % conversion cost = 1.5
-    assert p.balance("b", "USDT") == D(500) + D("298.5")
+    assert p.balance("b", "USDT") == D(500) + D("298.5") - D(250)  # minus the CCC seed
     assert p.rebalance_costs == D("1.5")
     [conversion] = p.drain_conversions()
     assert (conversion.asset, conversion.network) == ("AAA", "conversion")
@@ -168,8 +168,10 @@ def test_idle_slot_is_converted_back_to_usdt_and_reused() -> None:
     assert conversion.status is RebalanceStatus.COMPLETED
     assert p.drain_conversions() == []
     # capital is fixed; the price gain and the cost are P&L, not new capital
-    assert p.valuation().capital == capital_before + D(250)  # only the new CCC slot is new
+    # the new CCC slot is paid from the freed USDT: capital does not grow
+    assert p.valuation().capital == capital_before
     v = p.valuation()
+    assert v.mark_to_market == v.total_pnl - v.realized + v.rebalance_costs
     assert v.total_pnl == D("50") - D("1.5")  # +20 % of the 250 slot, minus the cost
     assert v.mark_to_market == D("50")
 
@@ -226,3 +228,19 @@ def test_config_validation_of_release_settings() -> None:
         PaperConfig(D(1), D(1), D(20), 0, coin_idle_release_ms=0)
     with pytest.raises(ValueError, match="conversion_cost_pct"):
         PaperConfig(D(1), D(1), D(20), 0, conversion_cost_pct=D(100))
+
+
+def test_capital_is_fixed_after_many_recycles() -> None:
+    p = _slot_portfolio()
+    fixed = p.valuation().capital
+    now = T0 + HOUR
+    for i in range(6):
+        now += DAYMS + 1
+        coin = f"N{i}"
+        p.mark_price(coin, D(10))
+        assert p.ensure_seeded("a", "b", coin, now)
+        assert ("b", coin) in p.seeds
+        v = p.valuation()
+        assert v.capital == fixed
+        assert v.mark_to_market == v.total_pnl - v.realized + v.rebalance_costs
+    assert p.rebalance_costs > D(0)  # the booked conversion cost stays
