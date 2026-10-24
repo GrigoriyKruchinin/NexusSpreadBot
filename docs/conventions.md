@@ -13,3 +13,8 @@
 - Tests: hand-computed expectations for spread math, never mock the math; adapters tested on
   recorded fixtures; integration tests marked `integration`, test DB only.
 - Commits: Conventional Commits in English; branches `chore/`, `feat/`, `fix/`; PR before `main`.
+
+## Docs and agent-file hygiene
+At each stage end (skill `.claude/skills/repo-hygiene`): stale files under `CLAUDE.md`, `.claude/`, `docs/` are
+deleted, the rest updated to match the code and STATE.md. Handoffs of accepted tasks are deleted; ADRs,
+reviews/audits backing GO/NO-GO, task cards, tests, CI and migrations are never deleted.

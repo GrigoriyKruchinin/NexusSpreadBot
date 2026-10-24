@@ -54,7 +54,8 @@ Single test: `uv run pytest tests/unit/<path>::<name> -q`.
 unchecked item. Per task: card -> implement -> `make check` not worse than baseline -> tick
 todo.md -> commit (Conventional Commits, English, one logical unit, todo tick in same commit) ->
 push the working branch. Stage end: tech-lead review (max 3 fix rounds) -> tester -> security ->
-delta audit -> summary to user. Conventions: `docs/conventions.md`.
+delta audit -> repo hygiene (skill `repo-hygiene`: delete stale agent/doc files, update
+the rest) -> summary to user. Conventions: `docs/conventions.md`.
 
 ## Participation points (only places to stop and ask)
 U1 team (done) · U2 roadmap (after vision+architecture; DEX/risk-manager decision) · UF GO/NO-GO ·
