@@ -52,10 +52,10 @@ Secrets go into `.env` only. Everything else lives in the committed file `config
 copy setting lines into `.env`: an environment variable overrides the file. After editing
 `config/nexus.toml`, run `make up` again (the settings are part of the image).
 
-Owner overlay: a file `config/local.toml` (git-ignored, your private values over the committed defaults)
-is planned. TODO(docs): describe it here once backend-lead's change has landed. The fixed text for the
-channel's pinned message can be shown with a command; TODO(docs): add the exact command once it has
-landed.
+Owner overlay: create `config/local.toml` (git-ignored) with only the keys you want to change, e.g.
+`[alert]` / `language = "ru"`; it is merged over `config/nexus.toml` and baked into the image, so run `make up`
+after editing it. Secrets never go there (they stay in `.env`). Text to pin in your channel:
+`make pin-text` (or `make pin-text ARGS="--lang ru"`).
 
 | Setting | Default | Meaning |
 |---|---|---|

@@ -5,7 +5,7 @@ SRC := src tests
 
 .DEFAULT_GOAL := help
 
-.PHONY: help
+.PHONY: pin-text help
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -47,6 +47,9 @@ up: ## One command: check .env, build, migrate, start everything (scripts/start.
 
 doctor: ## Full setup check incl. database and migrations (stack must be up); add ARGS=--send-test to ping the chat
 	$(COMPOSE) --profile tools run --rm check nexus check $(ARGS)
+
+pin-text: ## Print the disclaimer to pin in your Telegram chat/channel: make pin-text ARGS="--lang ru"
+	$(COMPOSE) --profile tools run --rm check nexus pin-text $(ARGS)
 
 down: ## Stop the stack (data volumes are KEPT)
 	$(COMPOSE) down
