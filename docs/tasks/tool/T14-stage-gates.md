@@ -30,3 +30,12 @@ Merge to main (only with user consent).
 docs/audit/
 
 DoD: `make check` green and not worse than baseline, new tests, no secrets in diff, todo.md + card updated, committed (Conventional Commits).
+
+## Progress note: fix round 1 (backend-lead, 2026-10-25)
+Tech-lead review points handled (see `docs/audit/tech-lead-review-S1-tool.md`):
+- 1, 2, 9, 10, 11: `services/alerts.py` (a close without a stored message is silent; an UPDATE without a stored message is dropped; a NEW that finds a stored message edits it), `DeliveryReceipt.message_id` may be `None`, `truncate()` keeps HTML valid, docstring fixed.
+- 3: system events and digest are rendered from `alert_catalog` (`sys_*`, `dg_*`, `wd_*` keys) in `[alert] language`; `SystemEventFormatter(language)` / `DigestFormatter(language)` wired in `container.py`.
+- 7, 12: placeholder regex matches the whole value; key check retries transient errors 3x (1 s, 2 s backoff) before the public fallback; auth errors are not retried.
+- 8, 13, R2: `nexus pin-text [--lang en|ru]` prints the pinned disclaimer (devops: reference it in README); `nexus check` calls `configure_logging` (WARNING, redaction on); DB probe covered by unit tests with a fake engine; `fmt_time` removed.
+- 16 (owner language ru): optional untracked `config/local.toml` next to `config/nexus.toml`, merged per key over it (same guard as the main file, settings only, secrets stay in `.env`), gitignored, copied into the image by `COPY config/nexus.toml config/local.tom[l] ./config/`. Owner setup: create `config/local.toml` with `[alert]` / `language = "ru"`, then `make up` (rebuild). The Dockerfile glob is verified by test only, not by a real `docker build`: tester should confirm the build with and without the file.
+- Not mine: 4, 5, 6, 14, 15 (docs/compose/guard rails).
