@@ -132,7 +132,7 @@ sweep unaffected). S0 reduced to the `test_safety` additions.
   -> `ExchangeRateLimitError`; limits written in the docstring.
 - [x] **S3 KuCoin futures adapter.** Same AC as S2 (contracts/active as the funding source, multiplier,
   depth20/100).
-- [ ] **S4 Binance USDⓈ-M adapter.** Same AC as S2. A test asserts that `leverageBracket` (signed) is
+- [x] **S4 Binance USDⓈ-M adapter.** Same AC as S2. A test asserts that `leverageBracket` (signed) is
   never called.
 - [ ] **S5 Transfer metadata extension.** `NetworkInfo` gets `withdraw_min`, `deposit_min`,
   `deposit_confirmations`, `est_arrival_min`, `busy` (optional, default None); parsers (ccxt, binance

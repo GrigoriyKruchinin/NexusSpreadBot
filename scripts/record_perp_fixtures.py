@@ -78,6 +78,14 @@ async def record(venue: str) -> None:
             else {s: await client.fetch_funding_rate(s) for s in keep}
         )
         _dump(venue, "funding", {s: rates[s] for s in keep if s in rates})
+        if venue == "binance":
+            intervals = await client.fetch_funding_intervals()
+            odd = [s for s in sorted(intervals) if intervals[s].get("interval") != "8h"][:2]
+            _dump(
+                venue,
+                "funding_intervals",
+                {s: intervals[s] for s in [*keep, *odd] if s in intervals},
+            )
         _dump(venue, "order_book", await client.fetch_order_book(BOOK_SYMBOL, BOOK_DEPTH))
         now = int(time.time() * 1000)
         klines = await client.fetch_mark_ohlcv(BOOK_SYMBOL, "1m", now - 3_600_000, 100)

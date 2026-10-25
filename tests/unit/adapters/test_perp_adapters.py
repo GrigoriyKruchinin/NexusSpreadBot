@@ -8,6 +8,7 @@ import ccxt
 import pytest
 
 import nexus.adapters.perp  # noqa: F401 - registers adapters
+from nexus.adapters.perp.binance_usdm import BinanceUsdmAdapter
 from nexus.adapters.perp.ccxt_perp import CcxtPerpAdapter
 from nexus.adapters.perp.kucoin_futures import KucoinFuturesAdapter
 from nexus.adapters.perp.okx_swap import OkxSwapAdapter
@@ -22,8 +23,9 @@ from nexus.domain.errors import (
 from tests.unit.adapters.fake_perp import FakePerpClient, load_perp_fixture
 
 NOW = 1_800_000_000_000
-VENUES = ("okx", "kucoin")
+VENUES = ("okx", "kucoin", "binance")
 CLASSES: dict[str, type[CcxtPerpAdapter]] = {
+    "binance": BinanceUsdmAdapter,
     "okx": OkxSwapAdapter,
     "kucoin": KucoinFuturesAdapter,
 }
@@ -123,7 +125,7 @@ async def test_markets_linear_usdt_only(venue: str) -> None:
     assert btc.base == "BTC"
     assert btc.active
     assert not btc.delisting
-    assert btc.max_leverage is not None
+    assert (btc.max_leverage is not None) == (venue != "binance")
     assert btc.taker_fee is not None
     assert btc.contract_size > 0
     assert btc.amount_step > 0
@@ -451,3 +453,123 @@ async def test_kucoin_tiers_skip_invalid_rows() -> None:
     assert tiers is not None
     assert len(tiers) == 10
     assert tiers[0].mmr == D("0.004")
+
+
+# ------------------------------------------------------------------ Binance USD-M
+
+
+async def test_binance_markets_linear_usdt_only_with_unknown_tiers() -> None:
+    adapter, _, _ = _adapter("binance")
+    markets = {m.symbol: m for m in await adapter.load_perp_markets()}
+    assert set(markets) == {BTC, "DOGE/USDT:USDT", "ETH/USDT:USDT"}
+    btc = markets[BTC]
+    assert btc.contract_size == D("1.0")
+    assert btc.amount_step == D("0.001")
+    assert btc.lot_base == D("0.001")
+    assert btc.max_leverage is None  # leverage brackets are signed: unknown, never assumed
+    assert btc.mmr is None
+    assert not btc.delisting
+
+
+async def test_binance_delisting_by_delivery_date() -> None:
+    raw = load_markets_with(
+        "binance", lambda m: m["info"].update(deliveryDate="1900000000000"), BTC
+    )
+    adapter, _, _ = _adapter("binance", markets=raw)
+    markets = {m.symbol: m for m in await adapter.load_perp_markets()}
+    assert markets[BTC].delisting
+    assert not markets["ETH/USDT:USDT"].delisting
+    raw[BTC]["info"]["deliveryDate"] = "garbage"
+    adapter2, _, _ = _adapter("binance", markets=raw)
+    assert not {m.symbol: m for m in await adapter2.load_perp_markets()}[BTC].delisting
+
+
+async def test_binance_tickers_book_limits_and_base_units() -> None:
+    adapter, client, _ = _adapter("binance")
+    tickers = await adapter.fetch_perp_tickers()
+    raw = load_perp_fixture("binance", "bids_asks")
+    assert tickers[BTC].bid == D(str(raw[BTC]["bid"]))
+    assert "fetch_tickers" not in [c[0] for c in client.calls]
+    book = await adapter.fetch_perp_order_book(BTC, 30)
+    assert client.calls[-1] == ("fetch_order_book", (BTC, 50))
+    rawbook = load_perp_fixture("binance", "order_book")
+    assert book.bids[0].amount == D(str(rawbook["bids"][0][1]))
+    assert adapter.order_book_limit(2000) == 1000
+    assert adapter.order_book_limit(3) == 5
+
+
+async def test_binance_funding_has_mark_index_and_merged_interval() -> None:
+    adapter, client, _ = _adapter("binance")
+    funding = await adapter.fetch_funding(None)
+    info = funding[BTC]
+    raw = load_perp_fixture("binance", "funding")[BTC]
+    assert info.rate == D(str(raw["fundingRate"]))
+    assert info.mark_price == D(str(raw["markPrice"]))
+    assert info.index_price == D(str(raw["indexPrice"]))
+    assert info.interval_h == D("8")
+    assert "fetch_mark_prices" not in [c[0] for c in client.calls]
+    intervals = {BTC: {"interval": "4h"}}
+    adapter2, _, _ = _adapter("binance", funding_intervals=intervals)
+    assert (await adapter2.fetch_funding([BTC]))[BTC].interval_h == D("4")
+
+
+async def test_binance_funding_survives_missing_intervals() -> None:
+    adapter, client, _ = _adapter("binance")
+    client.fail("fetch_funding_intervals", ccxt.NetworkError("down"), ccxt.NetworkError("down"))
+    client.fail("fetch_funding_intervals", ccxt.NetworkError("down"))
+    funding = await adapter.fetch_funding([BTC])
+    assert funding[BTC].rate is not None
+    assert funding[BTC].interval_h is None
+
+
+async def test_binance_funding_history_times_rounded_to_second() -> None:
+    rows = [{"fundingRate": -0.00001401, "timestamp": 1_792_656_000_003}]
+    adapter, _, _ = _adapter("binance", funding_history=lambda *a: rows)
+    payments = await adapter.fetch_funding_history(BTC, 1_792_000_000_000, 1_793_000_000_000)
+    assert [p.funding_time_ms for p in payments] == [1_792_656_000_000]
+    assert payments[0].rate == D("-0.00001401")
+
+
+async def test_binance_klines_single_call_for_24h() -> None:
+    start = NOW - NOW % 60_000
+    adapter, client, _ = _adapter("binance", klines=_paged(_rows(start, 1440)))
+    klines = await adapter.fetch_mark_klines(BTC, start, start + 1440 * 60_000)
+    assert len(klines) == 1440
+    assert client.calls[-1][1][3] == 1500
+    assert [c[0] for c in client.calls].count("fetch_mark_ohlcv") == 1
+
+
+async def test_binance_signed_leverage_bracket_is_never_called() -> None:
+    adapter, client, _ = _adapter("binance")
+    assert await adapter.fetch_leverage_tiers(BTC) is None
+    await adapter.fetch_funding([BTC])
+    await adapter.fetch_perp_tickers()
+    names = {c[0] for c in client.calls}
+    assert not names & {"fetch_market_leverage_tiers", "fetch_leverage_tiers"}
+
+
+def test_binance_adapter_source_never_references_signed_brackets() -> None:
+    import ast
+    from pathlib import Path
+
+    import nexus.adapters.perp.binance_usdm as module
+
+    tree = ast.parse(Path(module.__file__).read_text())
+    called = {
+        node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+    }
+    banned = {
+        "fetch_leverage_tiers",
+        "fetch_market_leverage_tiers",
+        "fapiPrivateGetLeverageBracket",
+    }
+    assert not {c for c in called if c in banned or "bracket" in c.lower()}
+    # the only definition of the port method returns None without any request
+    method = next(
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.AsyncFunctionDef) and n.name == "fetch_leverage_tiers"
+    )
+    assert not [n for n in ast.walk(method) if isinstance(n, ast.Await)]

@@ -35,6 +35,7 @@ class FakePerpClient:
             "order_book",
             "klines",
             "funding_history",
+            "funding_intervals",
             "tiers",
         ):
             try:
