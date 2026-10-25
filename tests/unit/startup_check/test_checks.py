@@ -294,3 +294,34 @@ def test_render_summary_and_language_fallback() -> None:
     assert "исправьте" in render([Item("fail", "tg_token_missing")], "ru")
     assert "warnings" in render([Item("warn", "venue_rejected", {"venue": "x"})], "en")
     assert "you can start" in render([Item("ok", "db_skipped")], "de")
+
+
+async def test_check_agrees_with_scanner_policy_in_default_mode() -> None:
+    """T9: `nexus check` uses the scanner's policy function: withdraw key -> warn, not fail."""
+    from nexus.adapters.key_policy import verify_key_policies
+
+    payload = {**BINANCE_OK, "enableWithdrawals": True}
+    item = await check_venue("binance", FakeAdapter(payload), creds(), POLICY)
+    report = await verify_key_policies(
+        {"binance": FakeAdapter(payload)}, {"binance": creds()}, POLICY
+    )
+    assert item.status == "warn"
+    assert report.rejected_venues == ("binance",)
+
+
+async def test_unverifiable_venue_is_a_warning_in_default_mode() -> None:
+    kucoin = {"code": "200000", "data": {"permission": "General"}}
+    item = await check_venue("kucoin", FakeAdapter(kucoin), creds(), POLICY)
+    assert (item.status, item.code) == ("warn", "venue_keyed_warn")
+
+
+async def test_strict_mode_fails_the_check() -> None:
+    strict = KeyPolicySettings(strict=True)
+    payload = {**BINANCE_OK, "enableWithdrawals": True}
+    item = await check_venue("binance", FakeAdapter(payload), creds(), strict)
+    assert (item.status, item.code) == ("fail", "venue_withdraw")
+    assert exit_code([item]) == 3
+    unbound = {**BINANCE_OK, "ipRestrict": False}
+    assert (await check_venue("binance", FakeAdapter(unbound), creds(), strict)).status == "fail"
+    relaxed = await check_venue("binance", FakeAdapter(unbound), creds(), POLICY)
+    assert (relaxed.status, relaxed.code) == ("warn", "venue_keyed_warn")

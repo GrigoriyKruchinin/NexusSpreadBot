@@ -476,6 +476,7 @@ class SystemEventFormatter:
             for e in event.exchanges
         )
         unbound = ", ".join(esc(v) for v in event.ip_unbound_venues)
+        fallback = ", ".join(esc(v) for v in event.public_fallback_venues)
         return truncate(
             "\n".join(
                 [
@@ -490,7 +491,15 @@ class SystemEventFormatter:
                     "<blockquote>🔑 ключ только для чтения"
                     " · 🌐 только публичные данные</blockquote>",
                     *(
-                        [f"⚠️ Ключи без привязки к IP (разрешено для локального запуска): {unbound}"]
+                        [
+                            "⚠️ Ключ НЕ использован (не прошёл проверку «только чтение»), "
+                            f"биржа работает в публичном режиме: {fallback}"
+                        ]
+                        if fallback
+                        else []
+                    ),
+                    *(
+                        [f"ℹ️ Привязка ключей к IP не подтверждена (рекомендуется): {unbound}"]
                         if unbound
                         else []
                     ),

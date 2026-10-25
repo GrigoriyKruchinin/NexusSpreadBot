@@ -293,13 +293,13 @@ def test_bootstrap_roles_target_is_safe() -> None:
 
 
 @pytest.mark.parametrize("compose", COMPOSE_FILES)
-def test_ip_binding_waiver_reaches_only_the_scanner(compose: str) -> None:
-    """KP-W / F-1: the env-only waiver reaches the scanner (and one-off `check`) only."""
+def test_key_policy_strict_reaches_only_the_scanner(compose: str) -> None:
+    """T9: the env-only strict flag reaches the scanner (and one-off `check`) only."""
     services = _load(compose)["services"]
     holders = {
         name
         for name, svc in services.items()
-        if "KEY_POLICY_IP_BINDING_WAIVED" in (svc.get("environment") or {})
+        if "KEY_POLICY_STRICT" in (svc.get("environment") or {})
     }
     # `check` (profile tools, one-off) must judge keys exactly like the scanner does.
     assert holders == {"scanner", "check"}

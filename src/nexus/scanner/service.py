@@ -204,8 +204,10 @@ class Scanner:
         episodes: EpisodeTracker | None = None,
         quarantine: QuarantineManager | None = None,
         ip_unbound_venues: tuple[str, ...] = (),
+        public_fallback_venues: tuple[str, ...] = (),
     ) -> None:
         self._ip_unbound_venues = ip_unbound_venues
+        self._public_fallback_venues = public_fallback_venues
         self._adapters = dict(adapters)
         self._authenticated = dict(authenticated)
         self._estimator = estimator
@@ -317,6 +319,7 @@ class Scanner:
             reference_notional_usd=decimal_str(self._estimator.config.reference_notional_usd),
             common_symbols=len(self._universe.common_symbols),
             ip_unbound_venues=self._ip_unbound_venues,
+            public_fallback_venues=self._public_fallback_venues,
         )
         await self._emit(event)
 

@@ -1,4 +1,11 @@
-"""Key policy startup check (S-08 / A6): refuse keys that can trade, withdraw or transfer.
+"""Key policy startup check (S-08 / A6, simplified in T9): never use a key that can trade,
+withdraw or transfer.
+
+There are no human attestation flags. The check is automatic: a key that fails it (or cannot be
+verified) is *rejected*. In the default mode the scanner then runs that venue in public mode
+without the key (the credential-less client is built by the composition root); with
+``KEY_POLICY_STRICT=true`` (owner's own setup) a rejected key is fatal, and an unrestricted IP
+binding or a property the API does not expose is a violation too.
 
 Per core venue one signed GET reads the key's own permissions (endpoints and refuse rules:
 ``docs/reports/exchange-key-permissions.md``). Every parser is a pure function from the
@@ -33,8 +40,14 @@ UNPARSEABLE = "unparseable_response"
 IP_UNBOUND = "ip_not_restricted"
 NO_POLICY = "no_key_policy_for_venue"
 REQUEST_FAILED = "request_failed"
-ATTEST_KUCOIN_IP = "attestation_required:ip_binding"
-ATTEST_GATEIO_PERMS = "attestation_required:permissions_read_only"
+UNVERIFIABLE_KUCOIN_IP = "unverifiable:ip_binding"
+UNVERIFIABLE_GATEIO_PERMS = "unverifiable:permissions_read_only"
+#: Pre-T9 attestation variables; ignored (a deprecation notice is shown).
+DEPRECATED_ENV_VARS = (
+    "KEY_POLICY_KUCOIN_IP_ATTESTED",
+    "KEY_POLICY_GATEIO_PERMISSIONS_ATTESTED",
+    "KEY_POLICY_IP_BINDING_WAIVED",
+)
 
 _WILDCARD_IPS = frozenset({"*", "0.0.0.0", "0.0.0.0/0", "::/0"})  # noqa: S104 - data, not a bind
 #: A CIDR this wide (/0../8) is not an IP binding in practice (treated as unbound).
@@ -199,7 +212,7 @@ def parse_okx(payload: Any) -> tuple[str, ...]:
 
 
 def parse_kucoin(payload: Any) -> tuple[str, ...]:
-    """``GET /api/v1/user/api-key`` (``{code, data: {...}}``); IP binding is attested."""
+    """``GET /api/v1/user/api-key`` (``{code, data: {...}}``); the IP whitelist is not exposed."""
     envelope = _mapping(payload)
     if envelope is None or str(envelope.get("code")) != "200000":
         return (UNPARSEABLE,)
@@ -216,32 +229,48 @@ def parse_kucoin(payload: Any) -> tuple[str, ...]:
 
 
 def parse_gateio(payload: Any) -> tuple[str, ...]:
-    """``GET /account/detail`` (flat object); permission scopes are attested."""
+    """``GET /account/detail`` (flat object); permission scopes are not exposed."""
     body = _mapping(payload)
     if body is None:
         return (UNPARSEABLE,)
     return _ip_rules(body.get("ip_whitelist"), "ip_whitelist")
 
 
+def deprecated_env_vars(environ: Mapping[str, str]) -> tuple[str, ...]:
+    """Names (never values) of removed ``KEY_POLICY_*`` attestation variables that are set."""
+    return tuple(name for name in DEPRECATED_ENV_VARS if environ.get(name, "").strip())
+
+
+@dataclass(frozen=True, slots=True)
+class KeyAssessment:
+    """Result for one key: ``violations`` reject it, ``warnings`` do not. Rule names only."""
+
+    violations: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+
+    @property
+    def accepted(self) -> bool:
+        """True when the key may be used (read-only as far as the API can tell)."""
+        return not self.violations
+
+
 @dataclass(frozen=True, slots=True)
 class KeyPolicyCheck:
-    """Policy of one venue: how to parse its introspection payload and what is attested."""
+    """Policy of one venue: how to parse its introspection payload.
+
+    ``unverifiable`` names a property the venue API does not expose (a warning, or a violation
+    in strict mode).
+    """
 
     venue: str
     parse: Parser
-    attestation: Callable[[KeyPolicySettings], tuple[bool, str]] | None = None
+    unverifiable: str | None = None
 
-    def evaluate(self, payload: Any, settings: KeyPolicySettings) -> tuple[str, ...]:
-        """Rule names violated by ``payload`` (empty = key passes). Never raises."""
-        return self.evaluate_waiver(payload, settings)[0]
+    def assess(self, payload: Any, settings: KeyPolicySettings) -> KeyAssessment:
+        """Judge ``payload``. Never raises.
 
-    def evaluate_waiver(
-        self, payload: Any, settings: KeyPolicySettings
-    ) -> tuple[tuple[str, ...], bool]:
-        """``(violated rules, key is IP-unbound under the waiver)``. Never raises.
-
-        With ``ip_binding_waived`` only ``ip_not_restricted`` and the KuCoin IP attestation
-        are dropped; every other rule is kept.
+        Strict: every rule (including IP binding and unverifiable properties) is a violation.
+        Default: IP binding and unverifiable properties are warnings; permissions stay fatal.
         """
         try:
             rules = list(self.parse(payload))
@@ -254,75 +283,102 @@ class KeyPolicyCheck:
                 error=type(exc).__name__,
             )
             rules = [UNPARSEABLE]
-        if self.attestation is not None:
-            attested, rule = self.attestation(settings)
-            if not attested:
-                rules.append(rule)
-        if not settings.ip_binding_waived:
-            return tuple(rules), False
-        waived = {IP_UNBOUND, ATTEST_KUCOIN_IP}
-        return tuple(r for r in rules if r not in waived), any(r in waived for r in rules)
+        if self.unverifiable is not None:
+            rules.append(self.unverifiable)
+        if settings.strict:
+            return KeyAssessment(violations=tuple(rules))
+        soft = {IP_UNBOUND, UNVERIFIABLE_KUCOIN_IP, UNVERIFIABLE_GATEIO_PERMS}
+        return KeyAssessment(
+            violations=tuple(r for r in rules if r not in soft),
+            warnings=tuple(r for r in rules if r in soft),
+        )
 
 
 KEY_POLICIES: dict[str, KeyPolicyCheck] = {
     "binance": KeyPolicyCheck("binance", parse_binance),
     "bybit": KeyPolicyCheck("bybit", parse_bybit),
     "okx": KeyPolicyCheck("okx", parse_okx),
-    "kucoin": KeyPolicyCheck(
-        "kucoin", parse_kucoin, lambda s: (s.kucoin_ip_attested, ATTEST_KUCOIN_IP)
-    ),
-    "gateio": KeyPolicyCheck(
-        "gateio", parse_gateio, lambda s: (s.gateio_permissions_attested, ATTEST_GATEIO_PERMS)
-    ),
+    "kucoin": KeyPolicyCheck("kucoin", parse_kucoin, UNVERIFIABLE_KUCOIN_IP),
+    "gateio": KeyPolicyCheck("gateio", parse_gateio, UNVERIFIABLE_GATEIO_PERMS),
 }
+
+
+@dataclass(frozen=True, slots=True)
+class KeyPolicyReport:
+    """Outcome for all venues: rejected keys (must not be used) and warnings (usable keys)."""
+
+    rejected: Mapping[str, tuple[str, ...]]
+    warnings: Mapping[str, tuple[str, ...]]
+
+    @property
+    def rejected_venues(self) -> tuple[str, ...]:
+        """Venues that must run without their key, sorted."""
+        return tuple(sorted(self.rejected))
+
+
+async def assess_venue_key(
+    venue: str,
+    adapter: object,
+    credentials: ExchangeCredentials | None,
+    settings: KeyPolicySettings,
+) -> KeyAssessment | None:
+    """The single policy decision shared by ``nexus check`` and the scanner.
+
+    ``None`` = no key configured (public mode). Never raises. Only rule names leave here.
+    """
+    if credentials is None or not credentials.is_configured:
+        log.info("key_policy_skipped", exchange=venue, reason="no_key_public_mode")
+        return None
+    policy = KEY_POLICIES.get(venue)
+    read_key_info = getattr(adapter, "fetch_key_info", None)
+    if policy is None or read_key_info is None:
+        return KeyAssessment(violations=(NO_POLICY,))
+    try:
+        payload = await read_key_info()
+    except Exception as exc:
+        # Any failure (exchange, read-only guard, configuration, ...) rejects this key. Only the
+        # class name is logged: messages of auth errors may embed request details.
+        log.warning("key_policy_request_failed", exchange=venue, error=type(exc).__name__)
+        return KeyAssessment(violations=(REQUEST_FAILED,))
+    assessment = policy.assess(payload, settings)
+    del payload  # raw response holds apiKey / uid / label
+    log.info(
+        "key_policy_checked",
+        exchange=venue,
+        passed=assessment.accepted,
+        violations=list(assessment.violations),
+        warnings=list(assessment.warnings),
+    )
+    return assessment
 
 
 async def verify_key_policies(
     adapters: Mapping[str, object],
     credentials: Mapping[str, ExchangeCredentials],
     settings: KeyPolicySettings,
-) -> tuple[str, ...]:
-    """Check every venue that has a key configured; raise on any violation.
+) -> KeyPolicyReport:
+    """Check every venue that has a key configured.
 
-    Returns the venues whose keys are IP-unbound under the explicit local-run waiver
-    (``KEY_POLICY_IP_BINDING_WAIVED``), sorted; empty without the waiver.
-
-    Venues without a key (public data mode) are skipped. All venues are evaluated before
-    raising so one run reports every problem. A configured key on a venue without a policy
-    is refused (fail closed).
+    Venues without a key (public data mode) are skipped. All venues are evaluated so one run
+    reports every problem. A configured key on a venue without a policy is rejected (fail
+    closed). In strict mode any rejection raises :class:`KeyPolicyViolationError`; otherwise
+    the caller must run the rejected venues without their key (see ``container``).
     """
-    violations: dict[str, tuple[str, ...]] = {}
-    unbound: list[str] = []
+    rejected: dict[str, tuple[str, ...]] = {}
+    warnings: dict[str, tuple[str, ...]] = {}
     for venue, adapter in adapters.items():
-        creds = credentials.get(venue)
-        if creds is None or not creds.is_configured:
-            log.info("key_policy_skipped", exchange=venue, reason="no_key_public_mode")
+        assessment = await assess_venue_key(venue, adapter, credentials.get(venue), settings)
+        if assessment is None:
             continue
-        policy = KEY_POLICIES.get(venue)
-        read_key_info = getattr(adapter, "fetch_key_info", None)
-        if policy is None or read_key_info is None:
-            violations[venue] = (NO_POLICY,)
-            continue
-        try:
-            payload = await read_key_info()
-        except Exception as exc:
-            # Any failure (exchange, read-only guard, configuration, ...) refuses this venue
-            # and the other venues are still checked. Only the class name is logged: messages
-            # of auth errors may embed request details.
-            log.warning("key_policy_request_failed", exchange=venue, error=type(exc).__name__)
-            violations[venue] = (REQUEST_FAILED,)
-            continue
-        rules, ip_unbound = policy.evaluate_waiver(payload, settings)
-        del payload  # raw response holds apiKey / uid / label
-        log.info("key_policy_checked", exchange=venue, passed=not rules, violations=list(rules))
-        if rules:
-            violations[venue] = rules
-        elif ip_unbound:
-            unbound.append(venue)
-    if violations:
-        raise KeyPolicyViolationError(violations)
-    result = tuple(sorted(unbound))
-    if result:
+        if not assessment.accepted:
+            rejected[venue] = assessment.violations
+        elif assessment.warnings:
+            warnings[venue] = assessment.warnings
+    if rejected and settings.strict:
+        raise KeyPolicyViolationError(rejected)
+    if rejected:
         # Names only: no key material, no IPs.
-        log.warning("key_policy_ip_binding_waived", venues=list(result))
-    return result
+        log.warning("key_policy_public_fallback", venues=sorted(rejected), rules=rejected)
+    if warnings:
+        log.warning("key_policy_warnings", rules=warnings)
+    return KeyPolicyReport(rejected=rejected, warnings=warnings)

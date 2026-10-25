@@ -123,6 +123,19 @@ MESSAGES: Final[dict[str, tuple[str, str]]] = {
         "{venue}: key accepted, read-only, KEYED mode.",
         "{venue}: ключ принят, только чтение, режим С КЛЮЧОМ.",
     ),
+    "venue_keyed_warn": (
+        "{venue}: key accepted, KEYED mode, but some properties cannot be verified by the API "
+        "({detail}). Make sure the key has only Read permission and, ideally, an IP whitelist.",
+        "{venue}: ключ принят, режим С КЛЮЧОМ, но часть свойств API проверить не может "
+        "({detail}). Убедитесь, что у ключа только право Read и, лучше всего, есть белый список "
+        "IP.",
+    ),
+    "key_policy_deprecated": (
+        "Obsolete setting(s) ignored: {detail}. Remove them from .env; the key check is automatic "
+        "now (optional KEY_POLICY_STRICT=true for a stricter check).",
+        "Устаревшие настройки игнорируются: {detail}. Удалите их из .env; проверка ключей теперь "
+        "автоматическая (необязательно: KEY_POLICY_STRICT=true для строгого режима).",
+    ),
     "venue_incomplete": (
         "{venue}: key settings incomplete ({detail}); running in PUBLIC mode. Fill the key and "
         "secret (and passphrase where required) together or clear them, see {docs}.",

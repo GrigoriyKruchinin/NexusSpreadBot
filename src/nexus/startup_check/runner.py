@@ -15,6 +15,7 @@ from pydantic_settings import SettingsConfigDict
 from sqlalchemy import text
 
 import nexus.adapters.cex  # noqa: F401 - registers built-in exchange adapters
+from nexus.adapters.key_policy import deprecated_env_vars
 from nexus.adapters.registry import AdapterOptions, exchange_registry
 from nexus.config.base import NexusBaseSettings
 from nexus.config.groups import (
@@ -92,6 +93,9 @@ async def _venue_items() -> list[Item]:
         default_taker_fee_pct=spread.default_taker_fee_pct,
     )
     items: list[Item] = []
+    obsolete = deprecated_env_vars(os.environ)
+    if obsolete:
+        items.append(Item("warn", "key_policy_deprecated", {"detail": safe(", ".join(obsolete))}))
     for venue in exchanges.enabled:
         adapter = None
         try:

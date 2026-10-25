@@ -18,7 +18,7 @@ Authority: ADR 0010 (`docs/decisions/0010-self-hosted-alert-tool.md`). Cards in 
 - [x] T6 commented `.env.example` + consistency check (devops; M) — `docs/tasks/tool/T6-env-example-config.md`
 - [x] T7 startup validation, bilingual errors, public-mode fallback (backend-lead; L; scanner-side fallback open, see card) — `docs/tasks/tool/T7-startup-validation.md`
 - [x] T8 one-command start `make up`, auto migrations (devops; M) — `docs/tasks/tool/T8-one-command-start.md`
-- [ ] T9 KEY_POLICY simplification for third parties (security; M) — `docs/tasks/tool/T9-key-policy-simplification.md`
+- [x] T9 KEY_POLICY simplification for third parties (security; M) — `docs/tasks/tool/T9-key-policy-simplification.md`
 - [ ] T10 README quickstart (EN) + `docs/guides/quickstart.md` (RU) (scribe; M) — `docs/tasks/tool/T10-readme-quickstart.md`
 - [ ] T11 tests isolation + CI update (tester; M) — `docs/tasks/tool/T11-tests-ci-update.md`
 - [ ] T12 repo hygiene + CLAUDE.md proposal (project-manager; M) — `docs/tasks/tool/T12-hygiene-docs-agents.md`; handoff `docs/handoffs/project-manager-to-user-claude-md-2026-10-25.md`
@@ -47,7 +47,7 @@ Authority: ADR 0010 (`docs/decisions/0010-self-hosted-alert-tool.md`). Cards in 
   - [ ] A5b Redis auth, healthcheck, maxmemory noeviction — card `docs/tasks/track0/A5b-redis-auth.md`
   - [ ] A5c DB roles + `nexus_test_owner` test role (needs user OK, U4) — card `docs/tasks/track0/A5c-db-roles-test-role.md`
   - [ ] A5d Docker hardening + secrets files (before any VPS) — card `docs/tasks/track0/A5d-docker-hardening-secrets.md`
-    - [ ] A5d must add a guard that refuses `KEY_POLICY_IP_BINDING_WAIVED=true` on a server/VPS/prod deployment (fail closed; no environment setting exists yet) — see A6 card addendum KP-W
+    - [ ] A5d must add a guard that refuses a non-strict key policy (`KEY_POLICY_STRICT` unset; T9 replaced the IP waiver) on a server/VPS/prod deployment (fail closed; no environment setting exists yet) — see A6 card addendum KP-W
 - [x] A6 key-policy startup check (6766bfd + ee38592; tech-lead round 2 + security: accepted) `KeyPolicyCheck` (S-08/G4; before U3, no real keys without it) — card `docs/tasks/track0/A6-key-policy-startup-check.md`
 - [ ] A6 follow-ups F-1..F-5 (parallel venue checks, IKeyIntrospection Protocol, guard test for _ws/transfer fallback, IP CIDR cut-off at U3, .env.example MEXC/Bitget wording) — see `docs/audit/tech-lead-review-track0.md` Round 2
 - [x] B1a remove MEXC_*/BITGET_* key vars from scanner env + `.env.example` (G5; low) — card `docs/tasks/track0/B1a-remove-unused-key-vars.md`

@@ -6,7 +6,7 @@
 - complexity: medium (security semantics must not weaken; mostly deletion and defaults)
 - size: M
 - depends_on: T7
-- status: todo
+- status: done (security review ACCEPT pending at stage end)
 
 ## Goal
 Third-party users face no attestation flags; read-only is verified by the API where possible and otherwise documented.
@@ -32,3 +32,10 @@ Server/VPS deployment policy.
 src/nexus/adapters/key_policy.py, src/nexus/config, tests/, docs/guides/
 
 DoD: `make check` green and not worse than baseline, new tests, no secrets in diff, todo.md + card updated, committed (Conventional Commits).
+
+## Progress (2026-10-25)
+- Attestation flags and `KEY_POLICY_IP_BINDING_WAIVED` removed; only `KEY_POLICY_STRICT` (env-only, TOML denied) remains. Old vars are ignored; `nexus check` shows a deprecation warning.
+- One policy function `assess_venue_key` (`adapters/key_policy.py`) serves `nexus check` and the scanner.
+- Default: rejected/unverifiable-fatal key -> `container.enforce_key_policy` closes the adapter and rebuilds it from empty credentials (public mode); warning log + `ScannerStarted.public_fallback_venues` Telegram line. IP binding and KuCoin IP / Gate.io scopes (API cannot show them) are warnings.
+- Strict: old fail-closed (exit 3), IP binding required, unverifiable venues refused (no attestation exists any more).
+- Tests: credential-less client asserted (`test_rejected_key_is_never_used_...`). Open: CLAUDE.md rule 2 still names the IP waiver flag (user-owned file); A5d guard text in todo adjusted.

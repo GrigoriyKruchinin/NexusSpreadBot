@@ -13,9 +13,13 @@ from typing import Any, Final, Literal
 
 import httpx
 
-from nexus.adapters.key_policy import NO_POLICY, REQUEST_FAILED, verify_key_policies
+from nexus.adapters.key_policy import (
+    NO_POLICY,
+    REQUEST_FAILED,
+    KeyAssessment,
+    assess_venue_key,
+)
 from nexus.config.groups import ExchangeCredentials, KeyPolicySettings
-from nexus.domain.errors import KeyPolicyViolationError
 
 Status = Literal["ok", "warn", "fail"]
 
@@ -179,24 +183,34 @@ async def check_venue(
     credentials: ExchangeCredentials | None,
     key_policy: KeyPolicySettings,
 ) -> Item:
-    """Mode of one venue. Never raises and never stops other venues; reads only (one signed GET)."""
+    """Mode of one venue, judged by the same policy function as the scanner.
+
+    Never raises and never stops other venues; reads only (one signed GET). A rejected key is a
+    warning (the scanner runs that venue in public mode), or a failure in strict mode.
+    """
     if credentials is None or not credentials.is_configured:
         return Item("ok", "venue_public", {"venue": venue})
     if adapter is None:
-        return Item("warn", "venue_rejected", {"venue": venue})
+        return Item("fail" if key_policy.strict else "warn", "venue_rejected", {"venue": venue})
     try:
-        await verify_key_policies({venue: adapter}, {venue: credentials}, key_policy)
-    except KeyPolicyViolationError as exc:
-        rules = exc.violations.get(venue, ())
+        assessment = await assess_venue_key(venue, adapter, credentials, key_policy)
+    except Exception:  # defensive: a venue problem must not stop the check
+        assessment = KeyAssessment(violations=(REQUEST_FAILED,))
+    if assessment is None:  # unreachable: credentials are configured
+        return Item("ok", "venue_public", {"venue": venue})
+    if not assessment.accepted:
+        rules = assessment.violations
+        severity: Status = "fail" if key_policy.strict else "warn"
         detail = safe(", ".join(rules))
         params = {"venue": venue, "detail": detail}
         if any(_is_withdraw_rule(r) for r in rules):
-            return Item("warn", "venue_withdraw", params)
+            return Item(severity, "venue_withdraw", params)
         if rules in ((REQUEST_FAILED,), (NO_POLICY,)):
-            return Item("warn", "venue_rejected", {"venue": venue})
-        return Item("warn", "venue_policy", params)
-    except Exception:  # defensive: a venue problem must not stop the check
-        return Item("warn", "venue_rejected", {"venue": venue})
+            return Item(severity, "venue_rejected", {"venue": venue})
+        return Item(severity, "venue_policy", params)
+    if assessment.warnings:
+        detail = safe(", ".join(assessment.warnings))
+        return Item("warn", "venue_keyed_warn", {"venue": venue, "detail": detail})
     return Item("ok", "venue_keyed", {"venue": venue})
 
 

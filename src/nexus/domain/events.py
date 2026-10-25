@@ -48,7 +48,9 @@ class ScannerStarted:
     reference_notional_usd: str
     common_symbols: int
     ip_unbound_venues: tuple[str, ...] = ()
-    """Venues whose keys have no IP binding (local-run waiver); names only."""
+    """Venues whose accepted keys have no verified IP binding; names only."""
+    public_fallback_venues: tuple[str, ...] = ()
+    """Venues whose key failed the automatic key check and is NOT used (public mode); names only."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -376,6 +378,7 @@ def event_from_payload(payload: dict[str, Any]) -> SystemEvent:
     if cls is ScannerStarted:
         data["exchanges"] = tuple(ExchangeStatus(**e) for e in data.get("exchanges", ()))
         data["ip_unbound_venues"] = tuple(data.get("ip_unbound_venues", ()))
+        data["public_fallback_venues"] = tuple(data.get("public_fallback_venues", ()))
     if cls is RoutesQuarantined:
         data["routes"] = tuple(QuarantinedRoute(**r) for r in data.get("routes", ()))
     event: SystemEvent = cls(**data)

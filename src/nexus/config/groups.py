@@ -219,22 +219,17 @@ class ExchangeCredentials(NexusBaseSettings):
 
 
 class KeyPolicySettings(NexusBaseSettings):
-    """User attestations for key properties the venue API does not expose (``KEY_POLICY_*``).
+    """Key policy mode (``KEY_POLICY_STRICT``, env-only).
 
-    Non-secret booleans. A venue whose key cannot be fully introspected needs its flag set
-    after the user verified the property by hand (U3 guide); otherwise startup is refused.
+    The read-only check of every key is automatic and always on. Default: a key that fails it
+    (or cannot be verified) is not used and the venue runs in public mode; IP binding is
+    recommended, not required. Strict (owner's own setup): a rejected key is fatal, IP binding is
+    required, and a property the venue API does not expose (KuCoin IP, Gate.io scopes) is refused.
     """
 
     model_config = SettingsConfigDict(env_prefix="KEY_POLICY_")
 
-    kucoin_ip_attested: bool = False
-    """KuCoin's key info does not show the IP whitelist: the key is IP-restricted."""
-    gateio_permissions_attested: bool = False
-    """Gate.io has no per-key scope introspection: every permission group is read-only or off."""
-    ip_binding_waived: bool = False
-    """Local-run waiver (user decision 2026-10-24): keys may lack an IP whitelist. Waives only
-    ``ip_not_restricted`` and the KuCoin IP attestation; every other rule stays fatal.
-    Env-only (``KEY_POLICY_IP_BINDING_WAIVED``); never to be set on a server (A5d guard)."""
+    strict: bool = False
 
 
 class ScannerSettings(NexusBaseSettings):

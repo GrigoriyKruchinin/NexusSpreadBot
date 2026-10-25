@@ -14,13 +14,14 @@ from structlog.testing import capture_logs
 
 from nexus.adapters import cex  # noqa: F401  (registers adapters)
 from nexus.adapters.key_policy import (
-    ATTEST_GATEIO_PERMS,
-    ATTEST_KUCOIN_IP,
     IP_UNBOUND,
     KEY_POLICIES,
     NO_POLICY,
     REQUEST_FAILED,
     UNPARSEABLE,
+    UNVERIFIABLE_GATEIO_PERMS,
+    UNVERIFIABLE_KUCOIN_IP,
+    deprecated_env_vars,
     verify_key_policies,
 )
 from nexus.adapters.registry import AdapterOptions, exchange_registry
@@ -37,12 +38,7 @@ from nexus.domain.errors import (
 @pytest.fixture(autouse=True)
 def _key_policy_env_off_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     """A developer's local .env may set KEY_POLICY_*; process env wins over dotenv."""
-    for name in (
-        "KEY_POLICY_IP_BINDING_WAIVED",
-        "KEY_POLICY_KUCOIN_IP_ATTESTED",
-        "KEY_POLICY_GATEIO_PERMISSIONS_ATTESTED",
-    ):
-        monkeypatch.setenv(name, "false")
+    monkeypatch.setenv("KEY_POLICY_STRICT", "false")
 
 
 FAKE_KEY = "AKIA-FAKE-KEY-1234"
@@ -83,9 +79,8 @@ KUCOIN_OK: dict[str, Any] = {
     "data": {"permission": "General", "apiKey": FAKE_KEY, "uid": FAKE_UID, "remark": FAKE_LABEL},
 }
 GATEIO_OK: dict[str, Any] = {"user_id": FAKE_UID, "ip_whitelist": ["203.0.113.7"], "tier": 1}
-ATTESTED = KeyPolicySettings(
-    kucoin_ip_attested=True, gateio_permissions_attested=True, ip_binding_waived=False
-)
+STRICT = KeyPolicySettings(strict=True)
+DEFAULT = KeyPolicySettings(strict=False)
 OK = {
     "binance": BINANCE_OK,
     "bybit": BYBIT_OK,
@@ -95,8 +90,10 @@ OK = {
 }
 
 
-def rules(venue: str, payload: Any, settings: KeyPolicySettings = ATTESTED) -> tuple[str, ...]:
-    return KEY_POLICIES[venue].evaluate(payload, settings)
+def rules(venue: str, payload: Any, settings: KeyPolicySettings = STRICT) -> tuple[str, ...]:
+    """Parser view: strict violations without the "API cannot show it" markers."""
+    found = KEY_POLICIES[venue].assess(payload, settings).violations
+    return tuple(r for r in found if not r.startswith("unverifiable:"))
 
 
 def mutated(base: dict[str, Any], change: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
@@ -300,115 +297,70 @@ def test_gateio_missing_whitelist() -> None:
     assert rules("gateio", payload) == ("missing_or_invalid_field:ip_whitelist",)
 
 
-# ---------------------------------------------------------------- attestation
-def test_attestation_required_for_kucoin_and_gateio() -> None:
-    none = KeyPolicySettings()
-    assert rules("kucoin", KUCOIN_OK, none) == (ATTEST_KUCOIN_IP,)
-    assert rules("gateio", GATEIO_OK, none) == (ATTEST_GATEIO_PERMS,)
-    for venue in ("binance", "bybit", "okx"):
-        assert rules(venue, OK[venue], none) == ()
-
-
-def test_attestation_flags_come_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("KEY_POLICY_KUCOIN_IP_ATTESTED", "true")
-    settings = KeyPolicySettings()
-    assert settings.kucoin_ip_attested is True
-    assert settings.gateio_permissions_attested is False
-
-
-# ---------------------------------------------------------------- IP binding waiver
-WAIVED = KeyPolicySettings(
-    ip_binding_waived=True, kucoin_ip_attested=False, gateio_permissions_attested=False
-)
-
-
-def test_waiver_default_off_and_same_as_before() -> None:
-    assert KeyPolicySettings().ip_binding_waived is False
-    unbound = mutated(BINANCE_OK, lambda p: p.update(ipRestrict=False))
-    assert rules("binance", unbound) == (IP_UNBOUND,)
-    assert rules("kucoin", KUCOIN_OK, KeyPolicySettings()) == (ATTEST_KUCOIN_IP,)
-
-
-def test_waiver_ignores_only_ip_rules() -> None:
-    unbound = mutated(BINANCE_OK, lambda p: p.update(ipRestrict=False))
-    assert rules("binance", unbound, WAIVED) == ()
-    okx = mutated(OKX_OK, lambda p: p["data"][0].update(ip=""))
-    assert rules("okx", okx, WAIVED) == ()
-    wildcard = mutated(OKX_OK, lambda p: p["data"][0].update(ip="0.0.0.0/0"))
-    assert rules("okx", wildcard, WAIVED) == ()
-    assert rules("kucoin", KUCOIN_OK, WAIVED) == ()
-
-
-def test_waiver_keeps_other_violations_fatal() -> None:
-    both = mutated(BINANCE_OK, lambda p: p.update(ipRestrict=False, enableWithdrawals=True))
-    assert rules("binance", both, WAIVED) == ("permission:enableWithdrawals",)
-    okx = mutated(OKX_OK, lambda p: p["data"][0].update(ip="", perm="read_only,trade"))
-    assert rules("okx", okx, WAIVED) == ("permission:trade",)
-    kucoin = mutated(KUCOIN_OK, lambda p: p["data"].update(permission="General,Transfer"))
-    assert rules("kucoin", kucoin, WAIVED) == ("permission:Transfer",)
-    assert rules("kucoin", {"code": "400"}, WAIVED) == (UNPARSEABLE,)
-    # Gate.io permission attestation is not waived.
-    assert rules("gateio", GATEIO_OK, WAIVED) == (ATTEST_GATEIO_PERMS,)
-    gate_unbound = mutated(GATEIO_OK, lambda p: p.update(ip_whitelist=[]))
-    assert rules("gateio", gate_unbound, WAIVED) == (ATTEST_GATEIO_PERMS,)
-    assert rules("okx", {"code": "1"}, WAIVED) == (UNPARSEABLE,)
-    missing = {k: v for k, v in BINANCE_OK.items() if k != "ipRestrict"}
-    assert rules("binance", missing, WAIVED) == (_missing_ip_restrict(),)
-
-
-def _missing_ip_restrict() -> str:
-    return "missing_or_invalid_field:ipRestrict"
-
-
-async def test_waiver_runner_returns_venues_and_warns() -> None:
-    adapters = {
-        "binance": FakeAdapter(mutated(BINANCE_OK, lambda p: p.update(ipRestrict=False))),
-        "bybit": FakeAdapter(BYBIT_OK),
-        "okx": FakeAdapter(mutated(OKX_OK, lambda p: p["data"][0].update(ip=""))),
-        "kucoin": FakeAdapter(KUCOIN_OK),
-    }
-    with capture_logs() as logs:
-        result = await verify_key_policies(adapters, dict.fromkeys(adapters, creds()), WAIVED)
-    assert result == ("binance", "kucoin", "okx")
-    warned = [e for e in logs if e["event"] == "key_policy_ip_binding_waived"]
-    assert len(warned) == 1
-    assert warned[0]["venues"] == ["binance", "kucoin", "okx"]
-    assert warned[0]["log_level"] == "warning"
-
-
-async def test_waiver_runner_still_raises_on_other_violation() -> None:
-    adapters = {
-        "binance": FakeAdapter(
-            mutated(BINANCE_OK, lambda p: p.update(ipRestrict=False, enableMargin=True))
-        ),
-        "okx": FakeAdapter(OKX_OK),
-    }
-    with pytest.raises(KeyPolicyViolationError) as err:
-        await verify_key_policies(adapters, dict.fromkeys(adapters, creds()), WAIVED)
-    assert err.value.violations == {"binance": ("permission:enableMargin",)}
-
-
-async def test_no_waiver_runner_returns_empty_and_no_warning() -> None:
-    adapters = {v: FakeAdapter(OK[v]) for v in CORE_EXCHANGES}
-    with capture_logs() as logs:
-        result = await verify_key_policies(adapters, dict.fromkeys(adapters, creds()), ATTESTED)
-    assert result == ()
-    assert not [e for e in logs if e["event"] == "key_policy_ip_binding_waived"]
-
-
-async def test_waiver_request_failed_stays_fatal() -> None:
-    adapters = {"okx": FakeAdapter(error=ExchangeError("okx", "boom"))}
-    with pytest.raises(KeyPolicyViolationError) as err:
-        await verify_key_policies(adapters, {"okx": creds()}, WAIVED)
-    assert err.value.violations == {"okx": (REQUEST_FAILED,)}
-
-
-def test_waiver_flag_from_env_and_strict_bool(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("KEY_POLICY_IP_BINDING_WAIVED", "true")
-    assert KeyPolicySettings().ip_binding_waived is True
-    monkeypatch.setenv("KEY_POLICY_IP_BINDING_WAIVED", "maybe")
+# ---------------------------------------------------------------- modes (T9)
+def test_strict_is_off_by_default_and_comes_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert KeyPolicySettings().strict is False
+    monkeypatch.setenv("KEY_POLICY_STRICT", "true")
+    assert KeyPolicySettings().strict is True
+    monkeypatch.setenv("KEY_POLICY_STRICT", "maybe")
     with pytest.raises(ValueError):  # noqa: PT011 - pydantic ValidationError is a ValueError
         KeyPolicySettings()
+
+
+def test_strict_marks_unverifiable_properties_as_violations() -> None:
+    assert KEY_POLICIES["kucoin"].assess(KUCOIN_OK, STRICT).violations == (UNVERIFIABLE_KUCOIN_IP,)
+    assert KEY_POLICIES["gateio"].assess(GATEIO_OK, STRICT).violations == (
+        UNVERIFIABLE_GATEIO_PERMS,
+    )
+    for venue in ("binance", "bybit", "okx"):
+        assert KEY_POLICIES[venue].assess(OK[venue], STRICT).violations == ()
+
+
+def test_default_mode_warns_about_unverifiable_properties_only() -> None:
+    kucoin = KEY_POLICIES["kucoin"].assess(KUCOIN_OK, DEFAULT)
+    assert kucoin.accepted
+    assert kucoin.warnings == (UNVERIFIABLE_KUCOIN_IP,)
+    gateio = KEY_POLICIES["gateio"].assess(GATEIO_OK, DEFAULT)
+    assert gateio.accepted
+    assert gateio.warnings == (UNVERIFIABLE_GATEIO_PERMS,)
+
+
+def test_default_mode_ip_binding_is_recommended_not_required() -> None:
+    unbound = mutated(BINANCE_OK, lambda p: p.update(ipRestrict=False))
+    assert KEY_POLICIES["binance"].assess(unbound, STRICT).violations == (IP_UNBOUND,)
+    result = KEY_POLICIES["binance"].assess(unbound, DEFAULT)
+    assert result.accepted
+    assert result.warnings == (IP_UNBOUND,)
+    okx = mutated(OKX_OK, lambda p: p["data"][0].update(ip="0.0.0.0/0"))
+    assert KEY_POLICIES["okx"].assess(okx, DEFAULT).accepted
+
+
+def test_default_mode_keeps_permission_rules_fatal() -> None:
+    both = mutated(BINANCE_OK, lambda p: p.update(ipRestrict=False, enableWithdrawals=True))
+    result = KEY_POLICIES["binance"].assess(both, DEFAULT)
+    assert result.violations == ("permission:enableWithdrawals",)
+    assert result.warnings == (IP_UNBOUND,)
+    kucoin = mutated(KUCOIN_OK, lambda p: p["data"].update(permission="General,Transfer"))
+    assert KEY_POLICIES["kucoin"].assess(kucoin, DEFAULT).violations == ("permission:Transfer",)
+    assert KEY_POLICIES["okx"].assess({"code": "1"}, DEFAULT).violations == (UNPARSEABLE,)
+    missing = {k: v for k, v in BINANCE_OK.items() if k != "ipRestrict"}
+    assert KEY_POLICIES["binance"].assess(missing, DEFAULT).violations == (
+        "missing_or_invalid_field:ipRestrict",
+    )
+
+
+def test_old_attestation_variables_are_ignored_with_a_notice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("KEY_POLICY_KUCOIN_IP_ATTESTED", "true")
+    monkeypatch.setenv("KEY_POLICY_IP_BINDING_WAIVED", "true")
+    settings = KeyPolicySettings()  # no error
+    assert settings.strict is False
+    assert deprecated_env_vars(
+        {"KEY_POLICY_KUCOIN_IP_ATTESTED": "true", "KEY_POLICY_IP_BINDING_WAIVED": "false"}
+    ) == ("KEY_POLICY_KUCOIN_IP_ATTESTED", "KEY_POLICY_IP_BINDING_WAIVED")
+    assert deprecated_env_vars({"KEY_POLICY_STRICT": "true"}) == ()
+    assert deprecated_env_vars({"KEY_POLICY_IP_BINDING_WAIVED": ""}) == ()
 
 
 # ---------------------------------------------------------------- runner
@@ -431,8 +383,10 @@ def creds(configured: bool = True) -> ExchangeCredentials:
 
 async def test_runner_passes_and_calls_once_per_venue() -> None:
     adapters = {v: FakeAdapter(OK[v]) for v in CORE_EXCHANGES}
-    await verify_key_policies(adapters, dict.fromkeys(CORE_EXCHANGES, creds()), ATTESTED)
+    report = await verify_key_policies(adapters, dict.fromkeys(CORE_EXCHANGES, creds()), DEFAULT)
     assert all(a.calls == 1 for a in adapters.values())
+    assert not report.rejected
+    assert set(report.warnings) == {"kucoin", "gateio"}  # cannot be verified by the API
 
 
 async def test_runner_skips_venue_without_key() -> None:
@@ -442,29 +396,50 @@ async def test_runner_skips_venue_without_key() -> None:
     assert adapter.calls == 0
 
 
-async def test_runner_refuses_and_names_venue_and_rule() -> None:
+async def test_strict_runner_refuses_and_names_venue_and_rule() -> None:
     adapters = {
         "binance": FakeAdapter({**BINANCE_OK, "enableWithdrawals": True}),
         "okx": FakeAdapter(OKX_OK),
         "bybit": FakeAdapter(BYBIT_OK),
     }
     with pytest.raises(KeyPolicyViolationError) as info:
-        await verify_key_policies(
-            adapters,
-            {n: creds() for n in adapters},
-            KeyPolicySettings(),
-        )
+        await verify_key_policies(adapters, {n: creds() for n in adapters}, STRICT)
     assert info.value.violations == {"binance": ("permission:enableWithdrawals",)}
     assert "binance" in str(info.value)
     assert "permission:enableWithdrawals" in str(info.value)
 
 
+async def test_strict_runner_refuses_unverifiable_venues() -> None:
+    adapters = {"kucoin": FakeAdapter(KUCOIN_OK), "gateio": FakeAdapter(GATEIO_OK)}
+    with pytest.raises(KeyPolicyViolationError) as info:
+        await verify_key_policies(adapters, {n: creds() for n in adapters}, STRICT)
+    assert info.value.violations == {
+        "kucoin": (UNVERIFIABLE_KUCOIN_IP,),
+        "gateio": (UNVERIFIABLE_GATEIO_PERMS,),
+    }
+
+
+async def test_default_runner_rejects_withdraw_key_without_raising() -> None:
+    adapters = {
+        "binance": FakeAdapter({**BINANCE_OK, "enableWithdrawals": True}),
+        "okx": FakeAdapter(OKX_OK),
+    }
+    with capture_logs() as logs:
+        report = await verify_key_policies(adapters, {n: creds() for n in adapters}, DEFAULT)
+    assert report.rejected == {"binance": ("permission:enableWithdrawals",)}
+    assert report.rejected_venues == ("binance",)
+    assert not report.warnings
+    assert any(e["event"] == "key_policy_public_fallback" for e in logs)
+
+
 async def test_runner_request_failure_is_refused_without_leaking_message() -> None:
     adapter = FakeAdapter(error=ExchangeAuthError("okx", f"bad key {FAKE_KEY}"))
-    with capture_logs() as logs, pytest.raises(KeyPolicyViolationError) as info:
-        await verify_key_policies({"okx": adapter}, {"okx": creds()}, KeyPolicySettings())
-    assert info.value.violations == {"okx": (REQUEST_FAILED,)}
+    with capture_logs() as logs:
+        report = await verify_key_policies({"okx": adapter}, {"okx": creds()}, DEFAULT)
+    assert report.rejected == {"okx": (REQUEST_FAILED,)}
     assert FAKE_KEY not in json.dumps(logs, default=str)
+    with pytest.raises(KeyPolicyViolationError) as info:
+        await verify_key_policies({"okx": adapter}, {"okx": creds()}, STRICT)
     assert FAKE_KEY not in str(info.value)
 
 
@@ -475,9 +450,9 @@ async def test_runner_any_exception_is_request_failed_and_others_continue(
     error: BaseException,
 ) -> None:
     adapters = {"okx": FakeAdapter(error=error), "bybit": FakeAdapter(BYBIT_OK)}
-    with capture_logs() as logs, pytest.raises(KeyPolicyViolationError) as info:
-        await verify_key_policies(adapters, {n: creds() for n in adapters}, KeyPolicySettings())
-    assert info.value.violations == {"okx": (REQUEST_FAILED,)}
+    with capture_logs() as logs:
+        report = await verify_key_policies(adapters, {n: creds() for n in adapters}, DEFAULT)
+    assert report.rejected == {"okx": (REQUEST_FAILED,)}
     assert adapters["bybit"].calls == 1
     assert FAKE_KEY not in json.dumps(logs, default=str)
     assert any(
@@ -486,15 +461,17 @@ async def test_runner_any_exception_is_request_failed_and_others_continue(
     )
 
 
-async def test_runner_refuses_key_on_venue_without_policy() -> None:
+async def test_runner_rejects_key_on_venue_without_policy() -> None:
+    report = await verify_key_policies({"mexc": FakeAdapter({})}, {"mexc": creds()}, DEFAULT)
+    assert report.rejected == {"mexc": (NO_POLICY,)}
     with pytest.raises(KeyPolicyViolationError) as info:
-        await verify_key_policies({"mexc": FakeAdapter({})}, {"mexc": creds()}, ATTESTED)
+        await verify_key_policies({"mexc": FakeAdapter({})}, {"mexc": creds()}, STRICT)
     assert info.value.violations == {"mexc": (NO_POLICY,)}
 
 
-async def test_runner_refuses_adapter_without_introspection() -> None:
-    with pytest.raises(KeyPolicyViolationError):
-        await verify_key_policies({"binance": object()}, {"binance": creds()}, ATTESTED)
+async def test_runner_rejects_adapter_without_introspection() -> None:
+    report = await verify_key_policies({"binance": object()}, {"binance": creds()}, DEFAULT)
+    assert report.rejected_venues == ("binance",)
 
 
 async def test_logs_contain_no_response_fields() -> None:
@@ -503,9 +480,9 @@ async def test_logs_contain_no_response_fields() -> None:
         "kucoin": FakeAdapter(KUCOIN_OK),
         "bybit": FakeAdapter(BYBIT_OK),
     }
-    with capture_logs() as logs, pytest.raises(KeyPolicyViolationError) as info:
-        await verify_key_policies(adapters, {n: creds() for n in adapters}, KeyPolicySettings())
-    dump = json.dumps(logs, default=str) + str(info.value)
+    with capture_logs() as logs:
+        report = await verify_key_policies(adapters, {n: creds() for n in adapters}, DEFAULT)
+    dump = json.dumps(logs, default=str) + str(report)
     for secret in (FAKE_KEY, FAKE_UID, FAKE_LABEL, "203.0.113.7"):
         assert secret not in dump
     assert any(entry["event"] == "key_policy_checked" for entry in logs)
@@ -517,7 +494,7 @@ async def test_parser_bug_refuses_instead_of_crashing_open() -> None:
 
     check = type(KEY_POLICIES["okx"])("okx", boom)
     with capture_logs() as logs:
-        assert check.evaluate({}, ATTESTED) == (UNPARSEABLE,)
+        assert check.assess({}, STRICT).violations == (UNPARSEABLE,)
     assert any(e["event"] == "key_policy_parser_error" for e in logs)
     assert FAKE_KEY not in json.dumps(logs, default=str)
 
@@ -612,6 +589,70 @@ async def test_scanner_scope_verifies_keys_before_anything_else(
         async with container.scanner_scope(settings):
             pass
     assert closed == ["adapter"]
+
+
+def _scope_settings(strict: bool) -> Any:
+    exchanges = type("E", (), {"request_timeout_ms": 5000})()
+    spread = type("Sp", (), {"default_taker_fee_pct": 0.1})()
+    return type(
+        "S",
+        (),
+        {
+            "credentials": {"binance": CREDS_ALL, "okx": CREDS_ALL},
+            "key_policy": KeyPolicySettings(strict=strict),
+            "exchanges": exchanges,
+            "spread": spread,
+        },
+    )()
+
+
+def _patch_transport(monkeypatch: pytest.MonkeyPatch, binance_payload: Any) -> None:
+    async def transport(
+        self: Any, url: str, method: str = "GET", headers: Any = None, body: Any = None
+    ) -> Any:
+        return binance_payload if "binance" in url else OKX_OK
+
+    monkeypatch.setattr(ccxt_async.Exchange, "fetch", transport)
+
+
+async def test_rejected_key_is_never_used_the_venue_gets_a_credential_less_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Hard rule: in default mode a key that failed the check is not used by any client."""
+    from nexus import container
+
+    _patch_transport(monkeypatch, {**BINANCE_OK, "enableWithdrawals": True})
+    settings = _scope_settings(strict=False)
+    options = AdapterOptions()
+    adapters = {n: exchange_registry.create(n, CREDS_ALL, options) for n in ("binance", "okx")}
+    original = adapters["binance"]
+    assert original._rest.apiKey  # type: ignore[attr-defined]  # it was keyed before the check
+    try:
+        report = await container.enforce_key_policy(adapters, settings)
+        assert report.rejected_venues == ("binance",)
+        rebuilt = adapters["binance"]
+        assert rebuilt is not original
+        assert not rebuilt._rest.apiKey  # type: ignore[attr-defined]
+        assert not rebuilt._rest.secret  # type: ignore[attr-defined]
+        assert adapters["okx"]._rest.apiKey  # type: ignore[attr-defined]  # others unaffected
+    finally:
+        for adapter in adapters.values():
+            await adapter.close()
+
+
+async def test_strict_mode_refuses_instead_of_falling_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from nexus import container
+
+    _patch_transport(monkeypatch, {**BINANCE_OK, "enableWithdrawals": True})
+    adapters = {"binance": exchange_registry.create("binance", CREDS_ALL, AdapterOptions())}
+    try:
+        with pytest.raises(KeyPolicyViolationError):
+            await container.enforce_key_policy(adapters, _scope_settings(strict=True))
+    finally:
+        for adapter in adapters.values():
+            await adapter.close()
 
 
 def test_cli_exits_non_zero_on_key_policy_violation(monkeypatch: pytest.MonkeyPatch) -> None:

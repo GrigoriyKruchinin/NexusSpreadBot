@@ -59,14 +59,19 @@ def test_started_message_waiver_line_roundtrip() -> None:
         "common_symbols": 1,
     }
     plain = formatter.render(ScannerStarted(**base))
-    assert "без привязки к IP" not in plain
-    event = ScannerStarted(**base, ip_unbound_venues=("binance", "okx", "kucoin"))
+    assert "привязки ключей к IP" not in plain.lower()
+    assert "НЕ использован" not in plain
+    event = ScannerStarted(
+        **base,
+        ip_unbound_venues=("binance", "okx", "kucoin"),
+        public_fallback_venues=("bybit",),
+    )
     restored = event_from_payload(json.loads(json.dumps(event_to_payload(event))))
     assert restored == event
-    assert (
-        "⚠️ Ключи без привязки к IP (разрешено для локального запуска): binance, okx, kucoin"
-        in formatter.render(restored)
-    )
+    text = formatter.render(restored)
+    assert "ℹ️ Привязка ключей к IP не подтверждена (рекомендуется): binance, okx, kucoin" in text
+    assert "⚠️ Ключ НЕ использован" in text
+    assert "публичном режиме: bybit" in text
 
 
 def test_system_events_roundtrip_and_render() -> None:

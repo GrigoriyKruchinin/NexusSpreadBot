@@ -9,8 +9,14 @@ import structlog
 from redis.asyncio import Redis
 
 import nexus.adapters.cex  # noqa: F401 - registers built-in exchange adapters
-from nexus.adapters.key_policy import verify_key_policies
+from nexus.adapters.key_policy import (
+    IP_UNBOUND,
+    UNVERIFIABLE_KUCOIN_IP,
+    KeyPolicyReport,
+    verify_key_policies,
+)
 from nexus.adapters.registry import AdapterOptions, exchange_registry
+from nexus.config.groups import ExchangeCredentials
 from nexus.config.roles import (
     AlertsWorkerSettings,
     MaintenanceWorkerSettings,
@@ -59,17 +65,40 @@ from nexus.workers.dispatch import CeleryAlertDispatcher
 
 log = structlog.get_logger(__name__)
 
+IP_UNBOUND_RULES = frozenset({IP_UNBOUND, UNVERIFIABLE_KUCOIN_IP})
 
-def build_adapters(settings: ScannerRoleSettings) -> dict[str, BaseExchangeAdapter]:
-    """Instantiate the enabled exchange adapters (unknown names fail fast)."""
-    options = AdapterOptions.from_settings(
+
+def _adapter_options(settings: ScannerRoleSettings) -> AdapterOptions:
+    return AdapterOptions.from_settings(
         timeout_ms=settings.exchanges.request_timeout_ms,
         default_taker_fee_pct=settings.spread.default_taker_fee_pct,
     )
+
+
+def build_adapters(settings: ScannerRoleSettings) -> dict[str, BaseExchangeAdapter]:
+    """Instantiate the enabled exchange adapters (unknown names fail fast)."""
+    options = _adapter_options(settings)
     return {
         name: exchange_registry.create(name, settings.credentials[name], options)
         for name in settings.exchanges.enabled
     }
+
+
+async def enforce_key_policy(
+    adapters: dict[str, BaseExchangeAdapter], settings: ScannerRoleSettings
+) -> KeyPolicyReport:
+    """Run the key policy; in default mode replace every rejected venue's adapter.
+
+    A key that failed the check is never used again: its adapter is closed and rebuilt from
+    empty credentials (public mode). Strict mode raises instead (``KeyPolicyViolationError``).
+    ``adapters`` is updated in place.
+    """
+    report = await verify_key_policies(adapters, settings.credentials, settings.key_policy)
+    options = _adapter_options(settings)
+    for venue in report.rejected_venues:
+        await adapters[venue].close()
+        adapters[venue] = exchange_registry.create(venue, ExchangeCredentials(), options)
+    return report
 
 
 def redis_client(url: str, socket_timeout_s: float) -> Redis:
@@ -85,10 +114,16 @@ async def scanner_scope(settings: ScannerRoleSettings) -> AsyncIterator[Scanner]
     async with AsyncExitStack() as stack:
         clock = SystemClock()
         adapters = build_adapters(settings)
-        for adapter in adapters.values():
-            stack.push_async_callback(adapter.close)
-        # Fail closed before any market data / DB work: a trade-capable key never runs.
-        ip_unbound = await verify_key_policies(adapters, settings.credentials, settings.key_policy)
+
+        async def _close_adapters() -> None:
+            for adapter in adapters.values():  # the rebuilt public adapters, not rejected ones
+                await adapter.close()
+
+        stack.push_async_callback(_close_adapters)
+        # Before any market data / DB work: a rejected key is never used (public fallback),
+        # or startup is refused in strict mode.
+        report = await enforce_key_policy(adapters, settings)
+        ip_unbound = tuple(sorted(v for v, w in report.warnings.items() if IP_UNBOUND_RULES & {*w}))
 
         engine = create_engine(settings.database)
         stack.push_async_callback(engine.dispose)
@@ -114,9 +149,13 @@ async def scanner_scope(settings: ScannerRoleSettings) -> AsyncIterator[Scanner]
         if streams is not None:
             stack.push_async_callback(streams.close)
         yield Scanner(
-            ip_unbound_venues=tuple(ip_unbound or ()),
+            ip_unbound_venues=ip_unbound,
+            public_fallback_venues=report.rejected_venues,
             adapters=adapters,
-            authenticated={n: c.is_configured for n, c in settings.credentials.items()},
+            authenticated={
+                n: c.is_configured and n not in report.rejected
+                for n, c in settings.credentials.items()
+            },
             estimator=NetSpreadEstimator(EstimatorConfig.from_settings(spread), clock),
             finder=CandidateFinder(
                 CandidateFilter(
