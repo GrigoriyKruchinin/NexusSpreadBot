@@ -7,7 +7,7 @@
   perp adapter interface), security (new public clients have no credentials; no order/transfer surface)
 - complexity: high (new perp market-data adapters, position state machine, persistence, report section)
 - depends_on: none blocking; deploy needs user OK (U4: image rebuild, migrator, scanner recreate)
-- status: Cancelled (NO-GO 2026-10-25), code removed in SHA_PLACEHOLDER. Former status: todo (spec ready 2026-10-25; architect review ACCEPT with changes 2026-10-25, steps S0-S15 below)
+- status: Cancelled (NO-GO 2026-10-25), code removed in f603178. Former status: todo (spec ready 2026-10-25; architect review ACCEPT with changes 2026-10-25, steps S0-S15 below)
 - spec: `docs/quant/hedged-transfer-spec.md` (normative; section numbers below refer to it)
 
 ## Goal
