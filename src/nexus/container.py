@@ -189,7 +189,9 @@ async def alert_service_scope(settings: AlertsWorkerSettings) -> AsyncIterator[A
             clock=SystemClock(),
             max_age_s=settings.telegram.alert_max_age_s,
             event_max_age_s=settings.telegram.event_max_age_s,
-            opportunity_formatter=OpportunityFormatter(settings.conditional.venues),
+            opportunity_formatter=OpportunityFormatter(
+                settings.conditional.venues, settings.alerts.language
+            ),
         )
     finally:
         await notifier.close()

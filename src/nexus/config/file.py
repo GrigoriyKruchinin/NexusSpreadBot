@@ -84,6 +84,7 @@ TOML_ALLOWED: frozenset[str] = frozenset(
         "SPREAD_REQUIRE_VERIFIED_TRANSFER",
         "SPREAD_ALERT_COOLDOWN_S",
         "ALERT_REALERT_GROWTH_PCT",
+        "ALERT_LANGUAGE",
         "EPISODE_CLOSE_GAP_S",
         "QUARANTINE_PERSIST_MIN",
         "QUARANTINE_TTL_H",

@@ -94,6 +94,8 @@ alert_cooldown_s = 600
 [alert]
 # Re-alert an open episode only when its net profit grew by at least this percentage
 realert_growth_pct = 50
+# Language of the alert texts: "en" or "ru"
+language = "en"
 
 [episode]
 close_gap_s = 300

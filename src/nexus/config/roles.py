@@ -148,6 +148,7 @@ class AlertsWorkerSettings(_RoleSettings):
     celery: CelerySettings
     telegram: TelegramSettings
     conditional: ConditionalVenuesSettings = Field(default_factory=ConditionalVenuesSettings)
+    alerts: AlertPolicySettings = Field(default_factory=AlertPolicySettings)
     watchdog: WatchdogSettings = Field(default_factory=WatchdogSettings)
     logging: LoggingSettings
 
@@ -159,6 +160,7 @@ class AlertsWorkerSettings(_RoleSettings):
             celery=CelerySettings(),
             telegram=TelegramSettings(),
             conditional=ConditionalVenuesSettings(),
+            alerts=AlertPolicySettings(),
             watchdog=WatchdogSettings(),
             logging=LoggingSettings(),
         )

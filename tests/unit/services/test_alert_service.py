@@ -30,7 +30,7 @@ async def test_sends_once_and_records() -> None:
     service = _service(repos, notifier)
     assert await service.send_opportunity(evaluation_id) is AlertOutcome.SENT
     assert repos.alerts[evaluation_id][0] is AlertDeliveryStatus.SENT
-    assert "Арбитражная возможность" in notifier.sent[0].text
+    assert "<b>ABC</b>/USDT" in notifier.sent[0].text
     assert await service.send_opportunity(evaluation_id) is AlertOutcome.DUPLICATE
     assert len(notifier.sent) == 1
 
@@ -140,7 +140,8 @@ async def test_realert_context_reaches_the_message() -> None:
     assert await _service(repos, notifier).send_opportunity(evaluation_id, context) is (
         AlertOutcome.SENT
     )
-    assert "Повтор №1" in notifier.sent[0].text
+    assert "🔄" in notifier.sent[0].text
+    assert "#9" in notifier.sent[0].text
 
 
 async def test_episode_closed_is_silent() -> None:

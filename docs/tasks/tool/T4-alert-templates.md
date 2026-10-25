@@ -6,7 +6,10 @@
 - complexity: medium (formatting plus Telegram HTML limits)
 - size: M
 - depends_on: T3
-- status: todo
+- status: done
+
+## Progress
+Done: catalog (en/ru) in alert_catalog.py, `[alert] language`, NEW/UPDATE/CLOSED templates, golden + escaping tests. Pinned disclaimer text in catalog (README in T9). Edit-in-place left to T5.
 
 ## Goal
 Define and implement the three Telegram message templates carrying the approved fields, in Russian and English chosen by a setting.

@@ -1,4 +1,4 @@
-"""Telegram HTML message templates (user-facing text is Russian).
+"""Telegram HTML message templates (alerts: en|ru via the catalog; system events: Russian).
 
 Every dynamic value passes through :func:`esc` (``html.escape``): exchange-provided strings
 (network codes, error texts) must never be able to inject markup.
@@ -15,6 +15,7 @@ from typing import Final
 from nexus.domain.conditional import conditional_legs
 from nexus.domain.events import (
     AlertContext,
+    AlertTransfer,
     EpisodeClosed,
     ExchangeDown,
     ExchangeRecovered,
@@ -25,10 +26,12 @@ from nexus.domain.events import (
     WatchdogAlert,
     WatchdogRecovered,
 )
-from nexus.domain.spread import SpreadEvaluation, TransferStatus
+from nexus.domain.spread import SpreadBreakdown, SpreadEvaluation, TransferStatus
+from nexus.notifications.alert_catalog import DEFAULT_LANGUAGE, catalog
 
 SEPARATOR: Final = "━━━━━━━━━━━━━━━━━━━━"
 TELEGRAM_MAX_LENGTH: Final = 4096
+JUST_OPENED_S: Final = 10
 
 EXCHANGE_DISPLAY_NAMES: Final[dict[str, str]] = {
     "binance": "Binance",
@@ -111,6 +114,12 @@ def fmt_price(value: Decimal, *, significant: int = 6) -> str:
     return text
 
 
+def signed_pct(value: Decimal) -> str:
+    """``+1.12 %`` (explicit sign, space before the percent sign as in the alert templates)."""
+    rounded = value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return f"{'+' if rounded >= 0 else '-'}{abs(rounded)} %"
+
+
 def fmt_amount(value: Decimal) -> str:
     """Base asset amount, up to 8 decimals, trimmed."""
     quantized = value.quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
@@ -143,99 +152,222 @@ def truncate(text: str) -> str:
 
 
 class OpportunityFormatter:
-    """Renders a profitable :class:`SpreadEvaluation` as a Telegram HTML alert."""
+    """Renders the opportunity alert templates NEW / UPDATE / CLOSED in ``en`` or ``ru``.
 
-    def __init__(self, conditional_venues: Collection[str] = ()) -> None:
+    The templates are compact lines (no ``<pre>`` tables, which break on mobile). Every dynamic
+    value is escaped; every fixed string comes from :mod:`nexus.notifications.alert_catalog`.
+    Edit-in-place delivery (replacing a sent NEW by UPDATE / CLOSED) is not done here.
+    """
+
+    def __init__(
+        self, conditional_venues: Collection[str] = (), language: str = DEFAULT_LANGUAGE
+    ) -> None:
         self._conditional = tuple(conditional_venues)
+        self._t = catalog(language)
 
-    def render(self, evaluation: SpreadEvaluation, context: AlertContext | None = None) -> str:
-        """Render the alert; requires a cost breakdown."""
-        bd = evaluation.breakdown
-        if bd is None:
+    def render(
+        self,
+        evaluation: SpreadEvaluation,
+        context: AlertContext | None = None,
+        *,
+        peak_net_pct: Decimal | None = None,
+    ) -> str:
+        """NEW for an episode's first alert, UPDATE for its re-alerts."""
+        context = context or AlertContext()
+        if context.realert:
+            return self.render_update(evaluation, context, peak_net_pct=peak_net_pct)
+        return self.render_new(evaluation, context)
+
+    def render_new(self, evaluation: SpreadEvaluation, context: AlertContext | None = None) -> str:
+        """Template NEW."""
+        return self._compose("title_new", evaluation, context or AlertContext(), None)
+
+    def render_update(
+        self,
+        evaluation: SpreadEvaluation,
+        context: AlertContext | None = None,
+        *,
+        peak_net_pct: Decimal | None = None,
+    ) -> str:
+        """Template UPDATE: the NEW body with current numbers and the lifetime with the peak."""
+        return self._compose("title_update", evaluation, context or AlertContext(), peak_net_pct)
+
+    def render_closed(
+        self,
+        evaluation: SpreadEvaluation,
+        context: AlertContext | None = None,
+        *,
+        peak_net_pct: Decimal | None = None,
+    ) -> str:
+        """Template CLOSED from the last seen evaluation (transfer and flags stay as last seen)."""
+        context = context or AlertContext()
+        bd = self._breakdown(evaluation)
+        t = self._t
+        if context.lifetime is not None:
+            duration = self._duration(context.lifetime.lifetime_ms() // 1000)
+            summary = (
+                t["closed_summary"].format(
+                    duration=duration,
+                    peak=signed_pct(peak_net_pct),
+                    last=signed_pct(bd.net_profit_pct),
+                )
+                if peak_net_pct is not None
+                else t["closed_summary_nopeak"].format(duration=duration)
+            )
+        else:
+            summary = ""
+        lines = [
+            t["title_closed"].format(coin=esc(evaluation.base), quote=esc(evaluation.quote)),
+            *self._venue_lines(evaluation, bd),
+            *self._transfer_lines(evaluation, context, bd),
+            self._footer(summary, context),
+        ]
+        return truncate("\n".join(line for line in lines if line))
+
+    def _compose(
+        self,
+        title_key: str,
+        evaluation: SpreadEvaluation,
+        context: AlertContext,
+        peak_net_pct: Decimal | None,
+    ) -> str:
+        bd = self._breakdown(evaluation)
+        t = self._t
+        title = t[title_key].format(
+            coin=esc(evaluation.base),
+            quote=esc(evaluation.quote),
+            net_pct=signed_pct(bd.net_profit_pct),
+        )
+        net = t["net"].format(
+            net_pct=signed_pct(bd.net_profit_pct),
+            net_usd=fmt_usd(bd.net_profit_usd, signed=True),
+            notional=fmt_usd(bd.cost_quote).removesuffix(".00"),
+        )
+        lines = [
+            title + self._conditional_marker(evaluation),
+            *self._venue_lines(evaluation, bd),
+            net,
+            *([t["fees_estimated"]] if evaluation.fees_estimated else []),
+            *self._transfer_lines(evaluation, context, bd),
+            self._footer(self._lifetime_text(context, peak_net_pct), context),
+        ]
+        return truncate("\n".join(line for line in lines if line))
+
+    @staticmethod
+    def _breakdown(evaluation: SpreadEvaluation) -> SpreadBreakdown:
+        if evaluation.breakdown is None:
             msg = "cannot render an opportunity without a cost breakdown"
             raise ValueError(msg)
-        buy = esc(exchange_name(evaluation.buy_exchange))
-        sell = esc(exchange_name(evaluation.sell_exchange))
-        base = esc(evaluation.base)
-        quote = esc(evaluation.quote)
+        return evaluation.breakdown
 
-        rows = [
-            ("Комиссия покупки", fmt_usd(bd.fee_buy_usd)),
-            ("Комиссия продажи", fmt_usd(bd.fee_sell_usd)),
-            ("Проскальзывание", fmt_usd(bd.slippage_usd)),
-            ("Перевод", self._transfer_cost(evaluation)),
-        ]
-        width = max(len(label) for label, _ in rows)
-        table = "\n".join(f"{label.ljust(width)}  {value}" for label, value in rows)
-
-        context = context or AlertContext()
-        title = "Арбитражная возможность"
-        if context.realert:
-            title = f"Повтор №{context.realert}: спред растёт"
+    def _conditional_marker(self, evaluation: SpreadEvaluation) -> str:
         legs = conditional_legs(
             evaluation.buy_exchange, evaluation.sell_exchange, self._conditional
         )
-        marker = ""
-        if legs:
-            label = "условная биржа" if len(legs) == 1 else "условные биржи"
-            marker = f"  ⚠️ {label} ({esc(', '.join(exchange_name(v) for v in legs))})"
-        lines = [
-            f"💹 <b>{esc(title)}</b> · <code>{esc(evaluation.symbol)}</code>{marker}",
-            *(
-                [
-                    f"🔁 В прошлом алерте чистая прибыль была "
-                    f"<b>{fmt_usd(Decimal(context.previous_net_usd), signed=True)}</b>"
-                ]
-                if context.realert and context.previous_net_usd
-                else []
-            ),
-            SEPARATOR,
-            f"🟢 <b>ПОКУПКА</b> на <b>{buy}</b> по <code>{fmt_price(bd.best_ask_buy)}</code>"
-            f" · средняя <code>{fmt_price(bd.vwap_buy)}</code>",
-            f"🔴 <b>ПРОДАЖА</b> на <b>{sell}</b> по <code>{fmt_price(bd.best_bid_sell)}</code>"
-            f" · средняя <code>{fmt_price(bd.vwap_sell)}</code>",
-            "",
-            f"💰 <b>Чистая прибыль: {fmt_usd(bd.net_profit_usd, signed=True)}"
-            f" ({fmt_pct(bd.net_profit_pct)})</b>",
-            f"📈 Спред до издержек: <b>{fmt_pct(bd.gross_spread_pct)}</b>",
-            f"📦 Объём: <b>{fmt_usd(bd.cost_quote)}</b> {quote} → "
-            f"<b>{fmt_amount(bd.base_bought)}</b> {base}",
-            SEPARATOR,
-            "🧾 <b>Издержки</b>",
-            f"<pre>{esc(table)}</pre>",
-            self._transfer_line(evaluation),
-            *(
-                ["ℹ️ <i>Комиссия тейкера оценочная (биржа не отдаёт её по паре).</i>"]
-                if evaluation.fees_estimated
-                else []
-            ),
-            f"<blockquote>⏱ Возраст стаканов: {evaluation.buy_book_age_ms} мс / "
-            f"{evaluation.sell_book_age_ms} мс\n"
-            f"🕒 {fmt_time(evaluation.evaluated_at_ms)}</blockquote>",
+        if not legs:
+            return ""
+        key = "conditional_one" if len(legs) == 1 else "conditional_many"
+        return "  " + self._t[key].format(venues=esc(", ".join(exchange_name(v) for v in legs)))
+
+    def _venue_lines(self, evaluation: SpreadEvaluation, bd: SpreadBreakdown) -> list[str]:
+        t = self._t
+        return [
+            f"{t['buy']} <b>{esc(exchange_name(evaluation.buy_exchange))}</b>"
+            f"  {fmt_price(bd.best_ask_buy)}",
+            f"{t['sell']} <b>{esc(exchange_name(evaluation.sell_exchange))}</b>"
+            f"  {fmt_price(bd.best_bid_sell)}",
         ]
-        return truncate("\n".join(lines))
 
-    @staticmethod
-    def _transfer_cost(evaluation: SpreadEvaluation) -> str:
-        bd = evaluation.breakdown
-        if bd is None:
-            return "н/д"
-        if not evaluation.transfer_verified:
-            # Only a per-asset chain tax can be priced without a verified network.
-            return f"{fmt_usd(bd.transfer_fee_usd)} налог + н/д" if bd.transfer_fee_usd else "н/д"
-        return fmt_usd(bd.transfer_fee_usd)
-
-    @staticmethod
-    def _transfer_line(evaluation: SpreadEvaluation) -> str:
-        transfer = evaluation.transfer
-        if transfer.status is TransferStatus.VERIFIED:
-            network = esc(transfer.network or "?")
-            return f"🔁 Перевод: ✅ подтверждён, сеть <b>{network}</b>"
-        note = f" — {esc(transfer.note)}" if transfer.note else ""
-        return (
-            "⚠️ <b>Маршрут перевода не подтверждён</b>"
-            f"{note}\n<i>Перед действием проверьте статус ввода/вывода вручную.</i>"
+    def _transfer_lines(
+        self, evaluation: SpreadEvaluation, context: AlertContext, bd: SpreadBreakdown
+    ) -> list[str]:
+        t = self._t
+        coin = esc(evaluation.base)
+        volume = context.volume
+        quote = fmt_usd(Decimal(volume.max_quote) if volume else bd.cost_quote)
+        base = fmt_amount(Decimal(volume.max_base) if volume else bd.base_bought)
+        lines = [
+            t["volume" if volume else "volume_scanned"].format(
+                quote=quote.removesuffix(".00"), base=base, coin=coin
+            )
+        ]
+        transfer = (
+            context.transfer
+            or AlertContext.build(evaluation, None).transfer
+            or AlertTransfer(status=evaluation.transfer.status.value)
         )
+        note = f" — {esc(transfer.note)}" if transfer.note else ""
+        if transfer.status == TransferStatus.VERIFIED.value:
+            fee_usd = (
+                t["fee_usd"].format(usd=fmt_usd(Decimal(transfer.fee_usd)))
+                if transfer.fee_usd is not None
+                else ""
+            )
+            time = (
+                t["time"].format(minutes=self._minutes(Decimal(transfer.est_arrival_min)))
+                if transfer.est_arrival_min is not None
+                else t["time_unknown"]
+            )
+            lines.append(
+                t["transfer_ok"].format(
+                    network=esc(transfer.network or "?"),
+                    fee_base=fmt_amount(Decimal(transfer.fee_base or 0)),
+                    coin=coin,
+                    fee_usd=fee_usd,
+                    time=time,
+                )
+            )
+        elif transfer.status == TransferStatus.UNAVAILABLE.value:
+            lines.append(t["transfer_unavailable"].format(note=note))
+        else:
+            lines.append(t["transfer_unverified"].format(note=note))
+        states = (transfer.withdraw, transfer.deposit)
+        lines.append(
+            t["flags"].format(
+                buy=esc(exchange_name(evaluation.buy_exchange)),
+                sell=esc(exchange_name(evaluation.sell_exchange)),
+                w=t.get(f"flag_{transfer.withdraw}", t["flag_unknown"]),
+                d=t.get(f"flag_{transfer.deposit}", t["flag_unknown"]),
+            )
+        )
+        if "closed" in states or transfer.status == TransferStatus.UNAVAILABLE.value:
+            lines.append(t["hint_closed"])
+        elif transfer.status != TransferStatus.VERIFIED.value or "unknown" in states:
+            lines.append(t["hint_unverified"])
+        return lines
+
+    def _footer(self, text: str, context: AlertContext) -> str:
+        parts = [text] if text else []
+        if context.episode_id is not None:
+            parts.append(self._t["episode"].format(episode=context.episode_id))
+        return "   ·   ".join(parts)
+
+    def _lifetime_text(self, context: AlertContext, peak_net_pct: Decimal | None) -> str:
+        t = self._t
+        lifetime = context.lifetime
+        if lifetime is None:
+            return ""
+        seconds = lifetime.lifetime_ms() // 1000
+        if not context.realert and seconds < JUST_OPENED_S:
+            return t["lifetime_new"]
+        duration = self._duration(seconds)
+        if peak_net_pct is None:
+            return t["lifetime"].format(duration=duration)
+        return t["lifetime_peak"].format(duration=duration, peak=signed_pct(peak_net_pct))
+
+    def _duration(self, seconds: int) -> str:
+        t = self._t
+        seconds = max(seconds, 0)
+        if seconds < 60:
+            return t["d_sec"].format(s=seconds)
+        minutes, secs = divmod(seconds, 60)
+        if minutes < 60:
+            return t["d_min"].format(m=minutes, s=secs)
+        hours, minutes = divmod(minutes, 60)
+        return t["d_hour"].format(h=hours, m=minutes)
+
+    def _minutes(self, minutes: Decimal) -> str:
+        return self._t["min"].format(n=fmt_amount(minutes.quantize(Decimal("0.1"))))
 
 
 class SystemEventFormatter:

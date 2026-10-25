@@ -347,6 +347,8 @@ class AlertPolicySettings(NexusBaseSettings):
     realert_growth_pct: Decimal = Field(default=Decimal(50), gt=0, le=1_000)
     """Re-alert an open episode only when its net profit grew by at least this percentage
     over the last alerted value (one alert per episode otherwise)."""
+    language: Literal["en", "ru"] = "en"
+    """Language of the opportunity alert texts (``ALERT_LANGUAGE``)."""
 
 
 class EpisodeSettings(NexusBaseSettings):
