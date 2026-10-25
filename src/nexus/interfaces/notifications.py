@@ -30,5 +30,13 @@ class INotifier(ABC):
         """Deliver ``message``; raises :class:`~nexus.domain.errors.NexusError` on failure."""
 
     @abstractmethod
+    async def edit(self, message_id: str, message: OutgoingMessage) -> DeliveryReceipt:
+        """Replace the text of a delivered message in place.
+
+        An edit that changes nothing succeeds. Raises :class:`~nexus.domain.errors.MessageGoneError`
+        when the message no longer exists or cannot be edited.
+        """
+
+    @abstractmethod
     async def close(self) -> None:
         """Release network resources."""

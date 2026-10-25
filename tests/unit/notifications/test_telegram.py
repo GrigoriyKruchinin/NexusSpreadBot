@@ -6,9 +6,11 @@ import pytest
 from pydantic import SecretStr
 
 from nexus.config.groups import TelegramSettings
-from nexus.domain.errors import NotificationError, NotificationRejectedError
+from nexus.domain.errors import MessageGoneError, NotificationError, NotificationRejectedError
 from nexus.interfaces.notifications import OutgoingMessage
+from nexus.notifications.rate_limit import SendRateLimiter
 from nexus.notifications.telegram import TelegramNotifier
+from tests.fakes import FakeClock
 
 TOKEN = "123456789:AAHabcdefghijklmnopqrstuvwxyz0123456"
 
@@ -96,3 +98,84 @@ async def test_transport_errors_never_leak_token(error: Exception) -> None:
     assert TOKEN not in str(exc_info.value)
     assert exc_info.value.__cause__ is None
     assert exc_info.value.__suppress_context__
+
+
+async def test_edit_payload_and_receipt() -> None:
+    notifier, seen = _notifier(
+        lambda _: httpx.Response(200, json={"ok": True, "result": {"message_id": 77}})
+    )
+    receipt = await notifier.edit("77", OutgoingMessage(text="<b>new</b>"))
+    assert receipt.message_id == "77"
+    assert seen[0].url.path == f"/bot{TOKEN}/editMessageText"
+    body = json.loads(seen[0].content)
+    assert body == {
+        "chat_id": "-100123",
+        "message_id": 77,
+        "text": "<b>new</b>",
+        "parse_mode": "HTML",
+        "link_preview_options": {"is_disabled": True},
+    }
+
+
+async def test_edit_returns_the_id_when_the_reply_is_true() -> None:
+    # Telegram answers `result: true` for edits of inline messages; the id is then the input.
+    notifier, _ = _notifier(lambda _: httpx.Response(200, json={"ok": True, "result": True}))
+    assert (await notifier.edit("5", OutgoingMessage(text="x"))).message_id == "5"
+
+
+async def test_edit_not_modified_is_success() -> None:
+    notifier, _ = _notifier(
+        lambda _: httpx.Response(
+            400,
+            json={
+                "ok": False,
+                "description": "Bad Request: message is not modified: specified new message "
+                "content and reply markup are exactly the same",
+            },
+        )
+    )
+    receipt = await notifier.edit("9", OutgoingMessage(text="same"))
+    assert receipt.message_id == "9"
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "Bad Request: message to edit not found",
+        "Bad Request: message can't be edited",
+        "Bad Request: MESSAGE_ID_INVALID",
+    ],
+)
+async def test_edit_of_a_gone_message_raises_message_gone(description: str) -> None:
+    notifier, _ = _notifier(
+        lambda _: httpx.Response(400, json={"ok": False, "description": description})
+    )
+    with pytest.raises(MessageGoneError):
+        await notifier.edit("9", OutgoingMessage(text="x"))
+
+
+async def test_edit_other_rejection_stays_a_plain_rejection() -> None:
+    notifier, _ = _notifier(
+        lambda _: httpx.Response(
+            400, json={"ok": False, "description": "Bad Request: can't parse entities"}
+        )
+    )
+    with pytest.raises(NotificationRejectedError) as exc_info:
+        await notifier.edit("9", OutgoingMessage(text="<b"))
+    assert not isinstance(exc_info.value, MessageGoneError)
+
+
+async def test_429_blocks_the_limiter_and_carries_retry_after() -> None:
+    clock = FakeClock()
+    limiter = SendRateLimiter(monotonic=clock.now, sleep=clock.sleep, max_wait_s=100)
+    notifier, _ = _notifier(
+        lambda _: httpx.Response(
+            429, json={"ok": False, "description": "Too Many", "parameters": {"retry_after": 30}}
+        )
+    )
+    notifier._limiter = limiter
+    with pytest.raises(NotificationError) as exc_info:
+        await notifier.edit("9", OutgoingMessage(text="x"))
+    assert exc_info.value.retry_after_s == 30
+    await limiter.acquire()  # the next call waits behind retry_after
+    assert clock.slept[-1] >= 29

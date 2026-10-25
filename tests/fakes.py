@@ -33,6 +33,21 @@ from nexus.interfaces.repositories import (
 )
 
 
+class FakeClock:
+    """Monotonic seconds with an awaitable ``sleep`` that only advances the time."""
+
+    def __init__(self) -> None:
+        self.t = 1000.0
+        self.slept: list[float] = []
+
+    def now(self) -> float:
+        return self.t
+
+    async def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.t += seconds
+
+
 @dataclass
 class ManualClock:
     now: int = 1_800_000_000_000
@@ -225,9 +240,19 @@ class RecordingDispatcher(IAlertDispatcher):
 
 
 class RecordingNotifier(INotifier):
+    """Records sends and edits; ``error`` fails sends, ``edit_error`` fails edits."""
+
     def __init__(self, error: Exception | None = None) -> None:
         self.sent: list[OutgoingMessage] = []
+        self.edits: list[tuple[str, OutgoingMessage]] = []
         self.error = error
+        self.edit_error: Exception | None = None
+
+    async def edit(self, message_id: str, message: OutgoingMessage) -> DeliveryReceipt:
+        if self.edit_error:
+            raise self.edit_error
+        self.edits.append((message_id, message))
+        return DeliveryReceipt(channel="telegram", message_id=message_id)
 
     async def send(self, message: OutgoingMessage) -> DeliveryReceipt:
         if self.error:

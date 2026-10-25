@@ -74,3 +74,7 @@ class NotificationError(NexusError):
 
 class NotificationRejectedError(NotificationError):
     """The channel rejected the message permanently (bad request, chat not found, blocked)."""
+
+
+class MessageGoneError(NotificationRejectedError):
+    """The message to edit does not exist or can no longer be edited (deleted, too old)."""
