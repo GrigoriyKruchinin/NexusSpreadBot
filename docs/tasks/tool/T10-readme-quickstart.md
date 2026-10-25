@@ -6,7 +6,7 @@
 - complexity: medium (docs, but must be walked through literally)
 - size: M
 - depends_on: T8
-- status: todo
+- status: done (scribe draft 2026-10-25; user walk-through pending = NEEDS_USER; commit by orchestrator)
 
 ## Goal
 A new user reaches working alerts in 10 minutes from the README alone.
@@ -31,3 +31,14 @@ Marketing, website.
 README.md, docs/guides/quickstart.md
 
 DoD: `make check` green and not worse than baseline, new tests, no secrets in diff, todo.md + card updated, committed (Conventional Commits).
+
+## Progress (2026-10-25, scribe)
+- `README.md` rewritten (EN, short): quickstart via `make up`, config table, key policy, disclaimer and exchange
+  terms (lawyer s. 3.1, 3.4), troubleshooting, update/stop/reset, Apache-2.0 note.
+- `docs/guides/quickstart.md` written (RU, plain language): BotFather, private chat / private channel id (-100...),
+  bot as admin with "Post messages" + "Edit messages of others", read-only key checklist, legal notes, troubleshooting.
+- API-keys statement: lawyer s. 3.3 ("Your keys stay with you") NOT used verbatim. T9 security ACCEPT is not recorded
+  yet, so the text is reworded as a design goal until security records the review.
+- Checked by hand: every `make` target used exists in Makefile (up, ps, logs, doctor, down, reset-data, migrate, check,
+  test-integration); no command reads `.env`; relative links point to existing files.
+- Open: user walk-through of the guide (acceptance criterion 1), security ACCEPT for the key statement (T9).
