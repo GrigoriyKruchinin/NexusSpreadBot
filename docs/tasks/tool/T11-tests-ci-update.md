@@ -6,7 +6,7 @@
 - complexity: medium (CI and fixture work)
 - size: M
 - depends_on: T1b
-- status: todo
+- status: done
 
 ## Goal
 CI and tests reflect the reduced scope and cannot read a developer's `.env`.
@@ -31,3 +31,9 @@ Load tests.
 tests/, .github/workflows/
 
 DoD: `make check` green and not worse than baseline, new tests, no secrets in diff, todo.md + card updated, committed (Conventional Commits).
+
+## Result (2026-10-25)
+New baseline: 1059 unit tests, coverage 91.90 % (floor 89 %), ruff 0, mypy 0. Details and the proposed
+CLAUDE.md line: `docs/audit/baseline-S1-tool.md`. Global hermetic fixture in `tests/unit/conftest.py`; CI runs
+unit tests again with a hostile env/.env and `bash -n scripts/*.sh`. E2E alert flow, `.env.example` and compose
+checks already exist as unit tests; compose smoke stays manual (needs fake Telegram).

@@ -33,6 +33,8 @@ jobs:
           cache-dependency-glob: uv.lock
       - run: uv sync
       - run: make lint
+      # T8/T11: syntax check of every shell script (start.sh and helpers).
+      - run: for f in scripts/*.sh; do bash -n "$f"; done
 
   typecheck:
     runs-on: ubuntu-24.04
@@ -64,6 +66,18 @@ jobs:
       - run: uv sync
       # Floor is enforced by [tool.coverage.report] fail_under = 89 in pyproject.toml.
       - run: make test-cov
+      # T11: unit tests must be hermetic. Run again with hostile Nexus variables in the environment
+      # (and a hostile .env in the repo root): the result must not change.
+      - name: Unit tests with a hostile environment
+        env:
+          KEY_POLICY_STRICT: "true"
+          TELEGRAM_CHAT_ID: "999"
+          POSTGRES_DB: nexus
+          SPREAD_MIN_NET_PROFIT_USD: "99"
+        run: |
+          printf 'KEY_POLICY_STRICT=true\nTELEGRAM_CHAT_ID=999\n' > .env
+          make test
+          rm -f .env
 
   integration:
     runs-on: ubuntu-24.04

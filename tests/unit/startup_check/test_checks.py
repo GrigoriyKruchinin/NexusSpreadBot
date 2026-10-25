@@ -208,7 +208,7 @@ def creds(configured: bool = True) -> ExchangeCredentials:
 
 
 BINANCE_OK = {"enableReading": True, "ipRestrict": True, **dict.fromkeys(BINANCE_FORBIDDEN, False)}
-POLICY = KeyPolicySettings()
+POLICY = KeyPolicySettings(strict=False, _env_file=None)
 
 
 async def test_venue_without_key_is_public_and_makes_no_call() -> None:
