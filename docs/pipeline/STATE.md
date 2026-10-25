@@ -1,6 +1,10 @@
 # STATE (updated 2026-10-24)
 
 ## Where we are
+- **User decision 2026-10-25 (option a): finish HT and test it on paper.** Test length MAX ~1 week (not 3), with gaps
+  (PC sometimes off); verdict by extrapolation from active hours. Quant to define a short-window, gap-aware preliminary
+  verdict (params pre-registered before deploy => whole week is out-of-sample; label confidence honestly). HT1 progress:
+  S0-S3 committed (a7ba759..1b29e02); S4 binance adapter partial, uncommitted in the worktree.
 - **User decision 2026-10-25 (later): HT is THE strategy; current spot-inventory soak data is not needed.** Old paper
   sets need not be kept or resumed (AC5 golden-hash coexistence no longer required; tell architect/backend-lead). Project is
   reshaped around HT; GO candidate = HT with hedge on okx+kucoin (binance separate until G1.1a). If HT is not viable ->
