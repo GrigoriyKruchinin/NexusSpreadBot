@@ -140,7 +140,7 @@ sweep unaffected). S0 reduced to the `test_safety` additions.
   `list_transfer_routes()` (added to the safety allowlist, security sign-off). AC: regression test that
   all pre-existing `NetworkInfo` fields are identical on every existing fixture; `select_transfer_route`
   tests unchanged; S0 pins still pass.
-- [ ] **S6 Transit-time model** (`simulation/transit.py`, pure): block-time table, seeded lognormal +
+- [x] **S6 Transit-time model** (`simulation/transit.py`, pure): block-time table, seeded lognormal +
   p_stuck, `tau_p50`/`tau_p95`, seed from `position_key`. AC = card AC4.
 - [ ] **S7 Basis buffer + vol stats** (`simulation/basis.py`, pure): fixed-point `array('q')` ring
   buffer, median/std at lag, z-score, warm-up; sigma_1m and max rise from klines. AC: hand-computed
