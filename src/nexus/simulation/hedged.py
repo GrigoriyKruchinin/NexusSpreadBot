@@ -108,6 +108,9 @@ class HedgedConfig:
     max_open_positions: int = 4
     route_cooldown_ms: int = 60_000
     max_hold_h: int = 24
+    latency_ms: int = 2000
+    rebalance_retry_ms: int = 30 * MINUTE_MS
+    exit_slippage_mult: Decimal = Decimal(2)
     refill_threshold_usd: Decimal = Decimal(1500)
     p_stuck: float = 0.01
     stuck_h: int = 6
@@ -212,6 +215,10 @@ class EntryPlan:
     funding_interval_h: Decimal
     next_funding_ms: int | None
     mark: Decimal
+    perp_lot_base: Decimal
+    """Smallest perp size in base units (exit rounding)."""
+    deposit_confirmations: int | None
+    est_arrival_min: Decimal | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -470,7 +477,9 @@ def _choose_route_and_size(
         cfg.min_trade_usd / ask_ref
     ):
         raise _FailError(SkipReason.SELL_THIN, "B bids within slippage below the minimum trade")
-    options: list[tuple[Decimal, str, _Sized, tuple[Decimal, Decimal], NetworkInfo]] = []
+    options: list[
+        tuple[Decimal, str, _Sized, tuple[Decimal, Decimal], NetworkInfo, NetworkInfo]
+    ] = []
     below_min = False
     for code, out, into in routes:
         fee = _need(out.withdraw_fee)
@@ -501,7 +510,7 @@ def _choose_route_and_size(
             * mark
         )
         ask_a = _need(req.a.book.best_ask)
-        options.append((fee * ask_a + f_cost, code, sized, tau, out))
+        options.append((fee * ask_a + f_cost, code, sized, tau, out, into))
     if not options:
         if below_min:
             raise _FailError(SkipReason.BELOW_MIN_WITHDRAW, "size below min withdraw/deposit")
@@ -510,7 +519,7 @@ def _choose_route_and_size(
     if old:
         raise _FailError(SkipReason.METADATA_STALE, old)
     options.sort(key=lambda o: (o[0], o[1]))
-    _, code, sized, tau, out = options[0]
+    _, code, sized, tau, out, into = options[0]
     # (d) B minimum amount/cost (the depth and active checks ran above)
     bid_b = _need(req.b.book.best_bid)
     if not _meets_min(req.b.market, sized.q, sized.q * bid_b):
@@ -522,7 +531,9 @@ def _choose_route_and_size(
     final = pooled if pooled is not None and pooled.cost >= cfg.min_trade_usd else sized
     if final.cost < cfg.min_trade_usd:
         raise _FailError(SkipReason.UNFILLABLE, "below the minimum trade")
-    return _build_plan(cfg, req, state, venue, code, out, final, tau, funding, mark, phi_h, mmr)
+    return _build_plan(
+        cfg, req, state, venue, code, out, into, market, final, tau, funding, mark, phi_h, mmr
+    )
 
 
 def _stale_meta(cfg: HedgedConfig, req: EntryRequest) -> str:
@@ -608,6 +619,8 @@ def _build_plan(
     venue: str,
     code: str,
     out: NetworkInfo,
+    into: NetworkInfo,
+    market: PerpMarket,
     sized: _Sized,
     tau: tuple[Decimal, Decimal],
     funding: FundingInfo,
@@ -646,6 +659,9 @@ def _build_plan(
         funding_interval_h=funding.interval_h or DEFAULT_FUNDING_INTERVAL_H,
         next_funding_ms=funding.next_funding_ms,
         mark=mark,
+        perp_lot_base=market.lot_base,
+        deposit_confirmations=into.deposit_confirmations,
+        est_arrival_min=into.est_arrival_min,
     )
 
 

@@ -148,7 +148,7 @@ sweep unaffected). S0 reduced to the `test_safety` additions.
 - [x] **S8 Hedged portfolio I: pre-checks + entry** (`simulation/hedged.py`, pure Decimal): pools,
   pre-checks a-f with their exact skip reasons (first failure wins), sizing, lot/contract rounding, margin,
   P_liq, leg reserve. AC = card AC2 + entry parts of AC1.
-- [ ] **S9 Hedged portfolio II: hold + exit + capital.** Funding accrual (idempotent per funding time),
+- [x] **S9 Hedged portfolio II: hold + exit + capital.** Funding accrual (idempotent per funding time),
   liquidation (kline high and poll), partial/forced exit, unpriceable hedge rule (C8), USDT rebalancing,
   valuation (open basis MTM). AC = card AC1 + AC3; P&L identity sums exactly.
 - [ ] **S10 Migration + ORM + repository.** Additive revision (`paper_hedged_*` only), `IHedgedPaperRepository` /
