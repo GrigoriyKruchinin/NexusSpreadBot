@@ -30,13 +30,15 @@ _FORBIDDEN_CALL = re.compile(
     r"create_?\w*order\w*|cancel\w*order\w*|edit_?\w*order\w*|"
     r"fetch2?|request|sign|"
     r"set_?leverage|set_?margin\w*|set_?position_?mode|(add|reduce)_?margin|"
-    r"(private|sapi|papi|fapi|dapi|v\d)\w*(post|put|delete)\w*"
+    r"close_?\w*position\w*|(borrow|repay)\w*margin\w*|modify_?margin\w*|"
+    r"\w*(private|sapi|papi|fapi|dapi|v\d)\w*(post|put|delete)\w*"
     r")$"
 )
 _ALLOWED_CALLS = frozenset(
     {
         "fetch_deposit_withdraw_fees",  # ccxt read-only (GET) fee table
-        "list_transfer_routes",  # pure multi-route listing (engine); security sign-off pending
+        "list_transfer_routes",  # pure multi-route listing (engine); security sign-off 2026-10-25
+        # (docs/audit/security-review-HT1-S0-S8.md)
         "load_transfer_info",  # our read-only metadata interface
         "select_transfer_route",  # pure route selection (engine)
         "transfer_info",  # universe lookup
@@ -116,6 +118,13 @@ def test_no_fund_moving_or_order_calls_in_source() -> None:
         "client.set_position_mode(True)",
         "client.add_margin('BTC/USDT:USDT', 1)",
         "client.reduceMargin('BTC/USDT:USDT', 1)",
+        "client.futuresPrivatePostOrders({})",
+        "client.futures_private_post_position_margin_deposit_margin({})",
+        "client.close_position('BTC/USDT:USDT')",
+        "client.closeAllPositions()",
+        "client.borrowCrossMargin('USDT', 1)",
+        "client.repay_isolated_margin('BTC/USDT', 'USDT', 1)",
+        "client.modifyMarginHelper('BTC/USDT:USDT', 1, 'add')",
         "client.request('capital/withdraw/apply', 'sapi', 'POST')",
         "getattr(client, 'withdraw')('USDT', 1)",
         "import ccxt\ngetattr(client, name)()",

@@ -17,6 +17,8 @@ from typing import Any
 
 import ccxt.async_support as ccxt_async
 
+from nexus.adapters.cex.ccxt_base import install_read_only_guard
+
 OUT = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "perp"
 VENUES = {
     "okx": ("okx", {"fetchMarkets": {"types": ["swap"]}, "defaultType": "swap"}),
@@ -52,6 +54,7 @@ async def record(venue: str) -> None:
     if client.apiKey:  # public data only
         msg = "fixture recording must run without credentials"
         raise SystemExit(msg)
+    install_read_only_guard(client, f"{venue}:perp-fixtures")
     try:
         markets = await client.load_markets(True)
         swaps = {

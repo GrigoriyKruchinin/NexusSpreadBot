@@ -113,7 +113,7 @@ class CcxtPerpAdapter(IPerpMarketData):
         try:
             await self._rest.close()
         except Exception as exc:
-            self._log.warning("adapter_close_failed", error=repr(exc))
+            self._log.warning("adapter_close_failed", error=scrub(repr(exc)))
 
     # ------------------------------------------------------------------ calls
 
