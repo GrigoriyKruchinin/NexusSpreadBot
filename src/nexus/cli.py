@@ -70,6 +70,8 @@ def main(argv: list[str] | None = None) -> int:
     check = sub.add_parser("check", help="validate Telegram, exchange keys and database")
     check.add_argument("--no-db", action="store_true", help="skip the database check")
     check.add_argument("--send-test", action="store_true", help="send a test message to the chat")
+    pin = sub.add_parser("pin-text", help="print the disclaimer text to pin in the Telegram chat")
+    pin.add_argument("--lang", choices=["en", "ru"], help="default: [alert] language")
     args = parser.parse_args(argv)
 
     if args.command == "scanner":
@@ -80,9 +82,17 @@ def main(argv: list[str] | None = None) -> int:
             log.critical("key_policy_violation", violations=exc.violations)
             return EXIT_KEY_POLICY
         return 0
+    if args.command == "pin-text":
+        from nexus.notifications.alert_catalog import pinned_text
+        from nexus.startup_check.runner import detect_language
+
+        print(pinned_text(args.lang or detect_language()))  # noqa: T201 - the text is the output
+        return 0
     if args.command == "check":
         from nexus.startup_check.runner import run
 
+        # Redaction processor on, WARNING level, human format: the report is the output.
+        configure_logging(LoggingSettings(level="WARNING", json_format=False), service="check")
         return run(skip_db=args.no_db, send_test=args.send_test)
     if args.command == "healthcheck":
         configure_logging(LoggingSettings(), service="healthcheck")
