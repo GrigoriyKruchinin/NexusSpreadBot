@@ -1,4 +1,4 @@
-"""Daily digest template (Telegram HTML, Russian; every dynamic value is escaped)."""
+"""Daily digest template (Telegram HTML, en|ru; every dynamic value is escaped)."""
 
 from __future__ import annotations
 
@@ -10,14 +10,14 @@ from nexus.domain.digest import (
     DigestData,
     EpisodeStats,
 )
+from nexus.notifications.alert_catalog import DEFAULT_LANGUAGE, catalog
 from nexus.notifications.formatting import (
-    QUARANTINE_REASONS,
     SEPARATOR,
     esc,
     exchange_name,
-    fmt_duration,
     fmt_pct,
     fmt_usd,
+    format_duration,
     truncate,
 )
 
@@ -26,7 +26,10 @@ LATENCY_MARK: Final[dict[bool | None, str]] = {True: " ⚡", False: " 🐢", Non
 
 
 class DigestFormatter:
-    """Renders :class:`DigestData` for a time zone."""
+    """Renders :class:`DigestData` for a time zone in ``en`` or ``ru``."""
+
+    def __init__(self, language: str = DEFAULT_LANGUAGE) -> None:
+        self._t = catalog(language)
 
     def render(self, data: DigestData, tz: str) -> str:
         """Render the digest."""
@@ -36,7 +39,7 @@ class DigestFormatter:
             return datetime.fromtimestamp(epoch_ms / 1000, tz=zone).strftime("%d %b %H:%M")
 
         lines = [
-            "📊 <b>Ежедневный дайджест</b>",
+            self._t["dg_title"],
             f"<i>{local(data.window_start_ms)} → {local(data.window_end_ms)} ({esc(tz)})</i>",
             *self._conditional(data),
             SEPARATOR,
@@ -45,85 +48,87 @@ class DigestFormatter:
             *self._quarantine(data),
             SEPARATOR,
             *self._exchanges(data),
-            f"<blockquote>Неподтверждённые возможности (записаны, без алертов): "
-            f"{data.unverified_evaluations}</blockquote>",
+            self._t["dg_unverified"].format(n=data.unverified_evaluations),
         ]
         return truncate("\n".join(lines))
 
-    @staticmethod
-    def _conditional(data: DigestData) -> list[str]:
+    def _conditional(self, data: DigestData) -> list[str]:
         """Conditional-venue note and the episode totals (all / excluding conditional)."""
+        t = self._t
         if not data.conditional_venues:
-            return ["Условные биржи: нет", SEPARATOR, f"Эпизоды:   все {data.episodes.total}"]
+            return [
+                t["dg_no_conditional"],
+                SEPARATOR,
+                t["dg_episodes_all"].format(total=data.episodes.total),
+            ]
         ep_excl = data.episodes.total_excl_conditional
         names = ", ".join(esc(exchange_name(v)) for v in data.conditional_venues)
         return [
-            f"⚠️ Условные биржи (данные собираются, торговать пока нельзя): {names}",
+            t["dg_conditional"].format(names=names),
             SEPARATOR,
-            f"Эпизоды:   все {data.episodes.total} | без условных "
-            f"(фильтр) {'н/д' if ep_excl is None else ep_excl}",
+            t["dg_episodes_split"].format(
+                total=data.episodes.total, excl=t["dg_na"] if ep_excl is None else ep_excl
+            ),
         ]
 
-    @staticmethod
-    def _episodes(stats: EpisodeStats) -> list[str]:
+    def _episodes(self, stats: EpisodeStats) -> list[str]:
+        t = self._t
         lines = [
-            f"🔀 <b>Эпизодов возможностей: {stats.total}</b>",
-            f"✅ подтверждённых {stats.verified} · ⚠️ неподтверждённых {stats.unverified}"
-            f" · 🚫 в карантине {stats.quarantined}",
+            t["dg_ep_title"].format(n=stats.total),
+            t["dg_ep_split"].format(v=stats.verified, u=stats.unverified, q=stats.quarantined),
         ]
         if not stats.total:
             return lines
         lines.append(
-            f"⚡ Пережили задержку: <b>{stats.survived_latency}</b> из {stats.latency_checked}"
-            " проверенных"
+            t["dg_ep_latency"].format(n=stats.survived_latency, checked=stats.latency_checked)
         )
         if stats.median_duration_s is not None and stats.max_duration_s is not None:
             lines.append(
-                f"⏱ Длительность: медиана {fmt_duration(stats.median_duration_s)}"
-                f" · максимум {fmt_duration(stats.max_duration_s)}"
+                t["dg_ep_duration"].format(
+                    median=format_duration(t, stats.median_duration_s),
+                    max=format_duration(t, stats.max_duration_s),
+                )
             )
         if stats.top:
-            lines.append("<b>Топ связок по пиковой чистой прибыли</b>")
+            lines.append(t["dg_top"])
             for rank, e in enumerate(stats.top, start=1):
                 lines.append(
                     f"{rank}. <code>{esc(e.symbol)}</code> {esc(exchange_name(e.buy_exchange))}"
                     f" → {esc(exchange_name(e.sell_exchange))} — "
                     f"<b>{fmt_usd(e.peak_net_usd, signed=True)}</b>"
-                    f" ({fmt_pct(e.peak_net_pct)}) · {fmt_duration(e.duration_s)}"
+                    f" ({fmt_pct(e.peak_net_pct)}) · {format_duration(t, e.duration_s)}"
                     f"{LATENCY_MARK[e.survived_latency]}"
                 )
         return lines
 
-    @staticmethod
-    def _quarantine(data: DigestData) -> list[str]:
-        lines = [
-            f"🚫 <b>Карантин</b>: новых {len(data.quarantines)}"
-            f" · активных {data.active_quarantines}"
-        ]
+    def _quarantine(self, data: DigestData) -> list[str]:
+        t = self._t
+        lines = [t["dg_q_title"].format(new=len(data.quarantines), active=data.active_quarantines)]
         for q in data.quarantines[:QUARANTINES_SHOWN]:
-            why = QUARANTINE_REASONS.get(q.reason, q.reason)
+            why = t.get(f"q_{q.reason}", q.reason)
             lines.append(
                 f"• <code>{esc(q.symbol)}</code> {esc(exchange_name(q.buy_exchange))}"
                 f" → {esc(exchange_name(q.sell_exchange))}: {esc(why)}"
             )
         hidden = len(data.quarantines) - QUARANTINES_SHOWN
         if hidden > 0:
-            lines.append(f"… и ещё {hidden}")
+            lines.append(t["sys_more"].format(n=hidden))
         return lines
 
-    @staticmethod
-    def _exchanges(data: DigestData) -> list[str]:
+    def _exchanges(self, data: DigestData) -> list[str]:
+        t = self._t
         names = sorted(set(data.uptime_pct) | set(data.coverage_pct))
         if not names:
-            return ["🌐 <b>Биржи</b>: нет данных"]
-        width = max(len("Биржа"), *(len(exchange_name(n)) for n in names))
-        rows = [f"{'Биржа'.ljust(width)}  Аптайм  Переводы"]
+            return [t["dg_ex_none"]]
+        col = t["dg_ex_col_name"]
+        width = max(len(col), *(len(exchange_name(n)) for n in names))
+        uw, tw = len(t["dg_ex_col_uptime"]), len(t["dg_ex_col_transfers"])
+        rows = [f"{col.ljust(width)}  {t['dg_ex_col_uptime']}  {t['dg_ex_col_transfers']}"]
         for name in names:
-            uptime = _pct_cell(data.uptime_pct.get(name))
-            coverage = _pct_cell(data.coverage_pct.get(name))
-            rows.append(f"{exchange_name(name).ljust(width)}  {uptime:>6}  {coverage:>8}")
-        return ["🌐 <b>Биржи</b>", f"<pre>{esc(chr(10).join(rows))}</pre>"]
+            uptime = self._pct_cell(data.uptime_pct.get(name))
+            coverage = self._pct_cell(data.coverage_pct.get(name))
+            rows.append(f"{exchange_name(name).ljust(width)}  {uptime:>{uw}}  {coverage:>{tw}}")
+        return [t["dg_ex_title"], f"<pre>{esc(chr(10).join(rows))}</pre>"]
 
-
-def _pct_cell(value: int | None) -> str:
-    return "н/д" if value is None else f"{value}%"
+    def _pct_cell(self, value: int | None) -> str:
+        return self._t["dg_na"] if value is None else f"{value}%"

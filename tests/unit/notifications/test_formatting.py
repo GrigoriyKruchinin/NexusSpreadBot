@@ -14,16 +14,18 @@ from nexus.domain.events import (
     ScannerStarted,
     ScannerStopped,
     SystemEvent,
+    WatchdogAlert,
     event_from_payload,
     event_to_payload,
 )
+from nexus.notifications.alert_catalog import catalog
 from nexus.notifications.formatting import (
     SystemEventFormatter,
     fmt_amount,
-    fmt_duration,
     fmt_pct,
     fmt_price,
     fmt_usd,
+    format_duration,
 )
 
 
@@ -50,7 +52,7 @@ def test_number_formatting() -> None:
 
 
 def test_started_message_waiver_line_roundtrip() -> None:
-    formatter = SystemEventFormatter()
+    formatter = SystemEventFormatter("ru")
     base: dict[str, Any] = {
         "exchanges": (ExchangeStatus("okx", True, 1),),
         "min_net_profit_pct": "0.3",
@@ -75,7 +77,7 @@ def test_started_message_waiver_line_roundtrip() -> None:
 
 
 def test_system_events_roundtrip_and_render() -> None:
-    formatter = SystemEventFormatter()
+    formatter = SystemEventFormatter("ru")
     events: list[SystemEvent] = [
         ScannerStarted(
             exchanges=(ExchangeStatus("bybit", True, 511, 87), ExchangeStatus("okx", False, 443)),
@@ -127,7 +129,7 @@ def _closed(**overrides: object) -> EpisodeClosed:
 def test_episode_closed_message_snapshot() -> None:
     event = _closed()
     assert event_from_payload(event_to_payload(event)) == event
-    assert SystemEventFormatter().render(event) == (
+    assert SystemEventFormatter("ru").render(event) == (
         "🏁 <b>Возможность закрылась</b> · <code>ABC/USDT</code>\n"
         "Binance → KuCoin\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
@@ -141,7 +143,7 @@ def test_episode_closed_message_snapshot() -> None:
 
 @pytest.mark.parametrize(("survived", "label"), [(False, "❌ нет"), (None, "н/д")])
 def test_episode_closed_latency_labels_and_escaping(survived: bool | None, label: str) -> None:
-    text = SystemEventFormatter().render(
+    text = SystemEventFormatter("ru").render(
         _closed(survived_latency=survived, realerts=0, symbol="<x>", reason="a&b")
     )
     assert f"<b>{label}</b>" in text
@@ -153,15 +155,15 @@ def test_episode_closed_latency_labels_and_escaping(survived: bool | None, label
 @pytest.mark.parametrize(
     ("seconds", "expected"), [(0, "0 с"), (45, "45 с"), (200, "3 мин 20 с"), (7_500, "2 ч 05 мин")]
 )
-def test_fmt_duration(seconds: int, expected: str) -> None:
-    assert fmt_duration(seconds) == expected
+def test_format_duration_ru(seconds: int, expected: str) -> None:
+    assert format_duration(catalog("ru"), seconds) == expected
 
 
 def test_routes_quarantined_message_snapshot_and_cap() -> None:
     route = QuarantinedRoute("ZIL/USDT", "binance", "okx", "unverified_persistent", "15 min")
     event = RoutesQuarantined(routes=(route,), duration_h=24)
     assert event_from_payload(event_to_payload(event)) == event
-    assert SystemEventFormatter().render(event) == (
+    assert SystemEventFormatter("ru").render(event) == (
         "🚫 <b>В карантин отправлено связок: 1</b> на <b>24 ч</b>\n"
         "<i>Алертов и проверки стаканов по ним не будет; карантин снимется раньше, "
         "если маршрут перевода подтвердится.</i>\n"
@@ -177,7 +179,7 @@ def test_routes_quarantined_message_snapshot_and_cap() -> None:
         ),
         duration_h=24,
     )
-    text = SystemEventFormatter().render(many)
+    text = SystemEventFormatter("ru").render(many)
     assert text.count("•") == 10
     assert "… и ещё 3" in text
     assert "&lt;x&gt;" in text
@@ -192,7 +194,7 @@ def test_watchdog_events_roundtrip_and_render() -> None:
     )
     from nexus.notifications.formatting import SystemEventFormatter
 
-    formatter = SystemEventFormatter()
+    formatter = SystemEventFormatter("ru")
     alert = WatchdogAlert("scanner", "scanner_stale", 25)
     assert event_from_payload(event_to_payload(alert)) == alert
     assert formatter.render(alert) == (
@@ -223,7 +225,7 @@ def test_watchdog_alert_texts_are_russian_and_escaped(reason: str) -> None:
     from nexus.domain.events import WatchdogAlert
     from nexus.notifications.formatting import SystemEventFormatter
 
-    text = SystemEventFormatter().render(WatchdogAlert("<b>backup</b>", reason, None))
+    text = SystemEventFormatter("ru").render(WatchdogAlert("<b>backup</b>", reason, None))
     assert "&lt;b&gt;backup" in text
     assert "<b>backup</b>" not in text
     assert "{minutes}" not in text
@@ -246,3 +248,33 @@ def test_truncate_never_cuts_inside_a_tag_or_entity(tail: str) -> None:
     head = "x" * (TELEGRAM_MAX_LENGTH - 64 - len(tail))
     cut = truncate(head + tail + "y" * 400)
     assert cut == head + "…"
+
+
+def test_system_events_and_digest_default_to_english() -> None:
+    started = SystemEventFormatter().render(
+        ScannerStarted(
+            exchanges=(ExchangeStatus("okx", True, 1),),
+            min_net_profit_pct="0.3",
+            min_net_profit_usd="5",
+            reference_notional_usd="1000",
+            common_symbols=1,
+        )
+    )
+    assert "Nexus Spread Scanner started" in started
+    assert "markets: 1" in started
+    closed = SystemEventFormatter().render(_closed())
+    assert "Opportunity closed" in closed
+    assert "Duration: <b>3 m 20 s</b>" in closed
+    assert "Close reason: the spread disappeared" in closed
+    assert "Gate.io is available again" in SystemEventFormatter().render(
+        ExchangeRecovered(exchange="gateio", downtime_s=95)
+    )
+    assert "Scanner: needs a check" in SystemEventFormatter().render(
+        WatchdogAlert("scanner", "scanner_stale", 25)
+    )
+
+
+def test_every_language_has_the_same_catalog_keys() -> None:
+    from nexus.notifications.alert_catalog import EN, RU
+
+    assert set(EN) == set(RU)

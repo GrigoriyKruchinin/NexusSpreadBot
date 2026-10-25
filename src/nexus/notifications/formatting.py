@@ -1,4 +1,4 @@
-"""Telegram HTML message templates (alerts: en|ru via the catalog; system events: Russian).
+"""Telegram HTML message templates (alerts, system events: en|ru via the catalog).
 
 Every dynamic value passes through :func:`esc` (``html.escape``): exchange-provided strings
 (network codes, error texts) must never be able to inject markup.
@@ -8,8 +8,7 @@ from __future__ import annotations
 
 import html
 import re
-from collections.abc import Collection
-from datetime import UTC, datetime
+from collections.abc import Collection, Mapping
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Final
 
@@ -46,37 +45,6 @@ EXCHANGE_DISPLAY_NAMES: Final[dict[str, str]] = {
 
 
 QUARANTINE_ROUTES_SHOWN: Final = 10
-QUARANTINE_REASONS: Final[dict[str, str]] = {
-    "unverified_persistent": "спред держится, а маршрут перевода не подтверждён",
-    "transfer_unavailable": "ввод или вывод монеты отключён",
-}
-EPISODE_CLOSE_REASONS: Final[dict[str, str]] = {
-    "gap": "спред исчез",
-    "quarantined": "связка отправлена в карантин",
-    "restart": "сканер перезапускался",
-}
-WATCHDOG_TITLES: Final[dict[str, str]] = {
-    "scanner": "Сканер",
-    "backup": "Резервная копия",
-}
-WATCHDOG_REASONS: Final[dict[str, str]] = {
-    "scanner_stale": "сканер не записывает данные уже {minutes} мин: проверьте контейнер scanner",
-    "scanner_no_data": "в базе нет записей работы сканера",
-    "backup_missing": "файл статуса резервного копирования не найден",
-    "backup_unreadable": "файл статуса резервного копирования нечитаем",
-    "backup_failed": "последняя резервная копия завершилась ошибкой ({minutes} мин назад)",
-    "backup_not_copied": "копия дампа не сохранена вне контейнера (диск не подключён?)",
-    "check_error": "проверка не выполняется (база данных или файл статуса недоступны)",
-    "backup_stale": "последняя резервная копия была {minutes} мин назад",
-}
-STOP_REASONS: Final[dict[str, str]] = {
-    "shutdown": "сканер остановлен или перезапускается (docker stop / make down)",
-}
-
-
-def watchdog_title(check: str) -> str:
-    """Human title of a check."""
-    return WATCHDOG_TITLES.get(check, check)
 
 
 def esc(value: object) -> str:
@@ -128,21 +96,16 @@ def fmt_amount(value: Decimal) -> str:
     return text.rstrip("0").rstrip(".") if "." in text else text
 
 
-def fmt_time(epoch_ms: int) -> str:
-    """UTC timestamp."""
-    return datetime.fromtimestamp(epoch_ms / 1000, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
-
-
-def fmt_duration(seconds: int) -> str:
-    """Russian short form: seconds, minutes + seconds, or hours + minutes."""
+def format_duration(t: Mapping[str, str], seconds: int) -> str:
+    """Short duration (seconds / minutes + seconds / hours + minutes) in the catalog language."""
     seconds = max(seconds, 0)
     if seconds < 60:
-        return f"{seconds} с"
+        return t["d_sec"].format(s=seconds)
     minutes, secs = divmod(seconds, 60)
     if minutes < 60:
-        return f"{minutes} мин {secs:02d} с"
+        return t["d_min"].format(m=minutes, s=secs)
     hours, minutes = divmod(minutes, 60)
-    return f"{hours} ч {minutes:02d} мин"
+    return t["d_hour"].format(h=hours, m=minutes)
 
 
 _TAG_RE: Final = re.compile(r"<(/?)([a-z][a-z0-9-]*)[^<>]*>")
@@ -377,45 +340,38 @@ class OpportunityFormatter:
         return t["lifetime_peak"].format(duration=duration, peak=signed_pct(peak_net_pct))
 
     def _duration(self, seconds: int) -> str:
-        t = self._t
-        seconds = max(seconds, 0)
-        if seconds < 60:
-            return t["d_sec"].format(s=seconds)
-        minutes, secs = divmod(seconds, 60)
-        if minutes < 60:
-            return t["d_min"].format(m=minutes, s=secs)
-        hours, minutes = divmod(minutes, 60)
-        return t["d_hour"].format(h=hours, m=minutes)
+        return format_duration(self._t, seconds)
 
     def _minutes(self, minutes: Decimal) -> str:
         return self._t["min"].format(n=fmt_amount(minutes.quantize(Decimal("0.1"))))
 
 
 class SystemEventFormatter:
-    """Renders :data:`~nexus.domain.events.SystemEvent` messages."""
+    """Renders :data:`~nexus.domain.events.SystemEvent` messages in ``en`` or ``ru``."""
+
+    def __init__(self, language: str = DEFAULT_LANGUAGE) -> None:
+        self._t = catalog(language)
 
     def render(self, event: SystemEvent) -> str:
         """Render any system event."""
+        t = self._t
         match event:
             case ScannerStarted():
                 return self._started(event)
             case ScannerStopped():
-                reason = STOP_REASONS.get(event.reason, event.reason)
-                return (
-                    "🛑 <b>Nexus Spread Scanner остановлен</b>\n"
-                    f"<blockquote>{esc(reason)}</blockquote>"
-                )
+                reason = t.get(f"stop_{event.reason}", event.reason)
+                return t["sys_stopped"].format(reason=esc(reason))
             case ExchangeDown():
-                return (
-                    f"⚠️ <b>{esc(exchange_name(event.exchange))} недоступна</b>\n"
-                    f"{SEPARATOR}\n"
-                    f"Ошибок подряд: <b>{event.consecutive_failures}</b>\n"
-                    f"<blockquote>{esc(event.error[:500])}</blockquote>"
+                return t["sys_down"].format(
+                    exchange=esc(exchange_name(event.exchange)),
+                    sep=SEPARATOR,
+                    n=event.consecutive_failures,
+                    error=esc(event.error[:500]),
                 )
             case ExchangeRecovered():
-                return (
-                    f"✅ <b>{esc(exchange_name(event.exchange))} снова доступна</b>\n"
-                    f"Простой: <b>{event.downtime_s} с</b>"
+                return t["sys_recovered"].format(
+                    exchange=esc(exchange_name(event.exchange)),
+                    downtime=format_duration(t, event.downtime_s),
                 )
             case EpisodeClosed():
                 return self._episode_closed(event)
@@ -424,31 +380,32 @@ class SystemEventFormatter:
             case WatchdogAlert():
                 return self._watchdog_alert(event)
             case WatchdogRecovered():
-                title = watchdog_title(event.check)
-                return (
-                    f"✅ <b>{esc(title)}: проблема устранена</b>\n"
-                    f"Длилась около <b>{fmt_duration(event.downtime_min * 60)}</b>"
+                return t["sys_wd_recovered"].format(
+                    title=esc(self._watchdog_title(event.check)),
+                    duration=format_duration(t, event.downtime_min * 60),
                 )
 
-    @staticmethod
-    def _watchdog_alert(event: WatchdogAlert) -> str:
-        title = watchdog_title(event.check)
-        template = WATCHDOG_REASONS.get(event.reason, "неизвестная причина: {minutes}")
-        text = template.format(minutes="?" if event.minutes is None else event.minutes)
-        return f"🚨 <b>{esc(title)}: нужна проверка</b>\n<blockquote>{esc(text)}</blockquote>"
+    def _watchdog_title(self, check: str) -> str:
+        return self._t.get(f"wd_title_{check}", check)
 
-    @staticmethod
-    def _quarantined(event: RoutesQuarantined) -> str:
+    def _watchdog_alert(self, event: WatchdogAlert) -> str:
+        t = self._t
+        template = t.get(f"wd_{event.reason}", t["wd_unknown"])
+        text = template.format(minutes="?" if event.minutes is None else event.minutes)
+        return t["sys_wd_alert"].format(
+            title=esc(self._watchdog_title(event.check)), text=esc(text)
+        )
+
+    def _quarantined(self, event: RoutesQuarantined) -> str:
+        t = self._t
         shown = event.routes[:QUARANTINE_ROUTES_SHOWN]
         lines = [
-            f"🚫 <b>В карантин отправлено связок: {len(event.routes)}</b>"
-            f" на <b>{event.duration_h} ч</b>",
-            "<i>Алертов и проверки стаканов по ним не будет; карантин снимется раньше, "
-            "если маршрут перевода подтвердится.</i>",
+            t["sys_q_title"].format(n=len(event.routes), hours=event.duration_h),
+            t["sys_q_note"],
             SEPARATOR,
         ]
         for route in shown:
-            why = QUARANTINE_REASONS.get(route.reason, route.reason)
+            why = t.get(f"q_{route.reason}", route.reason)
             lines.append(
                 f"• <code>{esc(route.symbol)}</code> {esc(exchange_name(route.buy_exchange))}"
                 f" → {esc(exchange_name(route.sell_exchange))}: {esc(why)}"
@@ -456,37 +413,44 @@ class SystemEventFormatter:
             if route.note:
                 lines.append(f"  <i>{esc(route.note[:200])}</i>")
         if hidden := len(event.routes) - len(shown):
-            lines.append(f"… и ещё {hidden}")
+            lines.append(t["sys_more"].format(n=hidden))
         return truncate("\n".join(lines))
 
-    @staticmethod
-    def _episode_closed(event: EpisodeClosed) -> str:
-        survived = {True: "✅ да", False: "❌ нет", None: "н/д"}[event.survived_latency]
-        peak_usd = fmt_usd(Decimal(event.peak_net_usd), signed=True)
-        peak_pct = fmt_pct(Decimal(event.peak_net_pct))
+    def _episode_closed(self, event: EpisodeClosed) -> str:
+        t = self._t
+        survived = {True: t["sys_yes"], False: t["sys_no"], None: t["sys_na"]}[
+            event.survived_latency
+        ]
+        reason = t.get(f"close_{event.reason}", event.reason)
         return "\n".join(
             [
-                f"🏁 <b>Возможность закрылась</b> · <code>{esc(event.symbol)}</code>",
+                t["sys_closed_title"].format(symbol=esc(event.symbol)),
                 f"{esc(exchange_name(event.buy_exchange))} → "
                 f"{esc(exchange_name(event.sell_exchange))}",
                 SEPARATOR,
-                f"⏱ Длительность: <b>{fmt_duration(event.duration_s)}</b>"
-                f" · проверок: {event.evaluations}",
-                f"💰 Максимум чистой прибыли: <b>{peak_usd} ({peak_pct})</b>",
-                f"⚡ Пережила задержку исполнения: <b>{survived}</b>",
-                *([f"🔁 Повторных алертов: {event.realerts}"] if event.realerts else []),
-                f"<blockquote>Причина закрытия: "
-                f"{esc(EPISODE_CLOSE_REASONS.get(event.reason, event.reason))}</blockquote>",
+                t["sys_closed_duration"].format(
+                    duration=format_duration(t, event.duration_s), n=event.evaluations
+                ),
+                t["sys_closed_peak"].format(
+                    usd=fmt_usd(Decimal(event.peak_net_usd), signed=True),
+                    pct=fmt_pct(Decimal(event.peak_net_pct)),
+                ),
+                t["sys_closed_latency"].format(value=survived),
+                *([t["sys_closed_realerts"].format(n=event.realerts)] if event.realerts else []),
+                t["sys_closed_reason"].format(reason=esc(reason)),
             ]
         )
 
-    @staticmethod
-    def _started(event: ScannerStarted) -> str:
+    def _started(self, event: ScannerStarted) -> str:
+        t = self._t
         exchanges = "\n".join(
-            f"{'🔑' if e.authenticated else '🌐'} <b>{esc(exchange_name(e.name))}</b>"
-            f" — рынков: {e.markets}"
+            t["sys_exchange"].format(
+                icon="🔑" if e.authenticated else "🌐",
+                name=esc(exchange_name(e.name)),
+                markets=e.markets,
+            )
             + (
-                f" · переводы {e.transfer_coverage_pct}%"
+                t["sys_exchange_transfers"].format(pct=e.transfer_coverage_pct)
                 if e.transfer_coverage_pct is not None
                 else ""
             )
@@ -497,29 +461,18 @@ class SystemEventFormatter:
         return truncate(
             "\n".join(
                 [
-                    "🚀 <b>Nexus Spread Scanner запущен</b>",
+                    t["sys_started"],
                     SEPARATOR,
                     exchanges,
                     "",
-                    f"🔗 Общих пар: <b>{event.common_symbols}</b>",
-                    f"🎯 Порог: чистая прибыль <b>≥ {esc(event.min_net_profit_pct)}%</b> и "
-                    f"<b>≥ ${esc(event.min_net_profit_usd)}</b>",
-                    f"📦 Расчётный объём: <b>${esc(event.reference_notional_usd)}</b>",
-                    "<blockquote>🔑 ключ только для чтения"
-                    " · 🌐 только публичные данные</blockquote>",
-                    *(
-                        [
-                            "⚠️ Ключ НЕ использован (не прошёл проверку «только чтение»), "
-                            f"биржа работает в публичном режиме: {fallback}"
-                        ]
-                        if fallback
-                        else []
+                    t["sys_common"].format(n=event.common_symbols),
+                    t["sys_threshold"].format(
+                        pct=esc(event.min_net_profit_pct), usd=esc(event.min_net_profit_usd)
                     ),
-                    *(
-                        [f"ℹ️ Привязка ключей к IP не подтверждена (рекомендуется): {unbound}"]
-                        if unbound
-                        else []
-                    ),
+                    t["sys_notional"].format(usd=esc(event.reference_notional_usd)),
+                    t["sys_key_legend"],
+                    *([t["sys_fallback"].format(venues=fallback)] if fallback else []),
+                    *([t["sys_unbound"].format(venues=unbound)] if unbound else []),
                 ]
             )
         )

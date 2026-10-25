@@ -33,7 +33,8 @@ from nexus.infra.redis_store import (
     RedisWatchdogState,
 )
 from nexus.interfaces.market_data import BaseExchangeAdapter
-from nexus.notifications.formatting import OpportunityFormatter
+from nexus.notifications.digest import DigestFormatter
+from nexus.notifications.formatting import OpportunityFormatter, SystemEventFormatter
 from nexus.notifications.rate_limit import SendRateLimiter, process_limiter
 from nexus.notifications.telegram import TelegramNotifier
 from nexus.persistence.db import create_engine, create_session_factory
@@ -242,6 +243,7 @@ async def alert_service_scope(settings: AlertsWorkerSettings) -> AsyncIterator[A
             opportunity_formatter=OpportunityFormatter(
                 settings.conditional.venues, settings.alerts.language
             ),
+            event_formatter=SystemEventFormatter(settings.alerts.language),
         )
     finally:
         await notifier.close()
@@ -261,6 +263,7 @@ async def digest_scope(settings: AlertsWorkerSettings) -> AsyncIterator[DigestSe
             ),
             notifier,
             SystemClock(),
+            DigestFormatter(settings.alerts.language),
         )
     finally:
         await notifier.close()

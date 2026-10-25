@@ -40,7 +40,7 @@ def _data() -> DigestData:
 
 
 def test_digest_snapshot() -> None:
-    assert DigestFormatter().render(_data(), "Europe/Moscow") == (
+    assert DigestFormatter("ru").render(_data(), "Europe/Moscow") == (
         "📊 <b>Ежедневный дайджест</b>\n"
         "<i>18 Oct 09:00 → 19 Oct 09:00 (Europe/Moscow)</i>\n"
         "Условные биржи: нет\n"
@@ -78,7 +78,7 @@ def test_empty_digest() -> None:
         uptime_pct={},
         coverage_pct={},
     )
-    text = DigestFormatter().render(data, "UTC")
+    text = DigestFormatter("ru").render(data, "UTC")
     assert "🔀 <b>Эпизодов возможностей: 0</b>" in text
     assert "Пережили задержку" not in text
     assert "Бумажн" not in text
@@ -101,7 +101,7 @@ async def test_digest_service_sends_last_24h() -> None:
     service = DigestService(_Repo(), notifier, ManualClock(T0 + DAY))  # type: ignore[arg-type]
     await service.send("Europe/Moscow")
     assert windows == [(T0, T0 + DAY)]
-    assert notifier.sent[0].text.startswith("📊 <b>Ежедневный дайджест</b>")
+    assert notifier.sent[0].text.startswith("📊 <b>Daily digest</b>")
     assert not notifier.sent[0].silent
 
 
@@ -120,7 +120,7 @@ def _cond_data(conditional: tuple[str, ...]) -> DigestData:
 
 
 def test_digest_conditional_block_golden() -> None:
-    text = DigestFormatter().render(_cond_data(("bybit", "gateio")), "UTC")
+    text = DigestFormatter("ru").render(_cond_data(("bybit", "gateio")), "UTC")
     assert text.split("\n")[2:6] == [
         "⚠️ Условные биржи (данные собираются, торговать пока нельзя): Bybit, Gate.io",
         "━━━━━━━━━━━━━━━━━━━━",
@@ -131,7 +131,7 @@ def test_digest_conditional_block_golden() -> None:
 
 
 def test_digest_conditional_block_empty_list() -> None:
-    text = DigestFormatter().render(_cond_data(()), "UTC")
+    text = DigestFormatter("ru").render(_cond_data(()), "UTC")
     assert text.split("\n")[2:5] == [
         "Условные биржи: нет",
         "━━━━━━━━━━━━━━━━━━━━",
@@ -141,7 +141,7 @@ def test_digest_conditional_block_empty_list() -> None:
 
 
 def test_digest_conditional_names_are_escaped() -> None:
-    text = DigestFormatter().render(_cond_data(("<b>x",)), "UTC")
+    text = DigestFormatter("ru").render(_cond_data(("<b>x",)), "UTC")
     assert text.split("\n")[2] == (
         "⚠️ Условные биржи (данные собираются, торговать пока нельзя): &lt;b&gt;x"
     )
@@ -150,7 +150,7 @@ def test_digest_conditional_names_are_escaped() -> None:
 
 def test_digest_shows_na_when_excl_values_are_missing() -> None:
     data = replace(_cond_data(("bybit", "gateio")), episodes=EpisodeStats(total=24))
-    lines = DigestFormatter().render(data, "UTC").split("\n")
+    lines = DigestFormatter("ru").render(data, "UTC").split("\n")
     assert lines[4] == "Эпизоды:   все 24 | без условных (фильтр) н/д"
 
 
@@ -172,3 +172,11 @@ async def test_digest_log_has_conditional_fields() -> None:
     assert record["conditional_venues"] == ["bybit", "gateio"]
     assert record["episodes"] == 24
     assert record["episodes_excl_conditional"] == 6
+
+
+def test_digest_defaults_to_english() -> None:
+    text = DigestFormatter().render(_data(), "UTC")
+    assert "<b>Daily digest</b>" in text
+    assert "Opportunity episodes: 9" in text
+    assert "Exchange  Uptime  Transfers" in text
+    assert "Ежедневный" not in text

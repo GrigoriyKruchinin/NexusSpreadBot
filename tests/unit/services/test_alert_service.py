@@ -91,7 +91,7 @@ async def test_system_event_recovered_is_silent() -> None:
     payload = event_to_payload(ExchangeRecovered(exchange="okx", downtime_s=12))
     assert await _service(repos, notifier).send_event(payload) is AlertOutcome.SENT
     assert notifier.sent[0].silent
-    assert "OKX снова доступна" in notifier.sent[0].text
+    assert "OKX is available again" in notifier.sent[0].text
 
 
 async def test_stale_system_event_dropped() -> None:
@@ -150,4 +150,4 @@ async def test_episode_closed_is_silent() -> None:
     payload = event_to_payload(event, emitted_at_ms=EVALUATED_AT_MS + 5_000)
     assert await _service(repos, notifier).send_event(payload) is AlertOutcome.SENT
     assert notifier.sent[0].silent
-    assert "Возможность закрылась" in notifier.sent[0].text
+    assert "Opportunity closed" in notifier.sent[0].text
