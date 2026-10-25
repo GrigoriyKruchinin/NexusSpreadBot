@@ -109,7 +109,7 @@ sweep unaffected). S0 reduced to the `test_safety` additions.
   forbid `set_?leverage`, `set_?margin\w*`, `set_?position_?mode`, `(add|reduce)_?margin`. AC: tests pass
   at HEAD with no production code change; the orchestrator records the pinned hashes and cross-checks them
   with `make go-report` (read-only).
-- [ ] **S1 Domain types + port.** `domain/perp.py` (PerpMarket, PerpTicker, FundingInfo, MarkKline,
+- [x] **S1 Domain types + port.** `domain/perp.py` (PerpMarket, PerpTicker, FundingInfo, MarkKline,
   FundingPayment, LeverageTier; Decimal, validation), `interfaces/perp.py` `IPerpMarketData`,
   `adapters/perp/registry.py`. AC: validation unit tests (contract size > 0, sane fees/MMR, funding sign
   kept); mypy strict.

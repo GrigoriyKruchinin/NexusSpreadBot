@@ -125,12 +125,27 @@ def test_guard_detects_known_bypasses(snippet: str) -> None:
 
 
 def test_no_withdraw_method_on_interfaces() -> None:
-    from nexus.interfaces import market_data
+    from nexus.interfaces import market_data, perp
 
-    for name in dir(market_data):
-        obj = getattr(market_data, name)
-        if isinstance(obj, type) and obj.__module__ == market_data.__name__:
-            assert not any(a.lower().startswith(("withdraw", "transfer")) for a in dir(obj)), name
+    for module in (market_data, perp):
+        for name in dir(module):
+            obj = getattr(module, name)
+            if isinstance(obj, type) and obj.__module__ == module.__name__:
+                assert not any(a.lower().startswith(("withdraw", "transfer")) for a in dir(obj)), (
+                    name
+                )
+
+
+def test_perp_port_is_read_only() -> None:
+    from nexus.interfaces.perp import IPerpMarketData
+
+    banned = re.compile(
+        r"(?i)(create|cancel|edit)\w*order|set_|margin|position|withdraw|transfer|api_?key"
+    )
+    methods = [a for a in dir(IPerpMarketData) if not a.startswith("_")]
+    assert methods
+    allowed_lev = {"fetch_leverage_tiers"}
+    assert [m for m in methods if banned.search(m) and m not in allowed_lev] == []
 
 
 # ------------------------------------------------------------------ runtime guard
