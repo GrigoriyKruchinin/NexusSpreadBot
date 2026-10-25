@@ -11,3 +11,7 @@ Read before S11-S15 of `docs/tasks/HT1-hedged-transfer-paper.md`.
 3. **Pre-registration:** after S11, report the HT run hash per set; the quant writes
    `docs/quant/ht-preregistration.md` with it before deploy.
 4. HT-only (user decision 2026-10-25): `[paper]` spot sets switched off at deploy, fresh DB; no golden pins.
+5. **Security should-fix (docs/audit/security-review-HT1-S0-S8.md), do in S11 or a small separate commit:** F1 widen
+   `test_safety` patterns (`\w*` prefix for private endpoints, `close_?\w*position\w*`, `(borrow|repay)\w*margin\w*`,
+   `modify_?margin\w*`) with bypass test cases; F2 install the read-only guard in `scripts/record_perp_fixtures.py` (or
+   fix its docstring); F3 `scrub()` the `adapter_close_failed` log. Update the S5 allowlist comment to cite the review.
