@@ -139,13 +139,17 @@ def _with_details(
         )
         if value is not None
     ]
+    # Venue estimates can be too optimistic (Binance: 1 min for BTC), so the slower of the
+    # venue estimate and the table wins; the label says which one it was.
+    table = estimated_arrival_min(code)
     arrival: Decimal | None
     arrival_source: str | None
-    if published:
+    if published and (table is None or max(published) >= table):
         arrival, arrival_source = max(published), "exchange"
+    elif table is not None:
+        arrival, arrival_source = table, "table"
     else:
-        arrival = estimated_arrival_min(code)
-        arrival_source = "table" if arrival is not None else None
+        arrival, arrival_source = None, None
     busy_flags = [x.busy for x in (out, into) if x is not None and x.busy is not None]
     return replace(
         quote,

@@ -273,7 +273,7 @@ def test_open_route_reports_open_states_and_table_time() -> None:
     assert quote.arrival_source == "table"
 
 
-def test_exchange_estimate_beats_table_and_takes_the_slower_side() -> None:
+def test_exchange_estimate_above_table_wins_and_takes_the_slower_side() -> None:
     src = NetworkInfo("ERC20", True, True, D(1), est_arrival_min=D(3), withdraw_min=D("0.5"))
     dst = NetworkInfo(
         "ETH",
@@ -291,6 +291,45 @@ def test_exchange_estimate_beats_table_and_takes_the_slower_side() -> None:
     assert (quote.withdraw_min, quote.deposit_min) == (D("0.5"), D("0.2"))
     assert quote.deposit_confirmations == 12
     assert quote.busy is True
+
+
+def test_table_beats_too_optimistic_exchange_estimate() -> None:
+    # Binance reports 1 min for BTC; the table (30) must win and be labelled "table".
+    src = NetworkInfo("BTC", True, True, D(1), est_arrival_min=D(1))
+    dst = NetworkInfo("BTC", True, True, None, est_arrival_min=D(1))
+    quote = select_transfer_route(_info("a", src), _info("b", dst))
+    assert (quote.est_arrival_min, quote.arrival_source) == (D(30), "table")
+
+
+def test_exchange_estimate_equal_to_table_is_labelled_exchange() -> None:
+    src = NetworkInfo("BTC", True, True, D(1), est_arrival_min=D(30))
+    quote = select_transfer_route(_info("a", src), _info("b", _net("BTC")))
+    assert (quote.est_arrival_min, quote.arrival_source) == (D(30), "exchange")
+
+
+def test_exchange_estimate_on_unlisted_network_is_used() -> None:
+    src = NetworkInfo("XYZNET", True, True, D(1), est_arrival_min=D(9))
+    quote = select_transfer_route(_info("a", src), _info("b", _net("XYZNET")))
+    assert (quote.est_arrival_min, quote.arrival_source) == (D(9), "exchange")
+
+
+@pytest.mark.parametrize(
+    ("code", "minutes"),
+    [("POLYGON", 8), ("LTC", 25), ("ETC", 45), ("ADA", 12), ("SOL", 2), ("ZKSYNC", 5)],
+)
+def test_raised_slow_chains(code: str, minutes: int) -> None:
+    assert NETWORK_ARRIVAL_MIN[code] == D(minutes)
+
+
+@pytest.mark.parametrize(
+    "code",
+    ["STATEMINT", "TON2", "SUINEW", "OPBNB", "SONIC", "SEIEVM", "CELO", "KAVAEVM", "PLASMA",
+     "SCROLL", "STARKNET", "MANTA", "RON", "XTZ", "XDC", "CFX", "KCC", "MONAD", "WORLDCHAIN",
+     "AVAX", "LIGHTNING", "SEGWITBTC"],
+)  # fmt: skip
+def test_review_added_networks_have_own_rows(code: str) -> None:
+    assert code in NETWORK_ARRIVAL_MIN
+    assert normalize_network(code) == code
 
 
 def test_unlisted_network_has_unknown_time() -> None:
