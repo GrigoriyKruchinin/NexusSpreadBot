@@ -1,6 +1,11 @@
 # STATE (updated 2026-10-24)
 
 ## Where we are
+- **User decision 2026-10-25 (later): HT is THE strategy; current spot-inventory soak data is not needed.** Old paper
+  sets need not be kept or resumed (AC5 golden-hash coexistence no longer required; tell architect/backend-lead). Project is
+  reshaped around HT; GO candidate = HT with hedge on okx+kucoin (binance separate until G1.1a). If HT is not viable ->
+  project stays an analytical spread-finder tool. Orchestrator plan: keep stack running (scanner alert data still useful) until
+  HT is ready; then at deploy: archive dump, fresh DB, start HT only (each data step needs explicit U4 OK).
 - **User decision 2026-10-25: NEW STRATEGY "hedged transfer"** (no coin inventory, no directional exposure): buy spot on A +
   short perp, transfer A->B, sell on B + close short. Entry only after pre-checks: perp exists and can be opened (depth,
   funding), withdraw A / deposit B open on a common network, spot depth on B, net profit > threshold. Running:
