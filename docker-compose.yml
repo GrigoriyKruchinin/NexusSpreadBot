@@ -173,6 +173,16 @@ services:
       retries: 3
       start_period: 30s
 
+  # `nexus check` (T7): validates Telegram, exchange keys and the database. Not started by `up`
+  # (profile "tools"); scripts/start.sh and `make doctor` run it as a one-off container.
+  check:
+    <<: *image
+    restart: "no"
+    profiles: ["tools"]
+    command: ["nexus", "check"]
+    environment:
+      <<: [*db-env, *scanner-env, *telegram-env]
+
   beat:
     <<: *image
     command: ["celery", "-A", "nexus.workers.app:celery_app", "beat", "--loglevel", "INFO",

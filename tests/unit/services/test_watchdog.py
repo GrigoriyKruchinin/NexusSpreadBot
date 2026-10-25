@@ -68,7 +68,9 @@ class Rig:
             state=self.state,
             dispatcher=self.dispatcher,
             clock=self.clock,
-            settings=WatchdogSettings(scanner_stale_min=10, backup_max_age_h=26),
+            settings=WatchdogSettings(
+                scanner_stale_min=10, backup_max_age_h=26, backup_check_enabled=True
+            ),
         )
         self.healthy()
 
@@ -303,4 +305,28 @@ async def test_alert_failure_while_check_is_broken_is_swallowed() -> None:
     rig.state.save = broken_save  # type: ignore[method-assign]
     actions = await rig.dog.run_once()
     assert actions["scanner"] == "error"
+    assert rig.dispatcher.events == []
+
+
+def test_backup_check_is_off_by_default() -> None:
+    assert WatchdogSettings().backup_check_enabled is False
+
+
+async def test_backup_check_disabled_never_reads_or_alerts() -> None:
+    class Exploding(IBackupStatusSource):
+        async def read(self) -> str | None:
+            raise AssertionError("backup status must not be read when the check is off")
+
+    rig = Rig()
+    dog = LivenessWatchdog(
+        activity=rig.activity,
+        backup=Exploding(),
+        state=rig.state,
+        dispatcher=rig.dispatcher,
+        clock=rig.clock,
+        settings=WatchdogSettings(),
+    )
+    rig.advance(24 * 60 * 3)  # no backup file for days: still nothing about backups
+    rig.activity.value = rig.clock.now - MIN
+    assert await dog.run_once() == {"scanner": "ok"}
     assert rig.dispatcher.events == []

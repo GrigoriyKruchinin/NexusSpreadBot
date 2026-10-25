@@ -64,7 +64,7 @@ def test_every_documented_variable_reaches_a_service(compose: str) -> None:
 def test_healthchecks_and_startup_order(compose: str) -> None:
     services = _load(compose)["services"]
     for name, svc in services.items():
-        if name != "migrator":
+        if name not in {"migrator", "check"}:  # one-off containers have no healthcheck
             assert "healthcheck" in svc, f"{name} has no healthcheck"
     for name in APP_SERVICES:
         for dependency, spec in (services[name].get("depends_on") or {}).items():
@@ -294,14 +294,16 @@ def test_bootstrap_roles_target_is_safe() -> None:
 
 @pytest.mark.parametrize("compose", COMPOSE_FILES)
 def test_ip_binding_waiver_reaches_only_the_scanner(compose: str) -> None:
-    """KP-W / F-1: the env-only waiver is wired to the scanner and to no other service."""
+    """KP-W / F-1: the env-only waiver reaches the scanner (and one-off `check`) only."""
     services = _load(compose)["services"]
     holders = {
         name
         for name, svc in services.items()
         if "KEY_POLICY_IP_BINDING_WAIVED" in (svc.get("environment") or {})
     }
-    assert holders == {"scanner"}
+    # `check` (profile tools, one-off) must judge keys exactly like the scanner does.
+    assert holders == {"scanner", "check"}
+    assert services["check"]["profiles"] == ["tools"]
 
 
 def test_start_script_is_safe() -> None:

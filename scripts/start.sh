@@ -52,7 +52,19 @@ if ! is_set POSTGRES_PASSWORD || is_empty POSTGRES_PASSWORD; then
   echo "POSTGRES_PASSWORD was empty: generated and saved to .env (value not shown) / пароль БД сгенерирован и записан в .env"
 fi
 
-# T7 hook: once `nexus check` exists, run it here (inside the built image) to fail fast on bad settings.
+# T7: `nexus check` runs INSIDE the built image (one-off container of the "check" service, same env
+# isolation as the real services; the host needs no Python). Pre-flight = Telegram token/chat/rights and
+# exchange keys; the database is checked later (`make doctor`). Exit 3 = fatal config: stop here.
+# A bad exchange key is only a warning (that venue runs in public mode). The program reads the
+# environment itself; this script never prints it.
+docker compose build check
+set +e
+docker compose --profile tools run --rm --no-deps check nexus check --no-db
+check_rc=$?
+set -e
+if [ "$check_rc" -ne 0 ]; then
+  fail "setup check failed (see above) / проверка настроек не прошла (см. выше). Fix .env and run again / исправьте .env и повторите"
+fi
 
 echo "Building and starting (first run takes a few minutes)... / сборка и запуск, первый раз несколько минут..."
 docker compose up -d --build

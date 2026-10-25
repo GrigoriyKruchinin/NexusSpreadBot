@@ -134,6 +134,9 @@ enabled = true
 interval_s = 300
 # Alert when the scanner recorded no exchange call for this many minutes
 scanner_stale_min = 10
+# Backup freshness check. OFF by default: the stack has no backup mount. Set true only if you run
+# scripts/backup.sh AND mount its status directory into the maintenance worker.
+backup_check_enabled = false
 # Written by scripts/backup.sh; mounted read-only into the maintenance worker
 backup_status_path = "/backups/last_backup.json"
 # Alert when the last backup finished longer ago than this (daily cron + slack)

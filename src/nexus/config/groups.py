@@ -455,6 +455,10 @@ class WatchdogSettings(NexusBaseSettings):
     """Period of the beat task that checks the scanner and the backup status."""
     scanner_stale_min: int = Field(default=10, ge=2)
     """Alert when the scanner recorded no exchange call for this many minutes."""
+    backup_check_enabled: bool = False
+    """Check the backup status file. OFF by default: the stack ships no backup mount (T8), so the
+    check would raise ``backup_missing`` for every user. Enable it together with
+    ``scripts/backup.sh`` and a mount of the status directory."""
     backup_status_path: str = "/backups/last_backup.json"
     """Status file written by ``scripts/backup.sh`` (mounted read-only into the worker)."""
     backup_max_age_h: int = Field(default=26, ge=1)

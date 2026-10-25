@@ -38,12 +38,15 @@ test-integration: ## Run integration tests (requires a test DB, see CLAUDE.md)
 check: lint typecheck test ## Lint + typecheck + unit tests
 
 # ---------------------------------------------------------------- docker (the tool)
-.PHONY: check-env-settings up down ps logs migrate reset-data revision
+.PHONY: check-env-settings up doctor down ps logs migrate reset-data revision
 check-env-settings: ## Print NAMES of setting lines left in .env (values never shown)
 	@uv run python -m nexus.config.provenance
 
 up: ## One command: check .env, build, migrate, start everything (scripts/start.sh)
 	@scripts/start.sh
+
+doctor: ## Full setup check incl. database and migrations (stack must be up); add ARGS=--send-test to ping the chat
+	$(COMPOSE) --profile tools run --rm check nexus check $(ARGS)
 
 down: ## Stop the stack (data volumes are KEPT)
 	$(COMPOSE) down

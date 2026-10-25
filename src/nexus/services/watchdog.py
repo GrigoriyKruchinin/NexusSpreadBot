@@ -63,10 +63,10 @@ class LivenessWatchdog:
         """
         now = self._clock.now_ms()
         actions: dict[str, str] = {}
-        for check, probe in (
-            (CHECK_SCANNER, self._probe_scanner),
-            (CHECK_BACKUP, self._probe_backup),
-        ):
+        probes = [(CHECK_SCANNER, self._probe_scanner)]
+        if self._settings.backup_check_enabled:
+            probes.append((CHECK_BACKUP, self._probe_backup))
+        for check, probe in probes:
             try:
                 finding = await probe(now)
             except Exception as error:

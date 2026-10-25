@@ -67,6 +67,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("scanner", help="run the spread scanner")
     health = sub.add_parser("healthcheck", help="container healthchecks")
     health.add_argument("target", choices=["scanner"])
+    check = sub.add_parser("check", help="validate Telegram, exchange keys and database")
+    check.add_argument("--no-db", action="store_true", help="skip the database check")
+    check.add_argument("--send-test", action="store_true", help="send a test message to the chat")
     args = parser.parse_args(argv)
 
     if args.command == "scanner":
@@ -77,6 +80,10 @@ def main(argv: list[str] | None = None) -> int:
             log.critical("key_policy_violation", violations=exc.violations)
             return EXIT_KEY_POLICY
         return 0
+    if args.command == "check":
+        from nexus.startup_check.runner import run
+
+        return run(skip_db=args.no_db, send_test=args.send_test)
     if args.command == "healthcheck":
         configure_logging(LoggingSettings(), service="healthcheck")
         try:

@@ -6,7 +6,7 @@
 - complexity: high (external API calls at boot, error taxonomy, secret hygiene)
 - size: L
 - depends_on: T6
-- status: todo
+- status: done (check + watchdog follow-up); scanner-side public fallback deferred, see Progress
 
 ## Goal
 Fail early and clearly on misconfiguration; degrade gracefully (public mode) for bad exchange keys; never print secrets.
@@ -34,3 +34,12 @@ Trading-permission handling (not applicable, ADR 0001).
 src/nexus/{adapters/key_policy.py,container.py,cli.py,notifications}, tests/
 
 DoD: `make check` green and not worse than baseline, new tests, no secrets in diff, todo.md + card updated, committed (Conventional Commits).
+
+## Progress (2026-10-25, backend-lead)
+- `nexus check [--no-db] [--send-test]` in `src/nexus/startup_check/` (checks.py, messages.py en/ru, runner.py). Language: `[alert] language`, else `LANG`.
+- Telegram: token format/placeholder, getMe (401), getChat, getChatMember (channel: administrator + can_post_messages + can_edit_messages; group: not left/restricted), optional test message. Network failure is a warning (unverified), never prints the URL/token.
+- Venues: one signed read-only key-introspection GET via `verify_key_policies` per venue; no key -> public; rejected/unreachable/withdraw-enabled/too broad -> warning, venue reported as PUBLIC; other venues unaffected. Exit 3 only for fatal config (Telegram, DB password, DB unreachable/not migrated); bad keys never fail the check.
+- DB: reachable and `alembic_version` equals the script head.
+- Runs INSIDE the image: compose service `check` (profile `tools`, scanner+telegram+db env). `scripts/start.sh` runs `--no-db` pre-flight before `up`; `make doctor` runs the full check (DB too).
+- Watchdog: `[watchdog] backup_check_enabled = false` (default OFF); no `backup_missing` for users without the backup mount.
+- NOT done: the scanner itself still refuses (exit 3, parked) on a violating key instead of falling back to public for that venue; it changes key-policy semantics and overlaps T9 (security), so it needs a decision. The check already reports the intended "PUBLIC mode" outcome.
