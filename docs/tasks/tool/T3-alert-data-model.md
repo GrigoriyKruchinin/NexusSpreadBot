@@ -40,3 +40,5 @@ DoD: `make check` green and not worse than baseline, new tests, no secrets in di
 - Payload: `AlertContext` v2 (`v`, `volume`, `transfer`, `lifetime`) built by `AlertContext.build(evaluation, episode, ...)`; v1 in-flight rows decode (new blocks `None`, `v=1`), unknown keys and malformed blocks are ignored. Fee/USD strings are rounded half-up (base 8 dp, USD 2 dp, fee USD 4 dp). Unknown transfer -> fee `None`, flags `unknown`. Episode `lifetime_ms(now)` accessor added.
 - R-03 unchanged (unknown transfer + `require_verified_transfer` stays TRANSFER_UNVERIFIED, test added).
 - Not done here: telegram message_id per episode (T5), rendering (T4).
+
+- Review 2026-10-25 (crypto-specialist): `docs/reports/network-times-review.md`. Corrections to apply in `engine/network_times.py` (follow-up after T5): slower chains raised, 22 networks added, use max(exchange estimate, table) instead of exchange override, separate withdrawal-processing term.
