@@ -3,6 +3,28 @@
 Legend: `[ ]` todo · `[x]` done. Cards: `docs/tasks/`. Stage-1 history: `docs/product/stage1-history.md`.
 Ticks only after verification and commit.
 
+## S1-tool — Self-hosted spread-alert tool (after NO-GO; user decisions 2026-10-25)
+Product: clone, `cp .env.example .env`, fill own Telegram bot token + chat/channel id and optional read-only exchange keys
+(no key = public mode), one command, alerts in own Telegram, data in PostgreSQL. No trading, no paper portfolios.
+Cards in `docs/tasks/tool/`; order = list order (T1a/T3/T6 can run in parallel after their dependencies).
+- [ ] T0 ADR 0010 product pivot (architect; S) — `docs/tasks/tool/T0-product-pivot-adr.md`
+- [ ] T13 lawyer: ToS / distribution / LICENSE input (lawyer; S; parallel) — `docs/tasks/tool/T13-lawyer-tool-distribution.md`
+- [ ] T1a remove paper portfolios + GO report: code, config, make target (backend-lead; L) — `docs/tasks/tool/T1a-remove-paper-core.md`
+- [ ] T1b remove paper parts of digest / watchdog D-08 / maintenance (backend-lead; M) — `docs/tasks/tool/T1b-remove-paper-digest-watchdog.md`
+- [ ] T2 migrations: squash (recommended) or drop-migration (backend-lead; M; U4 confirm) — `docs/tasks/tool/T2-migrations-reset.md`
+- [ ] T3 alert data model: volume, transfer net/fee/time, withdraw/deposit flags, lifetime (backend-lead; L) — `docs/tasks/tool/T3-alert-data-model.md`
+- [ ] T4 alert templates NEW/UPDATE/CLOSED, ru/en (backend-lead; M) — `docs/tasks/tool/T4-alert-templates.md`
+- [ ] T5 anti-spam: dedupe, cooldown, caps, edit-in-place, close (backend-lead; L) — `docs/tasks/tool/T5-alert-antispam-edit-in-place.md`
+- [ ] T6 commented `.env.example` + consistency check (devops; M) — `docs/tasks/tool/T6-env-example-config.md`
+- [ ] T7 startup validation, bilingual errors, public-mode fallback (backend-lead; L) — `docs/tasks/tool/T7-startup-validation.md`
+- [ ] T8 one-command start `make up`, auto migrations (devops; M) — `docs/tasks/tool/T8-one-command-start.md`
+- [ ] T9 KEY_POLICY simplification for third parties (security; M) — `docs/tasks/tool/T9-key-policy-simplification.md`
+- [ ] T10 README quickstart (EN) + `docs/guides/quickstart.md` (RU) (scribe; M) — `docs/tasks/tool/T10-readme-quickstart.md`
+- [ ] T11 tests isolation + CI update (tester; M) — `docs/tasks/tool/T11-tests-ci-update.md`
+- [ ] T12 repo hygiene + CLAUDE.md proposal (project-manager; M) — `docs/tasks/tool/T12-hygiene-docs-agents.md`; handoff `docs/handoffs/project-manager-to-user-claude-md-2026-10-25.md`
+- [ ] T14 stage gates: tech-lead, tester, security, delta audit, close (orchestrator; M) — `docs/tasks/tool/T14-stage-gates.md`
+- [ ] LICENSE decision (user; input from T13) — needed before the repo is advertised
+
 ## Adoption (Phases 0-6)
 - [x] U0 intake (`docs/pipeline/intake.md`)
 - [x] Audit `docs/audit/00-16`, stage assessment
@@ -53,28 +75,28 @@ Ticks only after verification and commit.
 - [ ] B12 reaper for stale `SENDING` alert rows + payload version `v` (backend-lead, L)
 - [ ] B13 WS fixes: `_give_up` unwatches, stream errors feed health tracker (backend-lead, L)
 - [x] B14 (5ba4f07 + e23024d; tech-lead round 2: accepted) `CONDITIONAL_VENUES` (default bybit,gateio): every aggregate shows the list and combined totals ALL vs EXCLUDING conditional venues; marker on alerts (backend-lead + observability-engineer; medium) — card `docs/tasks/m2/B14-conditional-venues-reporting.md`
-- [ ] B15 shadow paper portfolios (part 1 config/sim/persistence/migration DONE: architect r2, quant r2, tech-lead r3 ACCEPT + F1/F3; part 2 GO report generator per `docs/quant/b15-review-and-report-spec.md` incl. F2 fee disclosure: tech-lead r2 ACCEPT incl. quant point 1; retention change cleared for the live scanner; follow-ups TL-4, Q3, Q5, Q6, Q8-Q11 listed in the card before UF) per venue set (`[paper] venue_sets` in `config/nexus.toml`, env `PAPER_VENUE_SETS` overrides; soak runs 4 sets: all, excl_conditional, excl_bybit, excl_gateio; own inventory/rebalancing/top-N cap, same fixed capital; migration `portfolio_id` needs A5a restore drill + user OK U4; data accrues from the moment a set is added; quant GO report reads per-set results; backend-lead + quant-analyst; high) — card `docs/tasks/m2/B15-shadow-paper-portfolios.md`
-- [ ] B16 public-only probe of expansion batch 1 (BingX, XT, Toobit, Bitfinex, Phemex; no keys, conditional by default, per-venue lawyer ToS gate, report in `docs/reports/`; backend-lead + crypto-specialist; medium) — card `docs/tasks/m2/B16-public-probe-expansion-batch1.md`
+- [x] CANCELLED (NO-GO 2026-10-25, see `docs/reports/go-no-go.md`): B15 shadow paper portfolios (part 1 config/sim/persistence/migration DONE: architect r2, quant r2, tech-lead r3 ACCEPT + F1/F3; part 2 GO report generator per `docs/quant/b15-review-and-report-spec.md` incl. F2 fee disclosure: tech-lead r2 ACCEPT incl. quant point 1; retention change cleared for the live scanner; follow-ups TL-4, Q3, Q5, Q6, Q8-Q11 listed in the card before UF) per venue set (`[paper] venue_sets` in `config/nexus.toml`, env `PAPER_VENUE_SETS` overrides; soak runs 4 sets: all, excl_conditional, excl_bybit, excl_gateio; own inventory/rebalancing/top-N cap, same fixed capital; migration `portfolio_id` needs A5a restore drill + user OK U4; data accrues from the moment a set is added; quant GO report reads per-set results; backend-lead + quant-analyst; high) — card `docs/tasks/m2/B15-shadow-paper-portfolios.md`
+- [x] CANCELLED (NO-GO 2026-10-25, see `docs/reports/go-no-go.md`): B16 public-only probe of expansion batch 1 (BingX, XT, Toobit, Bitfinex, Phemex; no keys, conditional by default, per-venue lawyer ToS gate, report in `docs/reports/`; backend-lead + crypto-specialist; medium) — card `docs/tasks/m2/B16-public-probe-expansion-batch1.md`
 - [ ] C0 characterization pack for `Scanner.sweep`/`run` before the split (tester, L-M; after R-02/B3/B4)
 - [ ] Backlog, no card (user idea G2): optional per-exchange proxy setting in adapters (ccxt proxy), off by default, proxy URL is a secret; gated by lawyer ToS check per core exchange on proxy/VPN use; design with the user when a server is discussed
 
-## M3 — Data, quant, legal
-- [ ] Agree GO/NO-GO numbers (threshold 2 %/month; see `docs/pipeline/nexus-appendix.md` P6)
+## M3 — Data, quant, legal (CLOSED by NO-GO; open items cancelled, history kept)
+- [x] CANCELLED (NO-GO 2026-10-25, see `docs/reports/go-no-go.md`): Agree GO/NO-GO numbers (threshold 2 %/month; see `docs/pipeline/nexus-appendix.md` P6)
 - [x] S0 pre-soak gates: D-01 restart policy, D-02 backup copy to C:\nexus-backups + status file, R-02 sweep isolation, liveness watchdog to Telegram, gap accounting (devops + backend-lead; medium) — card `docs/tasks/m3/S0-pre-soak-gates.md`
 - [x] S0 follow-up D-08: watchdog check for per-set paper data freshness (newest `paper_cap_stats` hour per set older than N h -> alert; disabled/failing set must not go silent) (backend-lead; small; before or early in the soak) — delta audit `docs/audit/delta-02-S0.md`
-- [ ] D-01b auto-recovery after WSL/Windows restart + host dead-man: code/tests/guide DONE (`docs/handoffs/D01b-auto-recovery.md`); remaining: tech-lead review, user OK + deploy (rebuild/recreate), user steps in `docs/guides/soak-auto-recovery.md`, re-run D-01 check (devops)
-- [ ] Integration test (CI only, `nexus_test`) for the D-08 paper-set activity SQL (`PaperSetActivityRepository`), tech-lead D-08 review risk (tester; small)
-- [ ] Test isolation: unit tests building `Settings`/`KeyPolicySettings` must not read the developer's local `.env` (17 key-policy tests broke when the user set KEY_POLICY_* flags; fixed locally by an autouse fixture). Disable env_file for tests globally (conftest) and audit other settings tests (tester; small)
-- [ ] Multi-day keyed soak (>= 7-14 days) with backups running. Started 2026-10-24 14:05Z on fresh volumes soak1 (archive dump `nexus-archive-20261024T132431Z`; D-03 drill PASSED 14:06Z; D-10 head OK). Remaining before/at soak start: fresh stack (U4 at each data step; guide `docs/guides/soak-fresh-stack.md`), D-03 restore drill on the first dump of the new DB, D-10 migrator exit 0 + `alembic current` = head, D-01 live restart check (security S-8). D-08 per-set freshness is its own line above (done). B15 part 1 done; part 2 report runs in parallel.
+- [x] CANCELLED (NO-GO 2026-10-25, see `docs/reports/go-no-go.md`): D-01b auto-recovery after WSL/Windows restart + host dead-man: code/tests/guide DONE (`docs/handoffs/D01b-auto-recovery.md`); remaining: tech-lead review, user OK + deploy (rebuild/recreate), user steps in `docs/guides/soak-auto-recovery.md`, re-run D-01 check (devops)
+- [x] CANCELLED (NO-GO 2026-10-25, see `docs/reports/go-no-go.md`): Integration test (CI only, `nexus_test`) for the D-08 paper-set activity SQL (`PaperSetActivityRepository`), tech-lead D-08 review risk (tester; small)
+- [ ] Test isolation: unit tests building `Settings`/`KeyPolicySettings` must not read the developer's local `.env` (17 key-policy tests broke when the user set KEY_POLICY_* flags; fixed locally by an autouse fixture). Disable env_file for tests globally (conftest) and audit other settings tests (tester; small) -> moved to S1-tool T11
+- [x] CANCELLED (NO-GO 2026-10-25, see `docs/reports/go-no-go.md`): Multi-day keyed soak (>= 7-14 days) with backups running. Started 2026-10-24 14:05Z on fresh volumes soak1 (archive dump `nexus-archive-20261024T132431Z`; D-03 drill PASSED 14:06Z; D-10 head OK). Remaining before/at soak start: fresh stack (U4 at each data step; guide `docs/guides/soak-fresh-stack.md`), D-03 restore drill on the first dump of the new DB, D-10 migrator exit 0 + `alembic current` = head, D-01 live restart check (security S-8). D-08 per-set freshness is its own line above (done). B15 part 1 done; part 2 report runs in parallel.
 - [x] CANCELLED (NO-GO 2026-10-25, code removed) HT1 hedged transfer arbitrage paper strategy (buy spot A + short perp, simulated A->B transfer, sell B + close; no coin inventory, MTM ~0; public perp/funding data; new GO report section; spec `docs/quant/hedged-transfer-spec.md` DONE 2026-10-25 (quant); architect review ACCEPT with changes 2026-10-25 (`docs/architecture/HT1-design-review.md`, ADR 0009 proposed, steps S0-S15 in card; quant spec amendment C1/C5/C6/C8 before S11); short-window (~1 week, gappy) preliminary verdict = spec section 16 DONE 2026-10-25 (quant); implementation backend-lead; deploy = rebuild + migrator + scanner recreate, U4) — card `docs/tasks/HT1-hedged-transfer-paper.md`
-- [ ] Lawyer/user: derivatives (perp) access for the user on binance/okx/kucoin under his residency/KYC (GO gate for HT)
-- [ ] Quant: formula review, cost model, latency vs spread lifetime, two execution modes, honest backtest, verdict
+- [x] CANCELLED (NO-GO 2026-10-25, see `docs/reports/go-no-go.md`): Lawyer/user: derivatives (perp) access for the user on binance/okx/kucoin under his residency/KYC (GO gate for HT)
+- [x] CANCELLED (NO-GO 2026-10-25, see `docs/reports/go-no-go.md`): Quant: formula review, cost model, latency vs spread lifetime, two execution modes, honest backtest, verdict
 - [ ] Lawyer: `docs/legal/nexus-risk-assessment.md` verified with sources
-- [ ] Dashboards as code (observability-engineer; ADR on stack)
+- [x] CANCELLED (NO-GO 2026-10-25, see `docs/reports/go-no-go.md`): Dashboards as code (observability-engineer; ADR on stack)
 - [x] `docs/reports/go-no-go.md` (NO-GO, user decision 2026-10-25)
 
-## M4 — Fork (UF): GO / Rework / NO-GO
-- [ ] Iteration loop: up to 5 iterations of hypothesis search (vision + analyzer + quant + crypto), reports in `docs/reports/iterations/`, no separate code copies (ADR 0007)
-- [ ] After 5 failed iterations: NO-GO -> portfolio packaging (only on explicit confirmation)
+## M4 — Fork (UF): closed, NO-GO 2026-10-25
+- [x] CANCELLED (NO-GO 2026-10-25, see `docs/reports/go-no-go.md`): Iteration loop: up to 5 iterations of hypothesis search (vision + analyzer + quant + crypto), reports in `docs/reports/iterations/`, no separate code copies (ADR 0007)
+- [x] CANCELLED (NO-GO 2026-10-25, see `docs/reports/go-no-go.md`): After 5 failed iterations: NO-GO -> portfolio packaging (only on explicit confirmation)
 
-## Stage 2 / 3 (only after GO) — see `docs/pipeline/nexus-appendix.md` P7
+## Stage 2 / 3 — cancelled (no GO). Product = self-hosted alert tool, see S1-tool above
