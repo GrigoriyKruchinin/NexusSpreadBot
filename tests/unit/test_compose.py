@@ -133,7 +133,10 @@ def test_config_file_is_baked_into_the_image_not_bind_mounted(compose: str) -> N
     }
     assert {k: v for k, v in binds.items() if v and k != "worker-maintenance"} == {}
     dockerfile = (ROOT / "Dockerfile").read_text()
-    assert "COPY config/nexus.toml ./config/nexus.toml" in dockerfile.split("AS runtime", 1)[1]
+    runtime = dockerfile.split("AS runtime", 1)[1]
+    # the optional gitignored overlay rides along via a glob that may match nothing
+    assert "COPY config/nexus.toml config/local.tom[l] ./config/" in runtime
+    assert "config/local.toml" in (ROOT / ".gitignore").read_text().splitlines()
 
 
 @pytest.mark.parametrize("compose", COMPOSE_FILES)

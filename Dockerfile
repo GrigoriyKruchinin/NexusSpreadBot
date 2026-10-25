@@ -31,7 +31,9 @@ COPY alembic.ini ./
 # Docker Desktop restarts containers after `wsl --shutdown` / a reboot (the distro proxy mounts it later), so
 # every app container used to die at start. The file holds no secrets (startup guard, A7); a settings change
 # now needs `docker compose build` + recreate.
-COPY config/nexus.toml ./config/nexus.toml
+# `local.tom[l]`: the optional untracked overlay (owner's personal values); the glob makes it
+# optional, nexus.toml always matches.
+COPY config/nexus.toml config/local.tom[l] ./config/
 COPY src/nexus/persistence/migrations ./src/nexus/persistence/migrations
 
 ENV PATH="/app/.venv/bin:${PATH}" \

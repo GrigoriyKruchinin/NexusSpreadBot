@@ -1,6 +1,7 @@
 """Committed settings file ``config/nexus.toml``: loader and fail-closed guard (A7).
 
-Priority: init kwargs > environment > ``.env`` (local only) > TOML file > code default.
+Priority: init kwargs > environment > ``.env`` (local only) > ``config/local.toml`` (optional,
+untracked) > TOML file > code default.
 
 The file holds SETTING-class values only (see ``docs/audit/security-config-split-A7.md``).
 Secrets and ENV-ONLY values (tokens, passwords, key-policy attestations, the Telegram API host,
@@ -31,6 +32,8 @@ CONFIG_FILE_ENV = "NEXUS_CONFIG_FILE"
 """Environment variable that points at the settings file (ENV-ONLY: cannot live in the file)."""
 DEFAULT_CONFIG_FILE = "config/nexus.toml"
 """Used when :data:`CONFIG_FILE_ENV` is unset; resolved against the working directory."""
+LOCAL_OVERLAY_NAME = "local.toml"
+"""Optional untracked overlay next to the settings file (gitignored, same guard, wins per key)."""
 
 #: Full env-style names (``<TABLE>_<KEY>``) of every SETTING-class field, i.e. the only keys the
 #: file may contain. A consistency test ties this list to the settings groups.
@@ -235,18 +238,7 @@ def present_env_names() -> set[str]:
     return present
 
 
-def read_config_tables() -> dict[str, dict[str, Any]]:
-    """Read and validate the settings file; ``{}`` when the default file is absent locally.
-
-    Missing file: ``NEXUS_CONFIG_FILE`` set -> refuse; default path missing -> refuse inside
-    containers (``NEXUS_RUNTIME=container``, reproducible runs), WARNING + code defaults locally.
-    """
-    path, explicit = config_file_path()
-    if not path.is_file():
-        if explicit or _is_container():
-            raise ConfigFileError(f"{path}: settings file not found")
-        log.warning("config_file_missing", path=str(path), effect="code defaults are used")
-        return {}
+def _read_file(path: Path) -> dict[str, dict[str, Any]]:
     try:
         text = path.read_bytes().decode("utf-8")
         data = tomllib.loads(text)
@@ -257,6 +249,31 @@ def read_config_tables() -> dict[str, dict[str, Any]]:
     except (UnicodeDecodeError, OSError):
         raise ConfigFileError(f"{path}: file is not readable UTF-8 text") from None
     validate_config(path, data, text)
+    return data
+
+
+def read_config_tables() -> dict[str, dict[str, Any]]:
+    """Read and validate the settings file; ``{}`` when the default file is absent locally.
+
+    Missing file: ``NEXUS_CONFIG_FILE`` set -> refuse; default path missing -> refuse inside
+    containers (``NEXUS_RUNTIME=container``, reproducible runs), WARNING + code defaults locally.
+
+    An optional ``local.toml`` next to the file (gitignored; the owner's personal values, e.g.
+    ``[alert] language = "ru"``) is read with the same guard and wins per key. It holds settings
+    only: secrets stay in ``.env`` (A7).
+    """
+    path, explicit = config_file_path()
+    if not path.is_file():
+        if explicit or _is_container():
+            raise ConfigFileError(f"{path}: settings file not found")
+        log.warning("config_file_missing", path=str(path), effect="code defaults are used")
+        return {}
+    data = _read_file(path)
+    overlay = path.with_name(LOCAL_OVERLAY_NAME)
+    if overlay.is_file():
+        for table, body in _read_file(overlay).items():
+            data[table] = {**data.get(table, {}), **body}
+        log.info("config_overlay_loaded", path=str(overlay))
     return data
 
 

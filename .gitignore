@@ -233,3 +233,6 @@ nexus-backups/
 *.dump
 *.dump.partial
 *.age
+
+# Personal settings overlay on top of config/nexus.toml (settings only, never secrets)
+config/local.toml

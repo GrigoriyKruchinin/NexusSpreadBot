@@ -25,6 +25,7 @@ from nexus.config.file import (
     ConfigFileError,
     _denied,
 )
+from nexus.config.groups import AlertPolicySettings
 from nexus.config.provenance import env_overridden_names, log_settings_provenance, settings_hash
 from tests.db_guard import UnsafeDatabaseError, assert_test_database
 
@@ -356,3 +357,30 @@ def test_merged_db_name_is_what_the_integration_guard_checks(
         assert_test_database(merged.db)
     monkeypatch.setenv("POSTGRES_DB", "nexus_test")
     assert_test_database(DatabaseSettings().db)
+
+
+# ------------------------------------------------------------------ local.toml overlay
+def test_local_overlay_wins_per_key_and_keeps_the_rest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write(tmp_path, '[alert]\nlanguage = "en"\nmax_per_hour = 11\n', monkeypatch)
+    (tmp_path / "local.toml").write_text('[alert]\nlanguage = "ru"\n')
+    settings = AlertPolicySettings()
+    assert settings.language == "ru"
+    assert settings.max_per_hour == 11
+
+
+def test_local_overlay_is_guarded_like_the_main_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write(tmp_path, '[alert]\nlanguage = "en"\n', monkeypatch)
+    (tmp_path / "local.toml").write_text('[telegram]\nbot_token = "x"\n')
+    with pytest.raises(ConfigFileError, match=r"local\.toml"):
+        AlertPolicySettings()
+
+
+def test_env_still_beats_the_local_overlay(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write(tmp_path, '[alert]\nlanguage = "en"\n', monkeypatch)
+    (tmp_path / "local.toml").write_text('[alert]\nlanguage = "ru"\n')
+    monkeypatch.setenv("ALERT_LANGUAGE", "en")
+    assert AlertPolicySettings().language == "en"
