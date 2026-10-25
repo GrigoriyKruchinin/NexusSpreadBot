@@ -8,15 +8,17 @@ It is read-only: it never trades, never withdraws and never transfers funds.
 
 Russian guide (step by step, with Telegram and exchange screenshots in words): [docs/guides/quickstart.md](docs/guides/quickstart.md).
 
-## Example alert (shortened, numbers invented)
+## Example alert (numbers invented)
 
 ```text
-🟢 XYZ/USDT   0.85% net
-Net after fees/slippage: 0.85% (≈ $8.50 on $1000)
-Volume: up to $12,000 (≈ 6000 XYZ) by orderbooks
-Transfer: ExampleNet · fee 1 XYZ (≈ $0.10) · ≈ 3 m (approx)
-Withdraw Buy: ✅ open   Deposit Sell: ✅ open
-ℹ️ Taker fee is an estimate
+🟢 ABC/USDT   +0.80 % net
+Buy  Binance  100
+Sell KuCoin  101
+Net after fees/slippage: +0.80 % (≈ +$7.98 on $1,000)
+Volume: up to $3,050 (≈ 30.5 ABC) by orderbooks
+Transfer: BEP20 · fee 0.8 ABC (≈ $0.08) · ≈ 5 min (approx)
+Withdraw Binance: ✅ open   Deposit KuCoin: ✅ open
+Lifetime: just opened   ·   #7
 ```
 
 Alerts are edited in place while a spread lives and get a "closed" summary when it ends. Alerts for
@@ -50,6 +52,11 @@ Secrets go into `.env` only. Everything else lives in the committed file `config
 copy setting lines into `.env`: an environment variable overrides the file. After editing
 `config/nexus.toml`, run `make up` again (the settings are part of the image).
 
+Owner overlay: a file `config/local.toml` (git-ignored, your private values over the committed defaults)
+is planned. TODO(docs): describe it here once backend-lead's change has landed. The fixed text for the
+channel's pinned message can be shown with a command; TODO(docs): add the exact command once it has
+landed.
+
 | Setting | Default | Meaning |
 |---|---|---|
 | `[alert] language` | `en` | Alert language: `en` or `ru` |
@@ -72,14 +79,17 @@ Keys in `.env`: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `POSTGRES_PASSWORD`, o
   **not used**: that venue runs in public mode and you get a warning in the startup check.
 - `KEY_POLICY_STRICT=true` (optional) makes a rejected key stop the start, requires an IP whitelist,
   and refuses venues whose API cannot show the key's permissions.
-- **Residual risk:** KuCoin and Gate.io do not let the API report every permission. Nexus cannot
-  detect a write permission there automatically. Check the key's permissions in the exchange
-  settings by hand and keep withdrawals and trading off.
+- **Residual risk (KuCoin, Gate.io):** KuCoin: Nexus checks the key's permissions but cannot see its IP
+  whitelist. Gate.io: Nexus cannot see the key's permissions; a Gate.io key with trade or withdraw
+  rights would still be used for reading in default mode (Nexus never sends orders or withdrawals,
+  but a leaked key would be dangerous). Check it by hand in the exchange settings, or use
+  `KEY_POLICY_STRICT=true` to refuse it.
 
-Your keys are read from your local `.env` and are used to call the exchanges' own APIs. The
-statement that keys are never logged, stored or sent elsewhere, and that Nexus has no telemetry, is
-being verified in the security review (T9); until that review is recorded, treat it as a design
-goal, not a guarantee.
+**Your keys stay with you.** API keys are optional and read-only. They are read from your local `.env`
+file, used only to sign requests sent directly to the exchange's own API, and are never logged, stored
+in the database, sent to Telegram or to the authors. Nexus has no telemetry. Create keys **without
+trading and without withdrawal permission**; enable IP restriction where the exchange offers it. Alert
+texts (prices, spreads) do go to Telegram, which you choose.
 
 ## Disclaimer
 
@@ -124,15 +134,21 @@ Nexus license covers the code only, not exchange data.
 | "Could not reach Telegram" | Check the internet; if Telegram is blocked where you live, use a VPN |
 | "key rejected" / "KEY_POLICY" warning | Check the key, secret and passphrase; recreate it read-only if needed. The venue runs in public mode meanwhile |
 | "database is not reachable" / "not migrated" | Run `make up`; if the password changed, it must match the one the database was created with |
+| `make up` says "port is already allocated" (only if you enabled the optional database port) | Another PostgreSQL (or an old `nexus-local` stack: `docker compose -p nexus-local down`, keeps its data) holds 5432. Stop it or set `POSTGRES_HOST_PORT=15432` |
 | Scanner not healthy after `make up` | `make logs s=scanner`, then `make doctor` |
+
+SQL access from the host is off by default. To enable it (loopback `127.0.0.1` only, never public):
+`COMPOSE_FILE=docker-compose.yml:docker-compose.postgres-port.yml make up`, port 5432 or
+`POSTGRES_HOST_PORT`.
 
 Full guide with more cases: [docs/guides/quickstart.md](docs/guides/quickstart.md).
 
 ## Update, stop, reset
 
-- **Update:** `git pull` then `make up`. If the new version changed the database schema, an existing
-  database cannot be upgraded in place: back it up if you need it, then start from a fresh database
-  with `make reset-data` (this deletes data).
+- **Update:** `git pull` then `make up`. Schema changes are applied automatically by migrations on every
+  `make up`, your data is kept. Only a database created before 2026-10-25 (the S1-tool schema squash)
+  cannot be upgraded: back it up if you need it, then reset it once with `make reset-data` (this
+  deletes data).
 - **Stop:** `make down` (data kept).
 - **Reset:** `make reset-data` deletes everything; it is irreversible.
 
