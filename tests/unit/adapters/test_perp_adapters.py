@@ -9,6 +9,7 @@ import pytest
 
 import nexus.adapters.perp  # noqa: F401 - registers adapters
 from nexus.adapters.perp.ccxt_perp import CcxtPerpAdapter
+from nexus.adapters.perp.kucoin_futures import KucoinFuturesAdapter
 from nexus.adapters.perp.okx_swap import OkxSwapAdapter
 from nexus.adapters.perp.registry import perp_registry
 from nexus.adapters.registry import AdapterOptions
@@ -21,8 +22,11 @@ from nexus.domain.errors import (
 from tests.unit.adapters.fake_perp import FakePerpClient, load_perp_fixture
 
 NOW = 1_800_000_000_000
-VENUES = ("okx",)
-CLASSES: dict[str, type[CcxtPerpAdapter]] = {"okx": OkxSwapAdapter}
+VENUES = ("okx", "kucoin")
+CLASSES: dict[str, type[CcxtPerpAdapter]] = {
+    "okx": OkxSwapAdapter,
+    "kucoin": KucoinFuturesAdapter,
+}
 BTC = "BTC/USDT:USDT"
 
 
@@ -352,3 +356,98 @@ async def test_close_closes_client() -> None:
     async with adapter:
         pass
     assert client.closed
+
+
+# ------------------------------------------------------------------ KuCoin futures
+
+
+async def test_kucoin_market_parsing() -> None:
+    adapter, _, _ = _adapter("kucoin")
+    markets = {m.symbol: m for m in await adapter.load_perp_markets()}
+    btc = markets[BTC]
+    assert btc.contract_size == D("0.001")
+    assert btc.amount_step == D("1.0")
+    assert btc.mmr == D("0.004")
+    assert btc.max_leverage == D("125.0")
+    assert btc.taker_fee == D("0.0006")
+    assert btc.lot_base == D("0.001")
+    assert "ETH/USDC:USDC" not in markets
+    assert "ETH/USD:ETH" not in markets
+    odd = markets["10000CAT/USDT:USDT"]
+    assert odd.base == "10000CAT"
+    assert odd.contract_size != 1
+
+
+async def test_kucoin_delisting_when_expiry_published() -> None:
+    raw = load_markets_with("kucoin", lambda m: m["info"].update(expireDate=1900000000000), BTC)
+    adapter, _, _ = _adapter("kucoin", markets=raw)
+    markets = {m.symbol: m for m in await adapter.load_perp_markets()}
+    assert markets[BTC].delisting
+    assert not markets["ETH/USDT:USDT"].delisting
+
+
+async def test_kucoin_tickers_use_bulk_bid_ask() -> None:
+    adapter, client, _ = _adapter("kucoin")
+    tickers = await adapter.fetch_perp_tickers()
+    raw = load_perp_fixture("kucoin", "bids_asks")
+    assert tickers[BTC].bid == D(str(raw[BTC]["bid"]))
+    assert tickers[BTC].ask == D(str(raw[BTC]["ask"]))
+    assert "fetch_tickers" not in [c[0] for c in client.calls]
+
+
+async def test_kucoin_order_book_base_units_and_depth_steps() -> None:
+    adapter, client, _ = _adapter("kucoin")
+    book = await adapter.fetch_perp_order_book(BTC, 10)
+    assert client.calls[-1] == ("fetch_order_book", (BTC, 20))
+    assert book.bids[0].amount == D("21.0") * D("0.001")
+    assert adapter.order_book_limit(50) == 100
+    assert adapter.order_book_limit(500) == 100
+
+
+async def test_kucoin_funding_marks_from_contract_tickers() -> None:
+    adapter, client, _ = _adapter("kucoin")
+    funding = await adapter.fetch_funding([BTC])
+    info = funding[BTC]
+    raw = load_perp_fixture("kucoin", "funding")[BTC]
+    tick = load_perp_fixture("kucoin", "tickers")[BTC]
+    assert info.rate == D(str(raw["fundingRate"]))
+    assert info.interval_h == D("8")
+    assert info.next_funding_ms == raw["fundingTimestamp"]
+    assert info.mark_price == D(str(tick["markPrice"]))
+    assert info.index_price == D(str(tick["indexPrice"]))
+    names = [c[0] for c in client.calls]
+    assert names.count("fetch_funding_rates") == 1
+    assert names.count("fetch_tickers") == 1
+
+
+async def test_kucoin_klines_high_low_from_all_price_columns() -> None:
+    start = NOW - NOW % 60_000
+    # Observed layout (open, low, close, high); high must be the max whatever the order is.
+    row = [start, 100.0, 99.0, 99.5, 101.0, 0.0]
+    adapter, _, _ = _adapter("kucoin", klines=lambda *a: [row])
+    (kline,) = await adapter.fetch_mark_klines(BTC, start, start + 60_000)
+    assert (kline.open, kline.low, kline.close, kline.high) == (D(100), D(99), D("99.5"), D(101))
+
+
+async def test_kucoin_recorded_klines_are_consistent_and_page_200() -> None:
+    adapter, client, _ = _adapter("kucoin")
+    rows = load_perp_fixture("kucoin", "klines")
+    since = rows[0][0]
+    klines = await adapter.fetch_mark_klines(BTC, since, rows[-1][0] + 60_000)
+    assert len(klines) == len(rows)
+    assert all(k.low <= min(k.open, k.close) <= max(k.open, k.close) <= k.high for k in klines)
+    assert client.calls[-1][1][3] == 200
+
+
+async def test_kucoin_tiers_skip_invalid_rows() -> None:
+    raw = copy.deepcopy(load_perp_fixture("kucoin", "tiers"))
+    baseline, _, _ = _adapter("kucoin")
+    valid = await baseline.fetch_leverage_tiers(BTC)
+    assert valid is not None
+    assert len(valid) == 11  # the recorded payload already holds one unusable tier
+    raw[1]["maxNotional"] = raw[1]["minNotional"]  # invalid bounds
+    adapter, _, _ = _adapter("kucoin", tiers=raw)
+    tiers = await adapter.fetch_leverage_tiers(BTC)
+    assert tiers is not None
+    assert len(tiers) == 10
+    assert tiers[0].mmr == D("0.004")

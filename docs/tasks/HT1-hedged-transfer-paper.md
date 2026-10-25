@@ -130,7 +130,7 @@ sweep unaffected). S0 reduced to the `test_safety` additions.
   per-instrument funding. AC: recorded public fixtures (markets, tickers, funding, book, klines, tiers);
   falsy `apiKey`; POST/DELETE via `request()` and an implicit method raise `ReadOnlyViolationError`; 429
   -> `ExchangeRateLimitError`; limits written in the docstring.
-- [ ] **S3 KuCoin futures adapter.** Same AC as S2 (contracts/active as the funding source, multiplier,
+- [x] **S3 KuCoin futures adapter.** Same AC as S2 (contracts/active as the funding source, multiplier,
   depth20/100).
 - [ ] **S4 Binance USDⓈ-M adapter.** Same AC as S2. A test asserts that `leverageBracket` (signed) is
   never called.
