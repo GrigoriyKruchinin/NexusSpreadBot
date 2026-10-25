@@ -1,6 +1,6 @@
 -- Idempotent bootstrap of the minimal A5a roles (subset of target.md section 10.1).
 -- NOT run automatically. Run once by the user as the bootstrap superuser:
---   docker compose -f docker-compose.local.yml exec -T postgres sh -c \
+--   docker compose exec -T postgres sh -c \
 --     'psql -U "$POSTGRES_USER" -d postgres -v ON_ERROR_STOP=1' < scripts/sql/bootstrap_backup_roles.sql
 -- Roles have LOGIN but NO password: they work only over the container's local unix socket
 -- (trust auth in the official image) and cannot log in over the published TCP port 5432.

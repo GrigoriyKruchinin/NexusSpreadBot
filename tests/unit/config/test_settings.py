@@ -49,7 +49,7 @@ def test_exchanges_default_is_core_exchanges(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_exchanges_empty_env_falls_back_to_core(monkeypatch: pytest.MonkeyPatch) -> None:
-    # docker-compose.local.yml passes an unset EXCHANGES_ENABLED as "".
+    # docker-compose.yml passes an unset EXCHANGES_ENABLED as "".
     monkeypatch.setenv("EXCHANGES_ENABLED", "")
     assert ExchangesSettings().enabled == CORE_EXCHANGES
 

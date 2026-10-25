@@ -153,3 +153,6 @@ jobs:
           persist-credentials: false
       # Build only: no push, no registry login.
       - run: docker build -t nexus-spread-bot:ci .
+      # T8: syntax check of the one-command start script (a full compose smoke needs a fake Telegram
+      # endpoint; documented manual check: `make up` on a fresh project, see docs/tasks/tool/T8).
+      - run: bash -n scripts/start.sh

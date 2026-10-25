@@ -22,7 +22,7 @@ set -uo pipefail
 set +x
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/docker-compose.local.yml}"
+COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/docker-compose.yml}"
 ENV_FILE="${WATCHDOG_ENV_FILE:-$REPO_ROOT/.env}"
 STATE_DIR="${WATCHDOG_STATE_DIR:-$HOME/.local/state/nexus-host-watchdog}"
 PAUSE_FILE="${WATCHDOG_PAUSE_FILE:-$HOME/.nexus-watchdog-pause}"

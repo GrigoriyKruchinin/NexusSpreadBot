@@ -10,7 +10,7 @@ import yaml
 from nexus.config.file import TOML_ALLOWED
 
 ROOT = Path(__file__).resolve().parents[2]
-COMPOSE_FILES = ["docker-compose.local.yml"]
+COMPOSE_FILES = ["docker-compose.yml"]
 APP_SERVICES = {"migrator", "scanner", "worker-alerts", "worker-maintenance", "beat"}
 
 EXCHANGE_SECRET = re.compile(r"^(BYBIT|BINANCE|OKX|GATEIO|KUCOIN|MEXC|BITGET)_API_")
@@ -260,29 +260,23 @@ def test_wrapper_propagates_scanner_failure_after_sigterm(tmp_path: Path) -> Non
 
 
 @pytest.mark.parametrize("compose", COMPOSE_FILES)
-def test_maintenance_worker_mounts_backup_status_read_only(compose: str) -> None:
-    services = _load(compose)["services"]
-    mounts = [
-        v
-        for v in services["worker-maintenance"]["volumes"]
-        if isinstance(v, dict) and v.get("target") == "/backups"
-    ]
-    assert len(mounts) == 1  # long syntax only: short syntax cannot forbid host-path creation
-    mount = mounts[0]
-    assert mount["type"] == "bind"
-    assert mount["source"].endswith("/nexus-backup-status")  # status dir, never the 0700 dump dir
-    assert mount["read_only"] is True
-    assert mount["bind"]["create_host_path"] is False  # missing source must fail, not start empty
-    for name, svc in services.items():
-        if name != "worker-maintenance":
-            assert not any("/backups" in str(v) for v in svc.get("volumes", [])), name
+def test_no_bind_mounts_anywhere(compose: str) -> None:
+    """T8: works on Docker Desktop/WSL without host paths (config is baked into the image)."""
+    for name, svc in _load(compose)["services"].items():
+        for volume in svc.get("volumes", []):
+            if isinstance(volume, dict):
+                assert volume.get("type") != "bind", name
+            else:
+                assert not str(volume).startswith(("/", ".", "~", "$")), (name, volume)
 
 
 @pytest.mark.parametrize("compose", COMPOSE_FILES)
-def test_soak_volumes_are_pinned_fresh_and_distinct_from_old(compose: str) -> None:
-    volumes = _load(compose)["volumes"]
-    assert volumes["postgres-data"]["name"] == "nexus-local_postgres-data-soak1"
-    assert volumes["redis-data"]["name"] == "nexus-local_redis-data-soak1"
+def test_data_volumes_are_default_named_for_the_tool(compose: str) -> None:
+    """T8: no soak-era pinned names; project-scoped defaults, so a clone never touches old data."""
+    doc = _load(compose)
+    assert doc["name"] == "nexus"
+    for volume in ("postgres-data", "redis-data"):
+        assert not (doc["volumes"][volume] or {}).get("name")
 
 
 def test_bootstrap_roles_target_is_safe() -> None:
@@ -308,3 +302,13 @@ def test_ip_binding_waiver_reaches_only_the_scanner(compose: str) -> None:
         if "KEY_POLICY_IP_BINDING_WAIVED" in (svc.get("environment") or {})
     }
     assert holders == {"scanner"}
+
+
+def test_start_script_is_safe() -> None:
+    """T8: one-command start never expands .env and never prints secrets."""
+    script = (ROOT / "scripts/start.sh").read_text()
+    for forbidden in ("compose config", "inspect", "exec ", "set -x", "cat .env", 'echo "$NEW'):
+        assert forbidden not in script, forbidden
+    assert "docker compose up -d --build" in script
+    assert "ENVIRON" in script  # generated password reaches awk through the environment, not argv
+    assert "up:" in (ROOT / "Makefile").read_text()

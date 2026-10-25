@@ -120,10 +120,11 @@ unless both the transfer path and the token contract are verified (ticker collis
 Setup guide (Russian): [docs/guides/stage-1-local-setup.md](docs/guides/stage-1-local-setup.md).
 
 ```bash
-cp .env.example .env && chmod 600 .env   # secrets only; tunables live in config/nexus.toml
-make up-local                            # build and start the stack
-make ps-local                            # all services should be healthy
+cp .env.example .env && chmod 600 .env   # fill TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID; tunables live in config/nexus.toml
+make up                                  # check .env, build, migrate, start (no make: scripts/start.sh)
+make ps                                  # all services should be healthy
 make logs s=scanner
+make down                                # stop; data volumes are kept (make reset-data deletes them)
 ```
 
 ### Extension runs (MEXC, Bitget)

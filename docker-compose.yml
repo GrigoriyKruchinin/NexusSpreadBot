@@ -1,11 +1,12 @@
-# Nexus Spread Scanner — local (Version 1, read-only) stack.
-#   cp .env.example .env  &&  make up-local
+# Nexus Spread Scanner — the stack for users (read-only alerts, no trading).
+#   cp .env.example .env   # fill TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
+#   make up                # or: scripts/start.sh   (build, migrate, start)
 #
 # Every service receives ONLY the secrets of its own domain (see x-*-env anchors). All other
 # settings come from config/nexus.toml, BAKED into the image (A7, D-01b; rebuild to change a setting).
 # Optional variables use ${VAR:-} -> empty means "use the default" (env_ignore_empty).
 
-name: nexus-local
+name: nexus
 
 x-image: &image
   image: nexus-spread-bot:local
@@ -162,20 +163,6 @@ services:
     environment:
       <<: [*db-env, *celery-env]
       NEXUS_WORKER_ROLE: maintenance
-    volumes:
-      # Backup status for the liveness watchdog (S0b), read-only. NOT the 0700 dump dir (the container
-      # uid cannot enter it and must not see dumps): backup.sh mirrors last_backup.json here.
-      # The ONLY remaining distro bind mount: if it is not ready after a WSL restart this one container
-      # fails to start; scripts/host_watchdog.sh then runs `docker compose start` within minutes (D-01b).
-      # Fixed path (no BACKUP_STATUS_DIR variable: compose would read it from .env, make/cron from the shell).
-      # Long syntax with create_host_path: false: a missing source FAILS the start instead of Docker
-      # silently creating an empty host dir (which would blind the in-stack backup liveness check).
-      - type: bind
-        source: ${HOME}/nexus-backup-status
-        target: /backups
-        read_only: true
-        bind:
-          create_host_path: false
     depends_on:
       migrator: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
@@ -203,11 +190,6 @@ services:
       start_period: 20s
 
 volumes:
-  # Soak 2026-10: fresh volumes (pinned names). The previous data stays untouched in the volumes
-  # "nexus-local_postgres-data" and "nexus-local_redis-data" (archive dump taken, step 3.1).
-  # Rollback: delete the `name:` line (or set the old name) and recreate the stack. Note: a fresh volume
-  # takes POSTGRES_PASSWORD from .env at initdb time; the old volume keeps its old password.
+  # Default (project-scoped) names: nexus_postgres-data / nexus_redis-data. `make down` keeps them.
   postgres-data:
-    name: nexus-local_postgres-data-soak1
   redis-data:
-    name: nexus-local_redis-data-soak1

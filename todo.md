@@ -17,7 +17,7 @@ Authority: ADR 0010 (`docs/decisions/0010-self-hosted-alert-tool.md`). Cards in 
 - [x] T5 anti-spam: dedupe, cooldown, caps, edit-in-place, close (backend-lead; L) — `docs/tasks/tool/T5-alert-antispam-edit-in-place.md`
 - [x] T6 commented `.env.example` + consistency check (devops; M) — `docs/tasks/tool/T6-env-example-config.md`
 - [ ] T7 startup validation, bilingual errors, public-mode fallback (backend-lead; L) — `docs/tasks/tool/T7-startup-validation.md`
-- [ ] T8 one-command start `make up`, auto migrations (devops; M) — `docs/tasks/tool/T8-one-command-start.md`
+- [x] T8 one-command start `make up`, auto migrations (devops; M) — `docs/tasks/tool/T8-one-command-start.md`
 - [ ] T9 KEY_POLICY simplification for third parties (security; M) — `docs/tasks/tool/T9-key-policy-simplification.md`
 - [ ] T10 README quickstart (EN) + `docs/guides/quickstart.md` (RU) (scribe; M) — `docs/tasks/tool/T10-readme-quickstart.md`
 - [ ] T11 tests isolation + CI update (tester; M) — `docs/tasks/tool/T11-tests-ci-update.md`

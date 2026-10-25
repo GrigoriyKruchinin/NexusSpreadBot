@@ -3,7 +3,7 @@
 # appears on any command line, in compose, or in logs.
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/docker-compose.local.yml}"
+COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/docker-compose.yml}"
 BACKUP_DIR="${BACKUP_DIR:-$HOME/nexus-backups}"
 BACKUP_USER="${BACKUP_USER:-nexus_ro}"
 SOURCE_DB="${SOURCE_DB:-nexus}"

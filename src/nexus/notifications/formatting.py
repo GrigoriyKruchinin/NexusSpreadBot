@@ -69,7 +69,7 @@ WATCHDOG_REASONS: Final[dict[str, str]] = {
     "backup_stale": "последняя резервная копия была {minutes} мин назад",
 }
 STOP_REASONS: Final[dict[str, str]] = {
-    "shutdown": "сканер остановлен или перезапускается (docker stop / make down-local)",
+    "shutdown": "сканер остановлен или перезапускается (docker stop / make down)",
 }
 
 

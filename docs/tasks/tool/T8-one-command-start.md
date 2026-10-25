@@ -6,7 +6,7 @@
 - complexity: medium (compose/Docker orchestration; must not touch live volumes)
 - size: M
 - depends_on: T2, T6, T7
-- status: todo
+- status: done (agent-verified statically; clean-machine run by the user)
 
 ## Goal
 `git clone && cp .env.example .env && <edit> && make up` brings up Postgres, Redis, migrator, scanner and workers and posts alerts.
@@ -35,3 +35,8 @@ VPS hardening (A5d), proxies.
 Makefile, docker-compose*.yml, scripts/, .github/workflows/
 
 DoD: `make check` green and not worse than baseline, new tests, no secrets in diff, todo.md + card updated, committed (Conventional Commits).
+
+## Result
+- `docker-compose.local.yml` -> `docker-compose.yml`, project `nexus`, default volume names; `make up` = `scripts/start.sh` (.env presence + names, auto-generated POSTGRES_PASSWORD only while no DB volume exists, build, migrator, healthy wait); `make down` keeps volumes; `make reset-data` typed-DELETE guard.
+- Removed: soak1 pinned volume names, backup-status bind mount, `up-local/down-local/ps-local`, `mkdir ~/nexus-backup-status`.
+- Open: `nexus check` hook (T7) is a comment in start.sh; in-app watchdog backup check will report backup_missing without the mount (needs a backend switch); no compose smoke in CI (bash -n only); roles bootstrap stays optional dev tool.
