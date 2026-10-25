@@ -4,7 +4,7 @@
 #
 # Secrets: this script never prints values from .env, only variable NAMES. A missing POSTGRES_PASSWORD
 # is generated and written into .env (mode kept 0600) without being echoed; do not run with `bash -x`.
-# It never runs `docker compose config`, `docker inspect` or `exec ... env`.
+# It never expands the environment of containers or the compose file.
 set -euo pipefail
 set +x
 
