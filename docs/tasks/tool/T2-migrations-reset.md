@@ -6,7 +6,7 @@
 - complexity: medium (irreversible schema work, but DB is empty by user decision)
 - size: M
 - depends_on: T1a
-- status: todo
+- status: done
 
 ## Goal
 End with a schema that contains no paper tables and a migration history that works on an empty DB with one command.
@@ -33,3 +33,8 @@ Wiping the live DB (user does it himself; agents were denied; guide commands are
 src/nexus/persistence/migrations/, scripts/, tests/integration/
 
 DoD: `make check` green and not worse than baseline, new tests, no secrets in diff, todo.md + card updated, committed (Conventional Commits).
+
+## Result (2026-10-25)
+- Decision: SQUASH (user decision; live DB and all backups wiped by the user, so U4 confirmation = that decision). Old dumps must not be restored into the new schema; `alembic stamp` is not supported for pre-S1 DBs.
+- New single head `8e1f4a7c2b90` (`versions/20261025_8e1f4a7c2b90_initial_schema.py`): 8 tables, no `paper_*`. Verified offline on SQLite: `compare_metadata` against ORM is empty, downgrade clean.
+- `tests/integration/test_migrations.py` (single head, `alembic check`, no paper tables); runs in CI only. Backup/restore scripts are table-agnostic, no change needed.
