@@ -6,7 +6,7 @@
 - complexity: medium (docs-plus-config but must match compose and settings exactly)
 - size: M
 - depends_on: T1a
-- status: todo
+- status: done
 
 ## Goal
 A stranger can fill `.env.example` without reading code and knows what is required vs optional.
