@@ -13,3 +13,11 @@ async def test_retention_windows() -> None:
     assert repos.purged == [
         (now - timedelta(days=7), now - timedelta(days=30), now - timedelta(days=90))
     ]
+
+
+async def test_stale_sending_alerts_are_reaped_after_the_configured_age() -> None:
+    repos = MemoryRepos()
+    now = datetime(2026, 10, 18, tzinfo=UTC)
+    await RetentionService(repos, MaintenanceSettings(), sending_stale_s=600).purge(now)
+    await RetentionService(repos, MaintenanceSettings()).purge(now)
+    assert repos.reaped_before == [now - timedelta(seconds=600), None]

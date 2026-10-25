@@ -172,6 +172,7 @@ class MaintenanceWorkerSettings(_RoleSettings):
     database: DatabaseSettings
     celery: CelerySettings
     maintenance: MaintenanceSettings
+    alerts: AlertPolicySettings = Field(default_factory=AlertPolicySettings)
     watchdog: WatchdogSettings = Field(default_factory=WatchdogSettings)
     logging: LoggingSettings
 
@@ -182,6 +183,7 @@ class MaintenanceWorkerSettings(_RoleSettings):
             database=DatabaseSettings(),
             celery=CelerySettings(),
             maintenance=MaintenanceSettings(),
+            alerts=AlertPolicySettings(),
             watchdog=WatchdogSettings(),
             logging=LoggingSettings(),
         )

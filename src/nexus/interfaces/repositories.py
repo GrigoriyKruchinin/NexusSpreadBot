@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 from nexus.domain.digest import DigestData
 from nexus.domain.episodes import OpportunityEpisode
@@ -22,6 +23,8 @@ class AlertDeliveryStatus(StrEnum):
     SENDING = "sending"
     SENT = "sent"
     FAILED = "failed"
+    SUPPRESSED = "suppressed"
+    """Not sent: over the hourly cap (counted in the "N more suppressed" summary)."""
 
 
 class IMarketRepository(ABC):
@@ -146,6 +149,55 @@ class IAlertLogRepository(ABC):
         """Insert or update the delivery record of ``evaluation_id``."""
 
 
+@dataclass(frozen=True, slots=True)
+class EpisodeMessage:
+    """The Telegram message of an episode and what it was last rendered from."""
+
+    episode_id: int
+    message_id: str
+    evaluation_id: int
+    context: dict[str, Any]
+    """:class:`~nexus.domain.events.AlertContext` payload of the last rendering."""
+
+
+@dataclass(frozen=True, slots=True)
+class SuppressedSummary:
+    """Suppressed NEW alerts of one hourly window and the summary message showing the count."""
+
+    suppressed: int
+    message_id: str | None
+
+
+class IAlertMessageRepository(ABC):
+    """Telegram message bookkeeping of the alerts worker (written by it alone)."""
+
+    @abstractmethod
+    async def get_episode_message(self, episode_id: int) -> EpisodeMessage | None:
+        """The message of an episode, ``None`` if it was never sent (or the episode is gone)."""
+
+    @abstractmethod
+    async def save_episode_message(
+        self, episode_id: int, *, message_id: str, evaluation_id: int, context: dict[str, Any]
+    ) -> None:
+        """Store (or replace) the episode's message id and what it was rendered from."""
+
+    @abstractmethod
+    async def try_consume(self, window_start_ms: int, limit: int) -> bool:
+        """Take one NEW-message slot of the hourly window; ``False`` when ``limit`` is reached."""
+
+    @abstractmethod
+    async def refund(self, window_start_ms: int) -> None:
+        """Give back a slot taken by :meth:`try_consume` when the send failed."""
+
+    @abstractmethod
+    async def record_suppressed(self, window_start_ms: int) -> SuppressedSummary:
+        """Count one suppressed alert; returns the window's total and its summary message id."""
+
+    @abstractmethod
+    async def set_summary_message(self, window_start_ms: int, message_id: str) -> None:
+        """Remember the window's summary message so later suppressions edit it."""
+
+
 class IExchangeHealthRepository(ABC):
     """Exchange call outcomes."""
 
@@ -172,5 +224,10 @@ class IRetentionRepository(ABC):
         snapshots_before: datetime,
         evaluations_before: datetime,
         episodes_before: datetime,
+        alerts_sending_before: datetime | None = None,
     ) -> dict[str, int]:
-        """Delete rows past their retention window; returns counts per table."""
+        """Delete rows past their retention window; returns counts per table.
+
+        Also reaps alert deliveries stuck in ``sending`` since ``alerts_sending_before`` (the
+        worker died between claim and result): they become ``failed``.
+        """

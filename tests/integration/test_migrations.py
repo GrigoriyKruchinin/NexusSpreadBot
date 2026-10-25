@@ -12,11 +12,14 @@ from nexus.persistence.db import create_engine
 pytestmark = pytest.mark.integration
 
 
-def test_single_revision_history() -> None:
+HEAD = "b7d2c4e6a1f3"
+
+
+def test_linear_history_on_top_of_the_squashed_initial_schema() -> None:
     script = ScriptDirectory.from_config(Config("alembic.ini"))
-    revisions = list(script.walk_revisions())
-    assert len(revisions) == 1
-    assert script.get_heads() == ["8e1f4a7c2b90"]
+    revisions = [r.revision for r in script.walk_revisions()]
+    assert revisions == [HEAD, "8e1f4a7c2b90"]  # newest first
+    assert script.get_heads() == [HEAD]
 
 
 def test_alembic_check_has_no_drift(db_settings: DatabaseSettings) -> None:
@@ -32,4 +35,4 @@ async def test_no_paper_tables_and_head_stamped(db_settings: DatabaseSettings) -
     finally:
         await engine.dispose()
     assert not [t for t in tables if t.startswith("paper_")]
-    assert version == "8e1f4a7c2b90"
+    assert version == HEAD

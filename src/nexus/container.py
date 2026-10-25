@@ -28,10 +28,12 @@ from nexus.infra.redis_store import (
 )
 from nexus.interfaces.market_data import BaseExchangeAdapter
 from nexus.notifications.formatting import OpportunityFormatter
+from nexus.notifications.rate_limit import SendRateLimiter, process_limiter
 from nexus.notifications.telegram import TelegramNotifier
 from nexus.persistence.db import create_engine, create_session_factory
 from nexus.persistence.repositories import (
     AlertLogRepository,
+    AlertMessageRepository,
     DigestRepository,
     EpisodeRepository,
     EvaluationRepository,
@@ -176,16 +178,24 @@ async def scanner_scope(settings: ScannerRoleSettings) -> AsyncIterator[Scanner]
         )
 
 
+def _send_limiter(settings: AlertsWorkerSettings) -> SendRateLimiter:
+    """Telegram rate limiter shared by every task of this worker process."""
+    policy = settings.alerts
+    return process_limiter(policy.send_min_interval_s, policy.send_max_per_minute)
+
+
 @asynccontextmanager
 async def alert_service_scope(settings: AlertsWorkerSettings) -> AsyncIterator[AlertService]:
     """Alert service for one Celery task (fresh event loop => unpooled engine)."""
     engine = create_engine(settings.database, pooled=False)
     sessions = create_session_factory(engine)
-    notifier = TelegramNotifier(settings.telegram)
+    notifier = TelegramNotifier(settings.telegram, limiter=_send_limiter(settings))
     try:
         yield AlertService(
             evaluations=EvaluationRepository(sessions),
             alert_log=AlertLogRepository(sessions),
+            messages=AlertMessageRepository(sessions),
+            max_per_hour=settings.alerts.max_per_hour,
             notifier=notifier,
             clock=SystemClock(),
             max_age_s=settings.telegram.alert_max_age_s,
@@ -203,7 +213,7 @@ async def alert_service_scope(settings: AlertsWorkerSettings) -> AsyncIterator[A
 async def digest_scope(settings: AlertsWorkerSettings) -> AsyncIterator[DigestService]:
     """Digest service for one Celery task (read-only aggregates + Telegram)."""
     engine = create_engine(settings.database, pooled=False)
-    notifier = TelegramNotifier(settings.telegram)
+    notifier = TelegramNotifier(settings.telegram, limiter=_send_limiter(settings))
     try:
         yield DigestService(
             DigestRepository(
@@ -224,7 +234,9 @@ async def retention_scope(settings: MaintenanceWorkerSettings) -> AsyncIterator[
     engine = create_engine(settings.database, pooled=False)
     try:
         yield RetentionService(
-            RetentionRepository(create_session_factory(engine)), settings.maintenance
+            RetentionRepository(create_session_factory(engine)),
+            settings.maintenance,
+            sending_stale_s=settings.alerts.sending_stale_s,
         )
     finally:
         await engine.dispose()

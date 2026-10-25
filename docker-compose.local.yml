@@ -141,7 +141,7 @@ services:
   worker-alerts:
     <<: *image
     command: ["celery", "-A", "nexus.workers.app:celery_app", "worker", "-Q", "alerts",
-              "-n", "alerts@%h", "--concurrency", "2", "--loglevel", "INFO"]
+              "-n", "alerts@%h", "--concurrency", "1", "--loglevel", "INFO"]
     environment:
       <<: [*db-env, *celery-env, *telegram-env]
       NEXUS_WORKER_ROLE: alerts

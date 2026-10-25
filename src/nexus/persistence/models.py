@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
@@ -23,6 +24,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 NAMING_CONVENTION = {
@@ -174,6 +176,25 @@ class OpportunityEpisodeRow(Base):
     realerts: Mapped[int] = mapped_column(Integer, server_default="0")
     survived_latency: Mapped[bool | None] = mapped_column(Boolean)
     unverified_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Written by the alerts worker only (never by the scanner's state saves).
+    alert_message_id: Mapped[str | None] = mapped_column(String(64))
+    """Telegram message of the episode: NEW sends it, UPDATE and CLOSED edit it."""
+    alert_evaluation_id: Mapped[int | None] = mapped_column(BigInteger)
+    """Evaluation behind the last rendering of the message (CLOSED re-renders from it)."""
+    alert_context: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    """AlertContext payload of the last rendering (volume / transfer blocks are not persisted
+    anywhere else)."""
+
+
+class AlertHourBudgetRow(Base):
+    """NEW-message budget of one clock hour and its "N more suppressed" summary message."""
+
+    __tablename__ = "alert_hour_budget"
+
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    sent: Mapped[int] = mapped_column(Integer, server_default="0")
+    suppressed: Mapped[int] = mapped_column(Integer, server_default="0")
+    summary_message_id: Mapped[str | None] = mapped_column(String(64))
 
 
 class AlertLogRow(Base):

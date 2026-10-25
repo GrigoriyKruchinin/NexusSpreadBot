@@ -224,6 +224,10 @@ class OpportunityFormatter:
         ]
         return truncate("\n".join(line for line in lines if line))
 
+    def render_suppressed(self, count: int, limit: int) -> str:
+        """The one collapsed message for alerts over the hourly cap."""
+        return self._t["suppressed"].format(n=count, limit=limit)
+
     def _compose(
         self,
         title_key: str,

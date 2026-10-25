@@ -32,8 +32,10 @@ from nexus.domain.spread import (
 from nexus.engine.candidates import RouteQuote
 from nexus.interfaces.repositories import (
     AlertDeliveryStatus,
+    EpisodeMessage,
     ExchangeMetadataStats,
     IAlertLogRepository,
+    IAlertMessageRepository,
     IDigestRepository,
     IEpisodeRepository,
     IEvaluationRepository,
@@ -43,9 +45,11 @@ from nexus.interfaces.repositories import (
     IQuarantineRepository,
     IRetentionRepository,
     ISnapshotRepository,
+    SuppressedSummary,
 )
 from nexus.interfaces.watchdog import IScannerActivity
 from nexus.persistence.models import (
+    AlertHourBudgetRow,
     AlertLogRow,
     ExchangeHealthRow,
     ExchangeMetadataStatsRow,
@@ -128,6 +132,9 @@ def row_to_evaluation(row: SpreadEvaluationRow) -> SpreadEvaluation:
         reason=row.reason or "",
         fees_estimated=bool(row.fees_estimated),
     )
+
+
+STALE_SENDING_ERROR = "reaped: stuck in sending (worker died between claim and result)"
 
 
 class _Repository:
@@ -459,6 +466,86 @@ class AlertLogRepository(_Repository, IAlertLogRepository):
             await session.execute(stmt)
 
 
+class AlertMessageRepository(_Repository, IAlertMessageRepository):
+    """Episode message ids (columns of ``opportunity_episodes`` that only the alerts worker
+    writes, so the scanner's state saves cannot clobber them) and the hourly NEW budget."""
+
+    async def get_episode_message(self, episode_id: int) -> EpisodeMessage | None:
+        """The message of ``episode_id`` or ``None``."""
+        async with self._sessions() as session:
+            row = await session.get(OpportunityEpisodeRow, episode_id)
+        if row is None or row.alert_message_id is None or row.alert_evaluation_id is None:
+            return None
+        return EpisodeMessage(
+            episode_id=episode_id,
+            message_id=row.alert_message_id,
+            evaluation_id=row.alert_evaluation_id,
+            context=dict(row.alert_context or {}),
+        )
+
+    async def save_episode_message(
+        self, episode_id: int, *, message_id: str, evaluation_id: int, context: dict[str, Any]
+    ) -> None:
+        """Store the episode's message (also for an already closed episode)."""
+        async with self._sessions.begin() as session:
+            await session.execute(
+                update(OpportunityEpisodeRow)
+                .where(OpportunityEpisodeRow.id == episode_id)
+                .values(
+                    alert_message_id=message_id,
+                    alert_evaluation_id=evaluation_id,
+                    alert_context=context,
+                )
+            )
+
+    async def try_consume(self, window_start_ms: int, limit: int) -> bool:
+        """Atomically take a slot: the increment only happens below ``limit``."""
+        insert = pg_insert(AlertHourBudgetRow).values(
+            window_start=ms_to_datetime(window_start_ms), sent=1
+        )
+        stmt = insert.on_conflict_do_update(
+            index_elements=[AlertHourBudgetRow.window_start],
+            set_={"sent": AlertHourBudgetRow.sent + 1},
+            where=AlertHourBudgetRow.sent < limit,
+        ).returning(AlertHourBudgetRow.sent)
+        async with self._sessions.begin() as session:
+            return await session.scalar(stmt) is not None
+
+    async def refund(self, window_start_ms: int) -> None:
+        """Release a slot (never below zero)."""
+        async with self._sessions.begin() as session:
+            await session.execute(
+                update(AlertHourBudgetRow)
+                .where(
+                    AlertHourBudgetRow.window_start == ms_to_datetime(window_start_ms),
+                    AlertHourBudgetRow.sent > 0,
+                )
+                .values(sent=AlertHourBudgetRow.sent - 1)
+            )
+
+    async def record_suppressed(self, window_start_ms: int) -> SuppressedSummary:
+        """Count one suppression and read the window's total and summary message id."""
+        insert = pg_insert(AlertHourBudgetRow).values(
+            window_start=ms_to_datetime(window_start_ms), suppressed=1
+        )
+        stmt = insert.on_conflict_do_update(
+            index_elements=[AlertHourBudgetRow.window_start],
+            set_={"suppressed": AlertHourBudgetRow.suppressed + 1},
+        ).returning(AlertHourBudgetRow.suppressed, AlertHourBudgetRow.summary_message_id)
+        async with self._sessions.begin() as session:
+            row = (await session.execute(stmt)).one()
+        return SuppressedSummary(suppressed=row.suppressed, message_id=row.summary_message_id)
+
+    async def set_summary_message(self, window_start_ms: int, message_id: str) -> None:
+        """Remember the summary message of the window."""
+        async with self._sessions.begin() as session:
+            await session.execute(
+                update(AlertHourBudgetRow)
+                .where(AlertHourBudgetRow.window_start == ms_to_datetime(window_start_ms))
+                .values(summary_message_id=message_id)
+            )
+
+
 class ExchangeHealthRepository(_Repository, IExchangeHealthRepository):
     """Stores exchange call outcomes."""
 
@@ -669,9 +756,25 @@ class RetentionRepository(_Repository, IRetentionRepository):
         snapshots_before: datetime,
         evaluations_before: datetime,
         episodes_before: datetime,
+        alerts_sending_before: datetime | None = None,
     ) -> dict[str, int]:
         """Delete rows past their retention window (see the interface for what is kept)."""
         async with self._sessions.begin() as session:
+            reaped = (
+                await session.execute(
+                    update(AlertLogRow)
+                    .where(
+                        AlertLogRow.status == AlertDeliveryStatus.SENDING.value,
+                        AlertLogRow.updated_at < alerts_sending_before,
+                    )
+                    .values(status=AlertDeliveryStatus.FAILED.value, error=STALE_SENDING_ERROR)
+                )
+                if alerts_sending_before is not None
+                else None
+            )
+            budgets = await session.execute(
+                delete(AlertHourBudgetRow).where(AlertHourBudgetRow.window_start < episodes_before)
+            )
             metadata_stats = await session.execute(
                 delete(ExchangeMetadataStatsRow).where(
                     ExchangeMetadataStatsRow.captured_at < snapshots_before
@@ -705,6 +808,8 @@ class RetentionRepository(_Repository, IRetentionRepository):
             "exchange_metadata_stats": _rowcount(metadata_stats),
             "opportunity_episodes": _rowcount(episodes),
             "route_quarantine": _rowcount(quarantines),
+            "alert_hour_budget": _rowcount(budgets),
+            "alert_log_stale_sending": _rowcount(reaped) if reaped is not None else 0,
         }
 
 
@@ -716,6 +821,7 @@ def _rowcount(result: Any) -> int:
 
 __all__ = [
     "AlertLogRepository",
+    "AlertMessageRepository",
     "EvaluationRepository",
     "ExchangeHealthRepository",
     "MarketRepository",

@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from decimal import Decimal as D
+from typing import Any
 
 from nexus.domain.episodes import OpportunityEpisode
 from nexus.domain.errors import ExchangeError
@@ -22,7 +23,9 @@ from nexus.interfaces.market_data import BaseExchangeAdapter
 from nexus.interfaces.notifications import DeliveryReceipt, INotifier, OutgoingMessage
 from nexus.interfaces.repositories import (
     AlertDeliveryStatus,
+    EpisodeMessage,
     IAlertLogRepository,
+    IAlertMessageRepository,
     IEpisodeRepository,
     IEvaluationRepository,
     IExchangeHealthRepository,
@@ -30,6 +33,7 @@ from nexus.interfaces.repositories import (
     IQuarantineRepository,
     IRetentionRepository,
     ISnapshotRepository,
+    SuppressedSummary,
 )
 
 
@@ -143,6 +147,7 @@ class MemoryRepos(
     health: list[tuple[str, str, bool]] = field(default_factory=list)
     alerts: dict[int, tuple[AlertDeliveryStatus, str | None]] = field(default_factory=dict)
     purged: list[tuple[datetime, datetime, datetime]] = field(default_factory=list)
+    reaped_before: list[datetime | None] = field(default_factory=list)
     evaluation_episodes: dict[int, int | None] = field(default_factory=dict)
 
     async def upsert_markets(self, markets: Sequence[MarketInfo]) -> int:
@@ -193,8 +198,10 @@ class MemoryRepos(
         snapshots_before: datetime,
         evaluations_before: datetime,
         episodes_before: datetime,
+        alerts_sending_before: datetime | None = None,
     ) -> dict[str, int]:
         self.purged.append((snapshots_before, evaluations_before, episodes_before))
+        self.reaped_before.append(alerts_sending_before)
         return {"spread_snapshots": 0}
 
 
@@ -322,3 +329,39 @@ class MemoryQuarantine(IQuarantineStore, IQuarantineRepository):
 
     async def record_lift(self, route_key: str, at_ms: int) -> None:
         self.lifted.append((route_key, at_ms))
+
+
+class MemoryAlertMessages(IAlertMessageRepository):
+    """In-memory episode messages and hourly budget."""
+
+    def __init__(self) -> None:
+        self.episodes: dict[int, EpisodeMessage] = {}
+        self.sent: dict[int, int] = {}
+        self.suppressed: dict[int, int] = {}
+        self.summaries: dict[int, str] = {}
+
+    async def get_episode_message(self, episode_id: int) -> EpisodeMessage | None:
+        return self.episodes.get(episode_id)
+
+    async def save_episode_message(
+        self, episode_id: int, *, message_id: str, evaluation_id: int, context: dict[str, Any]
+    ) -> None:
+        self.episodes[episode_id] = EpisodeMessage(episode_id, message_id, evaluation_id, context)
+
+    async def try_consume(self, window_start_ms: int, limit: int) -> bool:
+        if self.sent.get(window_start_ms, 0) >= limit:
+            return False
+        self.sent[window_start_ms] = self.sent.get(window_start_ms, 0) + 1
+        return True
+
+    async def refund(self, window_start_ms: int) -> None:
+        self.sent[window_start_ms] = max(0, self.sent.get(window_start_ms, 0) - 1)
+
+    async def record_suppressed(self, window_start_ms: int) -> SuppressedSummary:
+        self.suppressed[window_start_ms] = self.suppressed.get(window_start_ms, 0) + 1
+        return SuppressedSummary(
+            self.suppressed[window_start_ms], self.summaries.get(window_start_ms)
+        )
+
+    async def set_summary_message(self, window_start_ms: int, message_id: str) -> None:
+        self.summaries[window_start_ms] = message_id

@@ -2,30 +2,36 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from typing import Any
 
 import structlog
 
 from nexus.domain.clock import Clock
+from nexus.domain.errors import MessageGoneError, NotificationError
 from nexus.domain.events import (
     AlertContext,
+    AlertLifetime,
     EpisodeClosed,
     ExchangeRecovered,
     WatchdogAlert,
     WatchdogRecovered,
     event_from_payload,
 )
-from nexus.interfaces.notifications import INotifier, OutgoingMessage
+from nexus.interfaces.notifications import DeliveryReceipt, INotifier, OutgoingMessage
 from nexus.interfaces.repositories import (
     AlertDeliveryStatus,
     IAlertLogRepository,
+    IAlertMessageRepository,
     IEvaluationRepository,
 )
 from nexus.notifications.formatting import OpportunityFormatter, SystemEventFormatter
 
 log = structlog.get_logger(__name__)
 CHANNEL = "telegram"
+HOUR_MS = 3_600_000
 
 
 class AlertOutcome(StrEnum):
@@ -36,10 +42,16 @@ class AlertOutcome(StrEnum):
     MISSING = "missing"
     NOT_ALERTABLE = "not_alertable"
     EXPIRED = "expired"
+    SUPPRESSED = "suppressed"
 
 
 class AlertService:
-    """Loads an evaluation, renders it and delivers it exactly once (best effort)."""
+    """Loads an evaluation, renders it and delivers it exactly once (best effort).
+
+    With a ``messages`` repository an episode is ONE Telegram message: NEW sends it, UPDATE edits
+    it (a lost message is re-sent once), the episode-closed event edits it to CLOSED, and NEW
+    messages over ``max_per_hour`` collapse into one "N more suppressed" summary.
+    """
 
     def __init__(
         self,
@@ -52,6 +64,8 @@ class AlertService:
         event_max_age_s: int = 300,
         opportunity_formatter: OpportunityFormatter | None = None,
         event_formatter: SystemEventFormatter | None = None,
+        messages: IAlertMessageRepository | None = None,
+        max_per_hour: int = 30,
     ) -> None:
         self._evaluations = evaluations
         self._alert_log = alert_log
@@ -61,6 +75,8 @@ class AlertService:
         self._event_max_age_ms = event_max_age_s * 1000
         self._opportunity = opportunity_formatter or OpportunityFormatter()
         self._events = event_formatter or SystemEventFormatter()
+        self._messages = messages
+        self._max_per_hour = max_per_hour
 
     async def send_opportunity(
         self, evaluation_id: int, context: AlertContext | None = None
@@ -82,23 +98,124 @@ class AlertService:
         if not await self._alert_log.claim(evaluation_id, channel=CHANNEL):
             log.info("alert_duplicate", evaluation_id=evaluation_id)
             return AlertOutcome.DUPLICATE
+        context = context or AlertContext()
         text = self._opportunity.render(evaluation, context)
         try:
-            receipt = await self._notifier.send(OutgoingMessage(text=text))
+            receipt = await self._deliver(text, context)
         except Exception as exc:
             # Release the claim so a Celery retry may try again (still bounded by max age).
             await self._alert_log.record(
                 evaluation_id, channel=CHANNEL, status=AlertDeliveryStatus.FAILED, error=str(exc)
             )
             raise
+        if receipt is None:
+            await self._alert_log.record(
+                evaluation_id, channel=CHANNEL, status=AlertDeliveryStatus.SUPPRESSED
+            )
+            log.warning("alert_suppressed", evaluation_id=evaluation_id, route=evaluation.route_key)
+            return AlertOutcome.SUPPRESSED
         await self._alert_log.record(
             evaluation_id,
             channel=CHANNEL,
             status=AlertDeliveryStatus.SENT,
             message_id=receipt.message_id,
         )
+        await self._remember(evaluation_id, context, receipt)
         log.info("alert_sent", evaluation_id=evaluation_id, route=evaluation.route_key)
         return AlertOutcome.SENT
+
+    async def _deliver(self, text: str, context: AlertContext) -> DeliveryReceipt | None:
+        """Edit the episode's message for an UPDATE, else send a new one; ``None`` = suppressed."""
+        if self._messages is not None and context.episode_id is not None and context.realert:
+            existing = await self._messages.get_episode_message(context.episode_id)
+            if existing is not None:
+                try:
+                    return await self._notifier.edit(existing.message_id, OutgoingMessage(text))
+                except MessageGoneError as exc:
+                    # Deleted or too old to edit: send once more and store the new id.
+                    log.warning("alert_message_gone", episode_id=context.episode_id, error=str(exc))
+        return await self._send_new(text)
+
+    async def _send_new(self, text: str, *, silent: bool = False) -> DeliveryReceipt | None:
+        """Send under the hourly budget (``None`` = over the cap, folded into the summary)."""
+        if self._messages is None:
+            return await self._notifier.send(OutgoingMessage(text=text, silent=silent))
+        window = self._window_start_ms()
+        if not await self._messages.try_consume(window, self._max_per_hour):
+            await self._summarize_suppressed(window)
+            return None
+        try:
+            return await self._notifier.send(OutgoingMessage(text=text, silent=silent))
+        except BaseException:
+            await self._messages.refund(window)
+            raise
+
+    def _window_start_ms(self) -> int:
+        now = self._clock.now_ms()
+        return now - now % HOUR_MS
+
+    async def _summarize_suppressed(self, window_ms: int) -> None:
+        """One 'N more suppressed' message per hour, edited as the count grows."""
+        if self._messages is None:  # pragma: no cover - only called with a repository
+            return
+        summary = await self._messages.record_suppressed(window_ms)
+        message = OutgoingMessage(
+            text=self._opportunity.render_suppressed(summary.suppressed, self._max_per_hour),
+            silent=True,
+        )
+        try:
+            if summary.message_id is not None:
+                try:
+                    await self._notifier.edit(summary.message_id, message)
+                except MessageGoneError:
+                    pass
+                else:
+                    return
+            receipt = await self._notifier.send(message)
+            await self._messages.set_summary_message(window_ms, receipt.message_id)
+        except NotificationError as exc:  # the summary is a hint: never fail the alert task for it
+            log.warning("suppressed_summary_failed", error=str(exc))
+
+    async def _remember(
+        self, evaluation_id: int, context: AlertContext, receipt: DeliveryReceipt
+    ) -> None:
+        """Store the message with what it was rendered from (CLOSED and restarts reuse it)."""
+        if self._messages is None or context.episode_id is None:
+            return
+        await self._messages.save_episode_message(
+            context.episode_id,
+            message_id=receipt.message_id,
+            evaluation_id=evaluation_id,
+            context=context.to_payload(),
+        )
+
+    async def _close_message(self, event: EpisodeClosed) -> bool:
+        """Edit the episode's message to CLOSED; ``False`` if there is nothing to edit."""
+        if self._messages is None or event.episode_id is None:
+            return False
+        stored = await self._messages.get_episode_message(event.episode_id)
+        if stored is None:
+            return False
+        evaluation = await self._evaluations.get(stored.evaluation_id)
+        if evaluation is None or evaluation.breakdown is None:
+            return False
+        context = AlertContext.from_payload(stored.context)
+        if event.opened_at_ms is not None:
+            # The spread lived until its last qualifying evaluation (the gap is not lifetime).
+            end = event.last_seen_at_ms or event.closed_at_ms or event.opened_at_ms
+            context = replace(
+                context, lifetime=AlertLifetime(event.opened_at_ms, end, closed_at_ms=end)
+            )
+        text = self._opportunity.render_closed(
+            evaluation, context, peak_net_pct=_decimal(event.peak_net_pct)
+        )
+        try:
+            await self._notifier.edit(stored.message_id, OutgoingMessage(text=text, silent=True))
+        except MessageGoneError as exc:
+            log.warning("alert_message_gone", episode_id=event.episode_id, error=str(exc))
+            return False
+        log.info("alert_closed_edited", episode_id=event.episode_id)
+        return True
 
     async def send_event(self, payload: dict[str, Any]) -> AlertOutcome:
         """Render and deliver a system event payload unless it is older than the event max age.
@@ -107,6 +224,8 @@ class AlertService:
         already recovered) would be misleading, so they are dropped. Watchdog events never expire.
         """
         event = event_from_payload(payload)
+        if isinstance(event, EpisodeClosed) and await self._close_message(event):
+            return AlertOutcome.SENT  # an edit is harmless when late, so no expiry check
         emitted_at_ms = payload.get("emitted_at_ms")
         # Watchdog events are state-gated (one per incident, never misleading when late) and the
         # incident is already marked as announced, so they must survive an alerts-worker outage.
@@ -121,3 +240,10 @@ class AlertService:
         await self._notifier.send(OutgoingMessage(text=self._events.render(event), silent=silent))
         log.info("event_sent", kind=event.kind)
         return AlertOutcome.SENT
+
+
+def _decimal(value: str) -> Decimal | None:
+    try:
+        return Decimal(value)
+    except InvalidOperation:
+        return None

@@ -14,7 +14,7 @@ Authority: ADR 0010 (`docs/decisions/0010-self-hosted-alert-tool.md`). Cards in 
 - [x] T2 migrations: squash (recommended) or drop-migration (backend-lead; M; U4 confirm) — `docs/tasks/tool/T2-migrations-reset.md`
 - [x] T3 alert data model: volume, transfer net/fee/time, withdraw/deposit flags, lifetime (backend-lead; L) — `docs/tasks/tool/T3-alert-data-model.md`
 - [x] T4 alert templates NEW/UPDATE/CLOSED, ru/en (backend-lead; M) — `docs/tasks/tool/T4-alert-templates.md`
-- [ ] T5 anti-spam: dedupe, cooldown, caps, edit-in-place, close (backend-lead; L) — `docs/tasks/tool/T5-alert-antispam-edit-in-place.md`
+- [x] T5 anti-spam: dedupe, cooldown, caps, edit-in-place, close (backend-lead; L) — `docs/tasks/tool/T5-alert-antispam-edit-in-place.md`
 - [x] T6 commented `.env.example` + consistency check (devops; M) — `docs/tasks/tool/T6-env-example-config.md`
 - [ ] T7 startup validation, bilingual errors, public-mode fallback (backend-lead; L) — `docs/tasks/tool/T7-startup-validation.md`
 - [ ] T8 one-command start `make up`, auto migrations (devops; M) — `docs/tasks/tool/T8-one-command-start.md`
