@@ -227,3 +227,22 @@ def test_watchdog_alert_texts_are_russian_and_escaped(reason: str) -> None:
     assert "&lt;b&gt;backup" in text
     assert "<b>backup</b>" not in text
     assert "{minutes}" not in text
+
+
+def test_truncate_keeps_short_text_and_closes_open_tags() -> None:
+    from nexus.notifications.formatting import TELEGRAM_MAX_LENGTH, truncate
+
+    assert truncate("short <b>x</b>") == "short <b>x</b>"
+    text = "<blockquote><b>" + "a" * 5000 + "</b></blockquote>"
+    cut = truncate(text)
+    assert len(cut) <= TELEGRAM_MAX_LENGTH
+    assert cut.endswith("…</b></blockquote>")
+
+
+@pytest.mark.parametrize("tail", ["<b", "<code class=", "&am", "&#12"])
+def test_truncate_never_cuts_inside_a_tag_or_entity(tail: str) -> None:
+    from nexus.notifications.formatting import TELEGRAM_MAX_LENGTH, truncate
+
+    head = "x" * (TELEGRAM_MAX_LENGTH - 64 - len(tail))
+    cut = truncate(head + tail + "y" * 400)
+    assert cut == head + "…"

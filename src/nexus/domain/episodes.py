@@ -57,10 +57,10 @@ class OpportunityEpisode:
     """Net USD of the last alert (first alert or re-alert) - the re-alert growth baseline."""
     realerts: int = 0
     survived_latency: bool | None = None
-    unverified_since_ms: int | None = None
-    """Start of the current run of non-``VERIFIED`` transfer statuses (``None`` = verified)."""
     """Still meeting the thresholds on a REST re-check after the latency check delay (``None`` =
     not checked yet / books unavailable)."""
+    unverified_since_ms: int | None = None
+    """Start of the current run of non-``VERIFIED`` transfer statuses (``None`` = verified)."""
 
     @classmethod
     def open(cls, evaluation: SpreadEvaluation) -> OpportunityEpisode:

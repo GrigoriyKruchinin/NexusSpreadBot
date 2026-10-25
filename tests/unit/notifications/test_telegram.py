@@ -53,6 +53,11 @@ async def test_send_success_payload() -> None:
     await notifier.close()
 
 
+async def test_missing_message_id_is_none_not_the_string_none() -> None:
+    notifier, _ = _notifier(lambda _: httpx.Response(200, json={"ok": True, "result": {}}))
+    assert (await notifier.send(OutgoingMessage(text="x"))).message_id is None
+
+
 async def test_rate_limit_carries_retry_after() -> None:
     notifier, _ = _notifier(
         lambda _: httpx.Response(

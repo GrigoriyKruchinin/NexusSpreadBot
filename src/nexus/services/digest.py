@@ -29,8 +29,8 @@ class DigestService:
         self._clock = clock
         self._formatter = formatter or DigestFormatter()
 
-    async def send(self, tz: str) -> str:
-        """Build and deliver the digest; returns the Telegram message id."""
+    async def send(self, tz: str) -> str | None:
+        """Build and deliver the digest; returns the message id (``None`` if unreported)."""
         until = self._clock.now_ms()
         data = await self._repository.collect(until - WINDOW_MS, until)
         receipt = await self._notifier.send(OutgoingMessage(text=self._formatter.render(data, tz)))

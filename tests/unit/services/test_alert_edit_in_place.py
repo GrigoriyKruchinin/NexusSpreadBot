@@ -114,11 +114,33 @@ async def test_edit_of_a_lost_message_resends_once_and_stores_the_new_id() -> No
     assert [message_id for message_id, _ in rig.notifier.edits] == ["2"]  # edits the new one
 
 
-async def test_update_without_a_stored_message_is_sent_as_new() -> None:
+async def test_update_without_a_stored_message_is_dropped() -> None:
     rig = Rig()
-    await rig.service.send_opportunity(await rig.evaluation("12"), _context(1))
-    assert len(rig.notifier.sent) == 1
+    outcome = await rig.service.send_opportunity(await rig.evaluation("12"), _context(1))
+    assert outcome is AlertOutcome.SUPPRESSED
+    assert rig.notifier.sent == []
     assert rig.notifier.edits == []
+    assert 7 not in rig.messages.episodes
+
+
+async def test_update_after_a_suppressed_new_sends_nothing() -> None:
+    rig = Rig(max_per_hour=1)
+    await rig.service.send_opportunity(await rig.evaluation(symbol="AAA/USDT"), _context(0, 1))
+    blocked = await rig.evaluation(symbol="BBB/USDT")
+    assert await rig.service.send_opportunity(blocked, _context(0, 2)) is AlertOutcome.SUPPRESSED
+    sent_before = len(rig.notifier.sent)
+    update = await rig.evaluation("12", symbol="BBB/USDT")
+    assert await rig.service.send_opportunity(update, _context(1, 2)) is AlertOutcome.SUPPRESSED
+    assert len(rig.notifier.sent) == sent_before  # neither a new message nor another summary
+
+
+async def test_late_new_retry_edits_the_stored_message_instead_of_duplicating() -> None:
+    rig = Rig()
+    await rig.service.send_opportunity(await rig.evaluation("8"), _context())
+    late_new = await rig.evaluation("9")  # a second NEW (realert == 0) of the same episode
+    assert await rig.service.send_opportunity(late_new, _context()) is AlertOutcome.SENT
+    assert len(rig.notifier.sent) == 1
+    assert [message_id for message_id, _ in rig.notifier.edits] == ["1"]
     assert rig.messages.episodes[7].message_id == "1"
 
 
@@ -136,24 +158,36 @@ async def test_edit_failure_429_is_recorded_and_retryable() -> None:
     assert len(rig.notifier.edits) == 1
 
 
-async def test_close_without_a_message_falls_back_to_the_event_message() -> None:
+async def test_close_without_a_message_is_silent() -> None:
     rig = Rig()
     closed = EpisodeClosed("ABC/USDT", "a", "b", "gap", 90, "7", "0.7", 5, 0, None, episode_id=99)
     payload = event_to_payload(closed, emitted_at_ms=NOW)
-    assert await rig.service.send_event(payload) is AlertOutcome.SENT
+    assert await rig.service.send_event(payload) is AlertOutcome.SUPPRESSED
     assert rig.notifier.edits == []
-    assert rig.notifier.sent[0].silent
+    assert rig.notifier.sent == []
 
 
-async def test_close_of_a_deleted_message_falls_back_to_the_event_message() -> None:
+async def test_suppressed_new_then_close_adds_no_extra_send() -> None:
+    rig = Rig(max_per_hour=1)
+    await rig.service.send_opportunity(await rig.evaluation(symbol="AAA/USDT"), _context(0, 1))
+    blocked = await rig.evaluation(symbol="BBB/USDT")
+    assert await rig.service.send_opportunity(blocked, _context(0, 2)) is AlertOutcome.SUPPRESSED
+    sent_before = len(rig.notifier.sent)  # alert + summary
+    closed = EpisodeClosed("BBB/USDT", "a", "b", "gap", 90, "7", "0.7", 5, 0, None, episode_id=2)
+    outcome = await rig.service.send_event(event_to_payload(closed, emitted_at_ms=NOW))
+    assert outcome is AlertOutcome.SUPPRESSED
+    assert len(rig.notifier.sent) == sent_before
+
+
+async def test_close_of_a_deleted_message_sends_no_standalone_message() -> None:
     rig = Rig()
     await rig.service.send_opportunity(await rig.evaluation("8"), _context())
     rig.notifier.edit_error = MessageGoneError("message can't be edited")
     closed = EpisodeClosed("ABC/USDT", "a", "b", "gap", 90, "7", "0.7", 5, 0, None, episode_id=7)
     assert await rig.service.send_event(event_to_payload(closed, emitted_at_ms=NOW)) is (
-        AlertOutcome.SENT
+        AlertOutcome.MISSING
     )
-    assert len(rig.notifier.sent) == 2  # the NEW message and the fallback
+    assert len(rig.notifier.sent) == 1  # only the NEW message
 
 
 async def test_late_close_still_edits() -> None:
@@ -221,7 +255,7 @@ async def test_failed_send_refunds_the_budget_slot() -> None:
 
 async def test_summary_failure_does_not_fail_the_alert() -> None:
     rig = Rig(max_per_hour=1)
-    await rig.service.send_opportunity(await rig.evaluation(symbol="AAA/USDT"), _context(1))
+    await rig.service.send_opportunity(await rig.evaluation(symbol="AAA/USDT"), _context())
     rig.notifier.error = NotificationError("telegram down")
     blocked = await rig.evaluation(symbol="BBB/USDT")
     assert await rig.service.send_opportunity(blocked, _context(episode_id=2)) is (

@@ -125,15 +125,26 @@ class AlertService:
         return AlertOutcome.SENT
 
     async def _deliver(self, text: str, context: AlertContext) -> DeliveryReceipt | None:
-        """Edit the episode's message for an UPDATE, else send a new one; ``None`` = suppressed."""
-        if self._messages is not None and context.episode_id is not None and context.realert:
-            existing = await self._messages.get_episode_message(context.episode_id)
-            if existing is not None:
-                try:
-                    return await self._notifier.edit(existing.message_id, OutgoingMessage(text))
-                except MessageGoneError as exc:
-                    # Deleted or too old to edit: send once more and store the new id.
-                    log.warning("alert_message_gone", episode_id=context.episode_id, error=str(exc))
+        """Send or edit the episode's message; ``None`` = suppressed (nothing was sent).
+
+        Per episode the order is NEW -> UPDATE* -> CLOSED over ONE message:
+        a NEW that finds a stored message (late retry) edits it instead of sending a duplicate;
+        an UPDATE without a stored message (its NEW was suppressed by the cap or is still being
+        retried) is dropped, because sending it would orphan the message the NEW will create.
+        """
+        if self._messages is None or context.episode_id is None:
+            return await self._send_new(text)
+        existing = await self._messages.get_episode_message(context.episode_id)
+        if existing is None:
+            if context.realert:
+                log.info("alert_update_no_message", episode_id=context.episode_id)
+                return None
+            return await self._send_new(text)
+        try:
+            return await self._notifier.edit(existing.message_id, OutgoingMessage(text))
+        except MessageGoneError as exc:
+            # Deleted or too old to edit: send once more and store the new id.
+            log.warning("alert_message_gone", episode_id=context.episode_id, error=str(exc))
         return await self._send_new(text)
 
     async def _send_new(self, text: str, *, silent: bool = False) -> DeliveryReceipt | None:
@@ -172,7 +183,8 @@ class AlertService:
                 else:
                     return
             receipt = await self._notifier.send(message)
-            await self._messages.set_summary_message(window_ms, receipt.message_id)
+            if receipt.message_id is not None:
+                await self._messages.set_summary_message(window_ms, receipt.message_id)
         except NotificationError as exc:  # the summary is a hint: never fail the alert task for it
             log.warning("suppressed_summary_failed", error=str(exc))
 
@@ -182,6 +194,9 @@ class AlertService:
         """Store the message with what it was rendered from (CLOSED and restarts reuse it)."""
         if self._messages is None or context.episode_id is None:
             return
+        if receipt.message_id is None:
+            log.warning("alert_no_message_id", episode_id=context.episode_id)
+            return
         await self._messages.save_episode_message(
             context.episode_id,
             message_id=receipt.message_id,
@@ -189,16 +204,22 @@ class AlertService:
             context=context.to_payload(),
         )
 
-    async def _close_message(self, event: EpisodeClosed) -> bool:
-        """Edit the episode's message to CLOSED; ``False`` if there is nothing to edit."""
-        if self._messages is None or event.episode_id is None:
-            return False
+    async def _close_message(self, event: EpisodeClosed) -> AlertOutcome:
+        """Edit the episode's message to CLOSED, or drop the close (never a standalone message).
+
+        A standalone "closed" message would bypass the hourly cap and announce an alert the user
+        never saw (its NEW was suppressed), so without an editable message the close is silent.
+        """
+        if self._messages is None or event.episode_id is None:  # pragma: no cover - guarded
+            return AlertOutcome.MISSING
         stored = await self._messages.get_episode_message(event.episode_id)
         if stored is None:
-            return False
+            log.info("alert_close_no_message", episode_id=event.episode_id)
+            return AlertOutcome.SUPPRESSED
         evaluation = await self._evaluations.get(stored.evaluation_id)
         if evaluation is None or evaluation.breakdown is None:
-            return False
+            log.warning("alert_close_no_evaluation", episode_id=event.episode_id)
+            return AlertOutcome.MISSING
         context = AlertContext.from_payload(stored.context)
         if event.opened_at_ms is not None:
             # The spread lived until its last qualifying evaluation (the gap is not lifetime).
@@ -213,9 +234,9 @@ class AlertService:
             await self._notifier.edit(stored.message_id, OutgoingMessage(text=text, silent=True))
         except MessageGoneError as exc:
             log.warning("alert_message_gone", episode_id=event.episode_id, error=str(exc))
-            return False
+            return AlertOutcome.MISSING
         log.info("alert_closed_edited", episode_id=event.episode_id)
-        return True
+        return AlertOutcome.SENT
 
     async def send_event(self, payload: dict[str, Any]) -> AlertOutcome:
         """Render and deliver a system event payload unless it is older than the event max age.
@@ -224,8 +245,12 @@ class AlertService:
         already recovered) would be misleading, so they are dropped. Watchdog events never expire.
         """
         event = event_from_payload(payload)
-        if isinstance(event, EpisodeClosed) and await self._close_message(event):
-            return AlertOutcome.SENT  # an edit is harmless when late, so no expiry check
+        if (
+            isinstance(event, EpisodeClosed)
+            and self._messages is not None
+            and event.episode_id is not None
+        ):
+            return await self._close_message(event)  # an edit is harmless late: no expiry check
         emitted_at_ms = payload.get("emitted_at_ms")
         # Watchdog events are state-gated (one per incident, never misleading when late) and the
         # incident is already marked as announced, so they must survive an alerts-worker outage.

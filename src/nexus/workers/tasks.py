@@ -132,7 +132,7 @@ def send_digest(self: Task[Any, Any], tz: str) -> str:
     """Deliver the daily digest (``tz``: display time zone from ``DIGEST_TZ``)."""
     from nexus.container import digest_scope
 
-    async def run() -> str:
+    async def run() -> str | None:
         async with digest_scope(_alerts_settings()) as service:
             return await service.send(tz)
 

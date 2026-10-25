@@ -7,6 +7,7 @@ Every dynamic value passes through :func:`esc` (``html.escape``): exchange-provi
 from __future__ import annotations
 
 import html
+import re
 from collections.abc import Collection
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
@@ -144,11 +145,27 @@ def fmt_duration(seconds: int) -> str:
     return f"{hours} ч {minutes:02d} мин"
 
 
+_TAG_RE: Final = re.compile(r"<(/?)([a-z][a-z0-9-]*)[^<>]*>")
+_PARTIAL_TAIL_RE: Final = re.compile(r"(<[^<>]*|&[#a-zA-Z0-9]{0,10})$")
+
+
 def truncate(text: str) -> str:
-    """Cut a message to Telegram's length limit."""
+    """Cut a message to Telegram's length limit without breaking its HTML.
+
+    A cut tag or entity is dropped and the tags still open are closed again, otherwise Telegram
+    answers 400 (permanent rejection) for the whole message.
+    """
     if len(text) <= TELEGRAM_MAX_LENGTH:
         return text
-    return text[: TELEGRAM_MAX_LENGTH - 1] + "…"
+    reserve = 64  # room for the ellipsis and the closing tags
+    cut = _PARTIAL_TAIL_RE.sub("", text[: TELEGRAM_MAX_LENGTH - reserve])
+    open_tags: list[str] = []
+    for closing, name in _TAG_RE.findall(cut):
+        if not closing:
+            open_tags.append(name)
+        elif name in open_tags:
+            del open_tags[open_tags.index(name) :]
+    return cut + "…" + "".join(f"</{name}>" for name in reversed(open_tags))
 
 
 class OpportunityFormatter:

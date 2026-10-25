@@ -19,7 +19,8 @@ class DeliveryReceipt:
     """Result of a successful delivery."""
 
     channel: str
-    message_id: str
+    message_id: str | None
+    """``None`` when the channel did not report an id (nothing can be edited later)."""
 
 
 class INotifier(ABC):

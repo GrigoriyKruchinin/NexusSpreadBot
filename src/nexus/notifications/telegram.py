@@ -80,7 +80,7 @@ class TelegramNotifier(INotifier):
         message_id = result.get("message_id") if isinstance(result, dict) else None
         return DeliveryReceipt(
             channel=_CHANNEL,
-            message_id=str(message_id if message_id is not None else fallback_id),
+            message_id=str(message_id) if message_id is not None else fallback_id,
         )
 
     async def _call(self, method: str, payload: dict[str, Any]) -> dict[str, Any]:
