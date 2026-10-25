@@ -1,6 +1,11 @@
 # STATE (updated 2026-10-24)
 
 ## Where we are
+- **User decision 2026-10-25: NEW STRATEGY "hedged transfer"** (no coin inventory, no directional exposure): buy spot on A +
+  short perp, transfer A->B, sell on B + close short. Entry only after pre-checks: perp exists and can be opened (depth,
+  funding), withdraw A / deposit B open on a common network, spot depth on B, net profit > threshold. Running:
+  quant-analyst spec (`docs/quant/hedged-transfer-spec.md`, card HT1) and lawyer (`docs/legal/futures-access.md`).
+  Then backend-lead implements as paper only (ADR 0001). Existing soak keeps running.
 - **2026-10-25 12:50Z preview (go_report, read-only):** soak gap from a full disk (user fixed; 894G free); 13 of 33 h
   without a sweep; stack up again ~12:40Z. All 4 sets: hedged P&L (realized - rebalance) +58..+72 USD in 1.4 d, but MTM on
   coin inventory -471..-669 USD -> total -405..-597 USD. Loss = price drop of held small-cap inventory (T, ORDER, ANIME), not
