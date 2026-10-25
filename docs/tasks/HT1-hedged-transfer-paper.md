@@ -7,7 +7,7 @@
   perp adapter interface), security (new public clients have no credentials; no order/transfer surface)
 - complexity: high (new perp market-data adapters, position state machine, persistence, report section)
 - depends_on: none blocking; deploy needs user OK (U4: image rebuild, migrator, scanner recreate)
-- status: todo (spec ready 2026-10-25)
+- status: todo (spec ready 2026-10-25; architect review ACCEPT with changes 2026-10-25, steps S0-S15 below)
 - spec: `docs/quant/hedged-transfer-spec.md` (normative; section numbers below refer to it)
 
 ## Goal
@@ -80,9 +80,87 @@ Report it in the GO report with MTM ~0 by construction and residual basis shown 
 9. `make check` green; unit tests >= current count + new; branch coverage >= 89 % floor (not below 91.5 %
    baseline trend); ruff 0; mypy --strict 0.
 
+## Architect review 2026-10-25: ACCEPT with changes
+Review: `docs/architecture/HT1-design-review.md`. ADR draft: `docs/decisions/0009-perp-market-data-and-hedged-paper-strategy.md`.
+Where these amendments conflict with Scope above, they override it:
+- **Scope 7 is replaced:** HT has its own `paper_hedged_*` tables (runs, positions, events, rebalances,
+  snapshots, snapshot_pools). Do **not** reuse `paper_portfolios` / `paper_rebalances`. Reason: the digest
+  and the GO report list every `paper_portfolios` row as a spot set (review F1).
+- **Scope 5 is changed:** `HedgedBook` is a sibling of `PaperBook`, not a trader inside it, and never in
+  `PaperBook.sets` / `[paper] venue_sets`. The sweep calls only a sync `observe_spot(tickers)`. Alert
+  handling is a spawned task. Perp polling runs in its own `PerpFeed` loop.
+- **Scope 1 is changed:** adapters for okx, kucoin and binance only. No bybit/gateio perp clients in HT1.
+- **Hedge venues (legal, 2026-10-25):** set `ht_excl_conditional` hedges on okx + kucoin (GO hypothesis).
+  Set `ht_excl_conditional_bn` hedges on binance + okx + kucoin (context only; GO-eligible only after
+  G1.1a + G5.3). Both run from day 1.
+- **Spec amendment needed from quant before S11:** C1 (sections 2/12/13/14 and the Bonferroni note), C5
+  (skip code `PERP_HISTORY_MISSING`), C6 (relative-basis estimator), C8 (final booking of an unpriceable
+  hedge).
+
+## Implementation steps (one commit each; `make check` green; HT stays disabled in the TOML until S13)
+- [ ] **S0 Golden pins + safety rules.** Test pins the literal definition hashes of `all`,
+  `excl_conditional`, `excl_bybit`, `excl_gateio` from the committed `config/nexus.toml`. `test_safety`:
+  forbid `set_?leverage`, `set_?margin\w*`, `set_?position_?mode`, `(add|reduce)_?margin`. AC: tests pass
+  at HEAD with no production code change; the orchestrator records the pinned hashes and cross-checks them
+  with `make go-report` (read-only).
+- [ ] **S1 Domain types + port.** `domain/perp.py` (PerpMarket, PerpTicker, FundingInfo, MarkKline,
+  FundingPayment, LeverageTier; Decimal, validation), `interfaces/perp.py` `IPerpMarketData`,
+  `adapters/perp/registry.py`. AC: validation unit tests (contract size > 0, sane fees/MMR, funding sign
+  kept); mypy strict.
+- [ ] **S2 ccxt perp base + OKX swap adapter.** No credentials, `install_read_only_guard`,
+  `fetchCurrencies: False`, `fetchMarkets` swap only; contracts -> base units; kline paging (100 rows);
+  per-instrument funding. AC: recorded public fixtures (markets, tickers, funding, book, klines, tiers);
+  falsy `apiKey`; POST/DELETE via `request()` and an implicit method raise `ReadOnlyViolationError`; 429
+  -> `ExchangeRateLimitError`; limits written in the docstring.
+- [ ] **S3 KuCoin futures adapter.** Same AC as S2 (contracts/active as the funding source, multiplier,
+  depth20/100).
+- [ ] **S4 Binance USDⓈ-M adapter.** Same AC as S2. A test asserts that `leverageBracket` (signed) is
+  never called.
+- [ ] **S5 Transfer metadata extension.** `NetworkInfo` gets `withdraw_min`, `deposit_min`,
+  `deposit_confirmations`, `est_arrival_min`, `busy` (optional, default None); parsers (ccxt, binance
+  public, kucoin, okx); per-venue `transfers_loaded_at_ms` on `MarketUniverse`; pure
+  `list_transfer_routes()` (added to the safety allowlist, security sign-off). AC: regression test that
+  all pre-existing `NetworkInfo` fields are identical on every existing fixture; `select_transfer_route`
+  tests unchanged; S0 pins still pass.
+- [ ] **S6 Transit-time model** (`simulation/transit.py`, pure): block-time table, seeded lognormal +
+  p_stuck, `tau_p50`/`tau_p95`, seed from `position_key`. AC = card AC4.
+- [ ] **S7 Basis buffer + vol stats** (`simulation/basis.py`, pure): fixed-point `array('q')` ring
+  buffer, median/std at lag, z-score, warm-up; sigma_1m and max rise from klines. AC: hand-computed
+  stats; memory bound test (keys x 720 x 8 B); missing samples are not imputed.
+- [ ] **S8 Hedged portfolio I: pre-checks + entry** (`simulation/hedged.py`, pure Decimal): pools,
+  pre-checks a-f with their exact skip reasons (first failure wins), sizing, lot/contract rounding, margin,
+  P_liq, leg reserve. AC = card AC2 + entry parts of AC1.
+- [ ] **S9 Hedged portfolio II: hold + exit + capital.** Funding accrual (idempotent per funding time),
+  liquidation (kline high and poll), partial/forced exit, unpriceable hedge rule (C8), USDT rebalancing,
+  valuation (open basis MTM). AC = card AC1 + AC3; P&L identity sums exactly.
+- [ ] **S10 Migration + ORM + repository.** Additive revision (`paper_hedged_*` only), `IHedgedPaperRepository` /
+  `persistence/hedged_repository.py` (`ensure_run`, atomic commit, restore, idempotent events). AC
+  (integration, `nexus_test`/CI): upgrade creates only the new tables, downgrade drops only them; full
+  position round trip; duplicate funding event rejected by the unique key.
+- [ ] **S11 Config.** `PaperHedgedSettings` (`PAPER_HEDGED_*`, `[paper_hedged]`, code default
+  `enabled=false`), `TOML_ALLOWED` keys, validation (hedge venues within the parent set and the enabled
+  exchanges, parent set exists, leverage 1-5, thresholds > 0, id <= 32 chars); HT run hash = HT params +
+  parent definition hash. TOML gets both HT sets but `enabled = false`. AC: S0 pins pass; config tests;
+  the HT hash changes when any HT parameter changes.
+- [ ] **S12 PerpFeed** (`scanner/perp_feed.py`): polling loop (30 s / 60 s), cache + ages, per-venue
+  backoff/health (separate from spot), kline/tier incremental cache + prefetch API, basis sampling. AC:
+  fake-port tests for cadence, 429 pause of the perp venue only, stale flags, cancellation (no hang on
+  stop), never-raise loop.
+- [ ] **S13 Wiring + restart.** `scanner/hedged.py` (`HedgedTrader`/`HedgedBook`), scanner hooks
+  (`observe_spot`, spawned `on_alert`, PerpFeed task), container (perp clients only for hedge venues of
+  enabled sets), restart/gap replay and `late_exit`; TOML `enabled = true`. AC = card AC5 (with S0 pins,
+  HT on) + AC7; isolation tests: a blocking fake feed never delays `sweep()`, and an exception in HT leaves
+  `PaperBook` outcomes identical.
+- [ ] **S14 GO report HT section** (`reports/go_hedged.py` + render, JSON + Markdown; directional-MTM
+  leak, basis-dominated, hedge-break, late-exit, unpriceable flags; shadow-exit P&L). AC = card AC8
+  (integration fixture on `nexus_test`).
+- [ ] **S15 Docs + deploy prep.** Russian guide in `docs/guides/`, English config comments, deploy checklist
+  (pinned hashes vs the go-report, expected log lines: 4x `paper_resumed`, 0x `paper_run_restarted`, 2x
+  `hedged_run_started`). AC = card AC9 + review by quant/tech-lead/security.
+
 ## Deploy (after review; U4 user OK required)
 Rebuild image -> migrator `alembic upgrade head` (exit 0) -> recreate scanner only. Verify logs: 4x
-`paper_resumed`, 0x `paper_run_restarted`, 1x `paper_run_started` for `ht_excl_conditional`; first HT snapshot
+`paper_resumed`, 0x `paper_run_restarted`, 2x `hedged_run_started` (`ht_excl_conditional`, `ht_excl_conditional_bn`); first HT snapshot
 within 15 min. Expected soak gap ~1-2 min.
 
 ## Out of scope

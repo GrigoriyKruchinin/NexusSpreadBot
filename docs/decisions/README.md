@@ -10,6 +10,7 @@
 | 0006 | [U2: DEX seam only; risk-manager added](0006-u2-dex-seam-only-risk-manager.md) | accepted (amended by 0008) |
 | 0007 | [Up to 5 iterations to find a profitable spread approach](0007-iteration-loop-find-profitable-approach.md) | accepted |
 | 0008 | [GO-HOLD state; DEX development allowed during HOLD](0008-go-hold-dex-during-hold.md) | accepted |
+| 0009 | [Public perp market-data port; hedged paper strategy as a PaperBook sibling](0009-perp-market-data-and-hedged-paper-strategy.md) | proposed |
 
 ADRs live here (`docs/decisions/`), not in `docs/adr/`.
 Format for new ADRs (MADR-lite): Status/Date, Context, Decision drivers, Considered options,
