@@ -71,7 +71,7 @@ Ticks only after verification and commit.
 - [ ] Quant: formula review, cost model, latency vs spread lifetime, two execution modes, honest backtest, verdict
 - [ ] Lawyer: `docs/legal/nexus-risk-assessment.md` verified with sources
 - [ ] Dashboards as code (observability-engineer; ADR on stack)
-- [ ] `docs/reports/go-no-go.md`
+- [x] `docs/reports/go-no-go.md` (NO-GO, user decision 2026-10-25)
 
 ## M4 — Fork (UF): GO / Rework / NO-GO
 - [ ] Iteration loop: up to 5 iterations of hypothesis search (vision + analyzer + quant + crypto), reports in `docs/reports/iterations/`, no separate code copies (ADR 0007)

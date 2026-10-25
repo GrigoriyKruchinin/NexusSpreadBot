@@ -1,6 +1,9 @@
 # STATE (updated 2026-10-24)
 
 ## Where we are
+- **UF 2026-10-25: NO-GO (user decision).** Report `docs/reports/go-no-go.md`. Project = analytical spread-finder only.
+  HT1 frozen after S12 (disabled). DB wipe planned for HT deploy is NOT done (no HT deploy). Open user questions: what the
+  analytical tool must deliver; keep/stop old spot paper runs; keep/remove HT1 code; DB wipe; merge branch to `main`.
 - **2026-10-25 hedge-method comparison** (`docs/quant/hedge-method-comparison.md`, 40 episodes): PERP okx+kucoin passes 0 after
   basis check (sell venue B falls back ~1.1 % during transfer); MARGIN short on B locks the spread but okx/kucoin lend 0 of
   the alerted coins, only binance (7/40, +$47.6) and gate; UNHEDGED -$848 on 40. No method passes in the GO set today.
