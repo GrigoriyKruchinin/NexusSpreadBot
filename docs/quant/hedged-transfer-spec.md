@@ -1,6 +1,12 @@
 # Hedged transfer arbitrage (HT) - paper strategy spec
 
 - Author: quant-analyst, 2026-10-25. Status: draft for backend-lead (card `docs/tasks/HT1-hedged-transfer-paper.md`).
+- Amended 2026-10-25 after the architect review (`docs/architecture/HT1-design-review.md`, changes C1, C5, C6,
+  C8) and the user decision of 2026-10-25 that **HT is the only strategy**: the spot-inventory paper sets and
+  their data are retired at HT deploy (fresh DB). Everything that existed only for coexistence with them is
+  dropped (old section 12, card AC5, review C9). Amended sections carry the tag "amended 2026-10-25 (architect C#)"
+  or "(HT-only)". Where the architect review and this spec differ on economics, this spec wins; on runtime
+  wiring and persistence the review wins.
 - Trigger: user decision 2026-10-25. Soak preview (1.4 d): hedged P&L +58..72 USD per $10k set, MTM on held
   small-cap coin inventory (T, ORDER, ANIME) -458..-655 USD. The user rejects any strategy with directional
   exposure. HT holds no coin inventory: every coin unit owned is hedged by a short perpetual swap ("perp").
@@ -23,29 +29,40 @@ States: `SKIPPED(reason)`, `IN_TRANSIT`, `ARRIVED` (exit pending: stale books / 
 `CLOSED`, `LIQUIDATED` (hedge broke, spot leg still in transit; closes as `CLOSED_UNHEDGED` on arrival),
 `FORCED_EXIT` (max hold reached). No coin is ever held outside an open position.
 
-## 2. Where to hedge (decision)
+## 2. Where to hedge (decision) - amended 2026-10-25 (architect C1)
 
-Candidates H = perp venues the user can trade, intersected with the set: default `binance, okx, kucoin`
-(bybit/gateio perps: data only, hedge only if the user enables them later).
+Hedge venues follow the legal verdict (`docs/legal/futures-access.md`). Two HT sets are pre-registered and both
+start on day 1 (same spot venues, same parameters, only the hedge venues differ):
+
+| set id | spot venues (A, B) | hedge venues H | role |
+|---|---|---|---|
+| `ht_excl_conditional` | binance, okx, kucoin | **okx, kucoin** | **the GO hypothesis** |
+| `ht_excl_conditional_bn` | binance, okx, kucoin | binance, okx, kucoin | context only; GO-eligible only after legal gates G1.1a + G5.3 |
+
+bybit/gateio perps: none (no adapters in HT1, review C12). Binance stays a **spot** venue in both sets; only its
+perps are excluded from the GO set.
 
 **Policy `best` (default):** among H with an eligible perp (pre-checks a/b), pick the max *expected* net
 (section 5e); ties -> prefer B, then A. Variants `sell_venue` (H = B only) and `buy_venue` (H = A only) exist
-as config values for later comparison, but only `best` runs in the soak (one pre-registered hypothesis).
+as config values for later comparison, but only `best` runs in the soak (one pre-registered hypothesis per set).
 
-Why (data, 60 first-alert episodes in the scanner log 2026-10-24 15:43Z .. 2026-10-25 13:04Z, perps snapshot
-2026-10-25 ~13:10Z, see section 14):
+Why (data: the 40 first-alert episodes with both legs in binance/okx/kucoin from the scanner log 2026-10-24
+15:43Z .. 2026-10-25 13:04Z; perp snapshots 2026-10-25 ~13:10Z and re-taken at the amendment, identical counts
+for the GO set; see section 14):
 
-| policy | hedgeable (perp + >= $1k depth) | expected net >= 0.3 % | pessimistic net >= 0.3 % |
-|---|---|---|---|
-| H = B only | 16 / 60 | 8 | 3 |
-| H = A only | 41 / 60 | 30 | 16 |
-| best of binance/okx/kucoin | 53 / 60 | 43 | 25 |
+| policy | hedge venues | hedgeable (perp + >= $1k depth) | expected net >= 0.3 % | pessimistic net >= 0.3 % |
+|---|---|---|---|---|
+| H = B only | okx, kucoin | 10 / 40 | 3 | 1 |
+| H = A only | okx, kucoin | 3 / 40 | 2 | 1 |
+| **best** | **okx, kucoin** | **13 / 40** | **10** | **9** |
+| best (context) | binance, okx, kucoin | 39 / 40 | 28-30 | 15-18 |
 
-H = B fails mostly because T has no OKX perp and KuCoin's T perp is thin ($0.9k within 0.5 %) with funding
--1.87 %/4 h. Basis argument: the P&L identity (section 3) depends on spot_B vs perp_H at exit. Perps of one
-coin on different venues are tied to near-identical multi-venue spot indices, so a deep perp elsewhere does
-not add material basis risk versus B's own perp; liquidity, fees and funding dominate. Operational cost of
-H != B (margin sits on a third venue) is captured by the capital model (section 9).
+Without binance perps coin T loses its only deep hedge: T has no OKX perp, and KuCoin's T perp is thin
+($0.8-0.9k within 0.5 %) with funding -1.9..-2.0 %/4 h. All 25 T episodes become unhedgeable in the GO set.
+Basis argument: the P&L identity (section 3) depends on spot_B vs perp_H at exit. Perps of one coin on
+different venues are tied to near-identical multi-venue spot indices, so a deep perp elsewhere does not add
+material basis risk versus B's own perp; liquidity, fees and funding dominate. Operational cost of H != B
+(margin sits on a third venue) is captured by the capital model (section 9).
 
 ## 3. P&L identity (exact; all Decimal)
 
@@ -93,8 +110,8 @@ per network withdraw/deposit flags, withdrawal fee, contract. Transfer tax table
 | binance (`binanceusdm`) | `load_markets` -> `GET /fapi/v1/exchangeInfo` | `fetch_bids_asks` -> `/fapi/v1/ticker/bookTicker` | `/fapi/v1/depth` | `fetch_funding_rates` -> `/fapi/v1/premiumIndex` (mark, index, rate, next time); `fetch_funding_intervals` -> `/fapi/v1/fundingInfo` | `/fapi/v1/leverageBracket` is SIGNED -> not used; config leverage <= 2 and default MMR | `/fapi/v1/markPriceKlines`, `/fapi/v1/fundingRate` |
 | okx (`okx`, `defaultType: swap`) | `/api/v5/public/instruments?instType=SWAP` (state, ctVal, lotSz, minSz, lever) | `/api/v5/market/tickers?instType=SWAP` | `/api/v5/market/books` | `fetch_funding_rate` -> `/api/v5/public/funding-rate?instId=` (per instrument: candidates only, cache 60 s); `/api/v5/public/mark-price?instType=SWAP` | `fetch_market_leverage_tiers` -> `/api/v5/public/position-tiers` | `/api/v5/market/mark-price-candles`, `/api/v5/public/funding-rate-history` |
 | kucoin (`kucoinfutures`, host api-futures) | `/api/v1/contracts/active` (status, multiplier, lotSize, maxLeverage, mark, index, fundingFeeRate, predicted rate, next time, maintainMargin) | `/api/v1/allTickers` | `/api/v1/level2/depth20` / `depth100` | same `contracts/active` (60 s) | `/api/v1/contracts/risk-limit/{symbol}` | `/api/v1/kline/query`, `/api/v1/contract/funding-rates` |
-| bybit (`bybit`, linear) data only | `/v5/market/instruments-info?category=linear` | `/v5/market/tickers?category=linear` (+ funding, mark) | `/v5/market/orderbook` | in tickers | `/v5/market/risk-limit` | `/v5/market/mark-price-kline`, `/v5/market/funding/history` |
-| gateio (`gate`, swap) data only | `/futures/usdt/contracts` (leverage_max, maintenance_rate, funding_interval, in_delisting) | `/futures/usdt/tickers` | `/futures/usdt/order_book` | in contracts/tickers | in contracts | `/futures/usdt/candlesticks`, `/futures/usdt/funding_rate` |
+| bybit (`bybit`, linear) reference only, no adapter in HT1 (C12) | `/v5/market/instruments-info?category=linear` | `/v5/market/tickers?category=linear` (+ funding, mark) | `/v5/market/orderbook` | in tickers | `/v5/market/risk-limit` | `/v5/market/mark-price-kline`, `/v5/market/funding/history` |
+| gateio (`gate`, swap) reference only, no adapter in HT1 (C12) | `/futures/usdt/contracts` (leverage_max, maintenance_rate, funding_interval, in_delisting) | `/futures/usdt/tickers` | `/futures/usdt/order_book` | in contracts/tickers | in contracts | `/futures/usdt/candlesticks`, `/futures/usdt/funding_rate` |
 
 Transfer-timing fields (spot side; already fetched, just not parsed):
 - binance public `bapi/capital/v1/public/capital/getNetworkCoinAll`: `withdrawMin`, `minConfirm`,
@@ -117,11 +134,20 @@ Evaluated on REST books fetched `latency_ms` (2 s) after the alert (same as curr
 - **(a) `NO_PERP` / `PERP_INACTIVE`**: USDT linear perp `BASE/USDT:USDT` on H, status trading, not
   delisting, same coin identity (perp base == spot base; skip ambiguous rebrands via the existing contract
   check list); contract step known.
-- **(b) hedge openable**: `PERP_THIN` if perp bid depth within `max_slippage_pct` (0.5 %) of best bid < size;
-  `LEVERAGE` if max leverage known and < `leverage`; `FUNDING` if pessimistic funding cost over the hold
-  > `max_funding_cost_pct` (0.3 %); `LIQ_RISK` if liquidation distance `d = 1/L - mmr` <
-  `max(liq_min_distance_pct, k*sigma_1m*sqrt(tau_p95_min), 1.5*max_rise_24h(tau_p95))` (sigma and
-  max rise from 1 m perp mark klines over 24 h; k = 5); `PERP_DATA_STALE` (ticker > 60 s, funding > 15 min).
+- **(b) hedge openable** (checked in this order; amended 2026-10-25 (architect C5)):
+  1. `PERP_DATA_STALE` (perp ticker > 60 s, funding > 15 min);
+  2. `PERP_THIN` if perp bid depth within `max_slippage_pct` (0.5 %) of best bid < size;
+  3. `LEVERAGE` if max leverage known and < `leverage`;
+  4. `FUNDING` if pessimistic funding cost over the hold > `max_funding_cost_pct` (0.3 %);
+  5. `PERP_HISTORY_MISSING` if the pre-check history is not in the cache when the post-latency books arrive
+     (no wait, no default sigma): the 24 h of 1 m mark klines on H must cover >= `kline_min_coverage`
+     (90 %, i.e. >= 1,296 of 1,440 minutes; a perp listed < 24 h ago therefore skips), and on venues with
+     public tiers (okx, kucoin) the tier table must be loaded (age <= 1 h). Binance has no public tiers:
+     the default `mmr_pct` applies there and this part of the check is not applied;
+  6. `LIQ_RISK` if liquidation distance `d = 1/L - mmr` <
+     `max(liq_min_distance_pct, k*sigma_1m*sqrt(tau_p95_min), 1.5*max_rise_24h(tau_p95))` (sigma and
+     max rise from the 1 m mark klines over 24 h; k = 5; gaps in the klines are not imputed: sigma uses
+     only consecutive-minute log returns, max rise uses the available windows).
 - **(c) transfer**: `TRANSFER_BLOCKED` unless a shared network N is withdraw-enabled on A, deposit-enabled on B,
   contracts do not conflict, fee known (`select_transfer_route` semantics, VERIFIED only), not `busy`;
   `BELOW_MIN_WITHDRAW` if `q + w` < A's min withdraw or `q` < B's min deposit; `METADATA_STALE` if transfer
@@ -131,14 +157,41 @@ Evaluated on REST books fetched `latency_ms` (2 s) after the alert (same as curr
 - **(e) profit**: `BELOW_THRESHOLD` unless
   `E_net = S + P_exp + F_exp + min(0, E_R) - L - RB_exp >= max(min_net_profit_pct * cost, min_net_profit_usd)`
   AND `P_net = S + P_exp + F_pess + min(0, E_R) - sigma_R - L - RB_exp >= 0` where
-  - `P_exp` = perp fees both ways at `f0` (exit leg at current ask);
+  - `P_exp` = perp taker fees both ways at `f0` **plus** the current perp quoted spread on H,
+    `q_h * (ask_H - bid_H)`, as the expected exit crossing cost (amended 2026-10-25 (architect C6): the basis
+    history below is bid-vs-bid, so the exit crossing is not inside `E_R` and must be charged here);
   - `F_exp` = funding over [t0, t0 + tau_p50] at the current rate, negative rates x1.5 stress, positive rates
     counted at 0 (never bank funding income ex ante); `F_pess` same over tau_p95;
-  - `E_R = q_h * (median_6h(basis_B,H) - basis_B,H_now)`: expected reversion of B's basis, counted only when
-    adverse; `sigma_R` = q_h * std of basis changes at lag tau_p50 from the 6 h history;
-    `BASIS_WARMUP` if < 60 samples (30 min) of history, `BASIS_OUTLIER` if |z| of the current basis > 2.5;
+  - Basis estimator, amended 2026-10-25 (architect C6): **relative basis**
+    `x = (bid_B - bid_H) / mid_H` (top of book, spot B bid vs perp H bid, mid_H = perp mid), sampled as in
+    section 5.1. Then, with `m_H` = current perp mid on H and `x_now` from the post-latency books:
+    `E_R = q_h * m_H * (median_6h(x) - x_now)`, counted only when adverse (`min(0, E_R)`);
+    `sigma_R = q_h * m_H * std_6h(x(t + lag) - x(t))` with `lag = tau_p50`;
+    `z = (x_now - median_6h(x)) / max(std_6h(x), basis_std_floor)`, `BASIS_OUTLIER` if |z| > 2.5;
+    `BASIS_WARMUP` if the window holds < `basis_min_samples` (60) samples **or** < 60 lag pairs.
+    This equals the absolute-basis form to first order (`b - f = x * mid_H`) and is more stationary when the
+    price level moves during the 6 h window (the absolute form would mix price-level drift into the median
+    and std). Median and std are computed only at the pre-check, never per tick;
   - `RB_exp` = USDT return fee pro rata (`usdt_fee_usd * cost / pool_target`).
   Thresholds are pre-registered (section 13) and change the run hash.
+
+### 5.1 Basis sampling and storage (amended 2026-10-25 (architect C6))
+
+- A sample `x` is taken at each perp ticker refresh (30 s) for every (coin, B, H) with B a spot venue of an HT
+  set and H an eligible hedge venue with an active perp, from the latest sweep spot ticker of B and the new
+  perp ticker of H. It is dropped (counted, not stored, never imputed) if the spot ticker is older than 15 s
+  relative to the perp ticker's `received_at_ms`, or either side is crossed or missing.
+- Storage (architect proposal confirmed, with one correction): per key a ring buffer of fixed-point integers
+  in `array('q')`, value = `round_half_even(x * 1e8)` (1e-8 of relative basis = 1e-4 bp; int64 range is
+  irrelevant at |x| < 1). Converted to Decimal on read; the median/std are computed in Decimal.
+  **Correction:** samples can be missing (dropped samples, perp outage, restart), so a count-based buffer is
+  not a time window. Each key stores a parallel `array('q')` of sample times (epoch ms). The 6 h window and
+  the lag pairs are taken by **time**: a pair (t, t + lag) is used only if a sample exists within +-15 s of
+  t + lag. Capacity stays 720 per key; memory per key 2 x 720 x 8 B = 11.5 KB, so the upper bound is
+  ~17-58 MB for 1,500-5,000 keys (not 9-29 MB). The memory-bound test uses this figure.
+- `basis_std_floor` = 1e-4 (1 bp): prevents a division by ~0 on a flat history.
+- After a restart the buffer is empty -> `BASIS_WARMUP` for >= 30 min (longer when lag pairs are missing);
+  rebuilding from klines is out of HT1.
 - **(f) capital/limits**: `INSUFFICIENT_USDT` (A pool < cost), `INSUFFICIENT_MARGIN` (H pool < margin + fees,
   after reserving cost when H = A), `MAX_POSITIONS` (open >= 4), `COIN_OPEN` (one open position per coin),
   `RECENT_FILL` (same route within 60 s), `STALE_BOOK` (any of A spot, B spot, H perp older than 5 s or skew
@@ -169,7 +222,8 @@ Evaluated on REST books fetched `latency_ms` (2 s) after the alert (same as curr
 - Unknown confirmations or block time -> `tau_conf` median 60 min (pessimistic).
 - Tail: with probability `p_stuck = 1 %` the draw is `stuck_h = 6 h` (manual review / congestion).
 - `tau_p50`, `tau_p95` (closed form from the lognormal + tau_conf * 1.5) drive pre-checks; the simulated
-  arrival is ONE reproducible draw: `seed = sha256(run_hash, position_id)`.
+  arrival is ONE reproducible draw: `seed = sha256(run_hash, position_key)` (`position_key` is made before
+  insert, review C13).
 - Shadow exit: the trader also records B/H books at `t0 + tau_p95` if that is later than the draw
   ("pessimistic exit"), so the report shows P&L under the slow-transfer case for the same positions.
 - Deposit on B disabled at arrival time (fresh metadata) -> stays `ARRIVED`, funding accrues, re-checked every
@@ -188,6 +242,26 @@ Evaluated on REST books fetched `latency_ms` (2 s) after the alert (same as curr
 - Exit at arrival + `latency_ms`: fresh REST books of B spot and H perp; stale-book guard as at entry;
   if B bids cannot absorb `q`, sell what fits within 2 x `max_slippage_pct`, close the matching `q_h`, retry
   the rest next sweep (funding keeps accruing). Positions survive restarts (persisted, resumed).
+
+### 8.1 Unpriceable hedge at exit or forced exit (amended 2026-10-25 (architect C8))
+
+The H perp is *unpriceable* when no fresh perp book (stale-book guard) can be fetched, the book cannot absorb
+`q_h` within 2 x `max_slippage_pct`, or the perp is halted/delisted.
+- Both legs stay open: the spot coin on B is **not** sold while its hedge cannot be closed (selling it would
+  leave a naked short). The position keeps state `ARRIVED`, flag `hedge_unpriced`, funding keeps accruing
+  (from history when live rates are missing), the liquidation watch keeps running (marks, else the 5-min
+  kline-high check, review C7). The exit is retried at every perp ticker refresh.
+- A spot-only unpriceable case (B book stale/thin, H fine) follows the existing retry rule (section 8) and
+  then `FORCED_EXIT`; the perp is closed only together with the spot quantity actually sold.
+- **Final booking** when the position is still unpriceable at `t0 + max_hold_h + unpriced_grace_h`
+  (24 h + 6 h): status `CLOSED`, flag `hedge_unpriced_final`, priced adversely on both legs:
+  - perp buy-to-close `f1 = P_last * (1 + 2 * max_slippage_pct)`, where `P_last` = max(last valid mark,
+    last valid ask) seen on H (any age; if the exchange published a settlement price for a delisted perp,
+    use max(settlement, P_last)); the close fee `phi_H * q_h * f1` is charged;
+  - spot sell on B at the current B book if priceable, else `b1 = last valid B bid * (1 - 2 * max_slippage_pct)`;
+  - the P&L lines are computed with these prices by the section 3 identity (the penalty lands in R and D);
+  - if a later mark >= `P_liq` was seen before the final booking, the position is `LIQUIDATED` instead.
+- Report: count and P&L of `hedge_unpriced_final` positions (GO-report flag if any), max time spent unpriced.
 
 ## 9. Capital model
 
@@ -231,78 +305,111 @@ rules as B15. Fields:
   |R| > 50 % of |S|.
 - Transfer times: drawn median/p95 vs model, stuck count; funding paid/received; hedge breaks (flag).
 - Pessimistic shadow-exit P&L next to the drawn one.
-- Verdict input: the HT set is evaluated as its own hypothesis (pre-registered set and parameters); the
-  spot-inventory sets stay as context. Bonferroni note: 2 strategy families reported.
+- Verdict input, amended 2026-10-25 (architect C1, HT-only): **only `ht_excl_conditional` is the GO
+  hypothesis** (pre-registered set and parameters). `ht_excl_conditional_bn` is reported next to it as
+  context and is labelled "not GO-eligible" until G1.1a + G5.3 pass. Multiple testing: 2 HT hypotheses are
+  reported, so the significance threshold of any test used for the verdict is Bonferroni-corrected to
+  alpha/2 (also when only the GO set is quoted), and promoting `_bn` to GO later does not reset this.
+  The spot-inventory sets no longer exist and are not a family in this count.
 
-## 12. Coexistence with the running soak and deploy
+## 12. Runtime placement and deploy (HT-only) - amended 2026-10-25 (user decision; architect C1, C9 dropped)
 
-- HT runs inside the scanner process as extra traders of `PaperBook` (they consume the same alert hook,
-  books and metadata); portfolio ids `ht_<venue_set>` (default `ht_excl_conditional` =
-  binance/kucoin/okx). It reuses the existing venue-set membership (top-N) of `excl_conditional`; it adds
-  NO entry to `[paper] venue_sets`, so candidate selection and cap stats of the 4 running sets are unchanged.
-- The definition hash of the 4 existing runs must not change (golden test). Their runs resume.
-- New `[paper_hedged]` table in `config/nexus.toml` (default `enabled = false` in code, `true` in the toml).
-- Persistence: additive Alembic migration (new tables only; existing tables untouched).
-- Deploy (U4, user OK): rebuild image -> migrator (`alembic upgrade head`, exit 0) -> recreate **scanner
-  only** (worker-maintenance only if HT retention is added). Expected soak gap ~1-2 min (as D-01b), check
-  logs: 4x `paper_resumed`, 0x `paper_run_restarted`, 1x `paper_run_started portfolio=ht_excl_conditional`.
-  The GO report runs on the host (`make go-report`), no container change for it.
+User decision 2026-10-25: HT is the only strategy. The 4 spot-inventory paper sets and their data are not
+needed and are retired at HT deploy (fresh DB, each data step with explicit U4 OK). Consequences:
+- **Dropped:** card AC5 / review C9 (golden pinned hashes of `all`, `excl_conditional`, `excl_bybit`,
+  `excl_gateio`, "HT on == HT off"), the "4x `paper_resumed`, 0x `paper_run_restarted`" deploy check, and the
+  rule that HT must not add fields to `EstimatorConfig`/`PaperConfig`. These existed only to protect the
+  running soak. The HT parameters still live in their own `[paper_hedged]` table (clean separation).
+- **HT spot venues are explicit:** each HT set names its spot venues (`spot_venues = binance, okx, kucoin`)
+  instead of borrowing the membership of the old `excl_conditional` spot set. An HT set consumes every scanner
+  alert episode whose buy and sell venues are both in `spot_venues` (the scanner's own candidate selection
+  applies; there is no per-set top-N any more). The ids `ht_excl_conditional` / `ht_excl_conditional_bn`
+  are kept for continuity with the legal docs and the review.
+- **HT run hash** = all section 13 parameters of the set (incl. `spot_venues`, `hedge_venues`) + the
+  estimator/latency parameters HT uses; no parent-set definition hash.
+- The spot paper runtime (`[paper]`) is switched off at HT deploy (`enabled = false`). Removing its code and
+  tables is a separate cleanup task after HT runs, not part of HT1. The scanner alert pipeline itself stays.
+- Persistence: own `paper_hedged_*` tables (review section 6); they are created by the normal migration
+  chain on the fresh DB.
+- Deploy (U4, user OK): archive dump of the old DB -> fresh DB -> migrator (`alembic upgrade head`, exit 0) ->
+  stack up. Check logs: 2x `hedged_run_started` (`ht_excl_conditional`, `ht_excl_conditional_bn`), first HT
+  snapshot within 15 min. The GO report runs on the host (`make go-report`).
 - HT data accrue from its own start: earliest HT verdict = start + 21 days.
 
-## 13. Parameters (pre-registered defaults; all in the run hash)
+## 13. Parameters (pre-registered defaults; all in the run hash) - amended 2026-10-25 (architect C1, C5, C6, C8)
 
 | key | default | note |
 |---|---|---|
-| venue_sets | `excl_conditional` | HT sets built on existing venue sets |
-| hedge_venues | binance, okx, kucoin | user's accounts |
+| sets (amended C1) | `ht_excl_conditional`, `ht_excl_conditional_bn` | both start day 1; only the first is the GO hypothesis |
+| spot_venues (HT-only) | binance, okx, kucoin | both sets |
+| hedge_venues (amended C1) | `ht_excl_conditional`: okx, kucoin; `ht_excl_conditional_bn`: binance, okx, kucoin | legal verdict |
 | hedge_policy | best | `sell_venue`/`buy_venue` exist, not run |
 | capital_usd / trade_notional_usd / min_trade_usd | 10000 / 1000 / 100 | |
 | leverage / mmr_pct default | 2 / 2.5 | liquidation ~ +47.5 % |
 | liq_min_distance_pct / liq_sigma_k | 30 / 5 | |
 | max_slippage_pct | 0.5 | per leg depth window |
-| perp_taker_fee_pct | binance 0.05, okx 0.05, kucoin 0.06, bybit 0.055, gateio 0.05 | VIP0 |
+| perp_taker_fee_pct | binance 0.05, okx 0.05, kucoin 0.06 | VIP0 |
 | min_net_profit_pct / min_net_profit_usd | 0.3 / 3 | on E_net; P_net >= 0 |
 | max_funding_cost_pct | 0.3 | pessimistic, per hold |
 | funding_negative_stress | 1.5 | |
-| basis_window_h / basis_min_samples / basis_z_max | 6 / 60 / 2.5 | 30 s samples |
+| basis_window_h / basis_min_samples / basis_z_max | 6 / 60 / 2.5 | 30 s samples, relative basis (C6) |
+| basis_std_floor / basis_pair_tolerance_s / basis_spot_max_age_s | 0.0001 / 15 / 15 | C6 |
+| kline_min_coverage | 0.9 | `PERP_HISTORY_MISSING` (C5) |
+| unpriced_grace_h | 6 | final booking of an unpriceable hedge (C8) |
 | leg_risk_reserve_pct | 0.05 | |
 | max_open_positions / per coin / route cooldown | 4 / 1 / 60 s | |
-| proc_median_min | binance 3, okx 3, kucoin 5, bybit 3, gateio 10 | |
+| proc_median_min | binance 3, okx 3, kucoin 5 | spot venues of the HT sets |
 | proc_sigma / p_stuck / stuck_h / unknown_conf_median_min | 0.7 / 0.01 / 6 / 60 | |
 | max_hold_h | 24 | |
 | refill_threshold_usd | 1500 | USDT rebalancing |
 | perp_ticker_interval_s / funding_refresh_s | 30 / 60 | |
 
-## 14. Honest prior (what survives the pre-checks)
+## 14. Honest prior (what survives the pre-checks) - amended 2026-10-25 (architect C1)
 
 Data: 60 first-alert episodes (27 routes) from the scanner log (2026-10-24 15:43Z .. 2026-10-25 13:04Z,
 ~21 h wall clock incl. the disk-full gap); median alert net $6.93 on $1,000 (0.69 %, spot fees and
-withdrawal fee included); perp markets/funding/depth snapshot taken 2026-10-25 ~13:10Z via public endpoints
-(scripts were throwaway; the snapshot is a proxy, NOT the state at alert time). Hold assumed 0.5 h median,
-1.5 h pessimistic; perp cost = 2 x taker + full spread; basis risk not included.
+withdrawal fee included). Perp markets/funding/depth from public endpoints (no keys): snapshot 2026-10-25
+~13:10Z, re-taken at the amendment; the GO-set counts are identical in both (scripts were throwaway; a
+snapshot is a proxy, NOT the state at alert time). Hold assumed 0.5 h median, 1.5 h pessimistic; perp cost =
+2 x taker + full quoted spread; funding paid when the rate is negative, income counted 0; basis risk (R),
+leg reserve and USDT rebalance NOT included. "Hedgeable" = active perp on an allowed H with >= $1k bid depth
+within 0.5 %. Ranges = the two snapshots.
 
-| sample | alerts | perp on binance/okx/kucoin, depth >= $1k | E_net >= 0.3 % | pessimistic >= 0.3 % | pessimistic >= 0.5 % |
+The HT sets only see alerts with both legs in binance/okx/kucoin (40 of the 60 episodes; 25 of them are T).
+
+| set / sample | alerts | hedgeable | E_net >= 0.3 % | pessimistic >= 0.3 % | pessimistic >= 0.5 % |
 |---|---|---|---|---|---|
-| all routes | 60 | 53 (88 %) | 43 (72 %) | 25 (42 %) | 10 (17 %) |
-| both legs in binance/okx/kucoin | 40 | 39 | 30 | 18 | 4 |
-| excluding coin T | 32 | 25 | 23 | 19 | 7 |
+| **`ht_excl_conditional` (okx, kucoin), GO** | 40 | **13 (33 %)** | 10 | **9** | **0** |
+| same, excluding coin T | 15 | 13 (87 %) | 10 | 9 | 0 |
+| `ht_excl_conditional_bn` (binance, okx, kucoin), context | 40 | 39 (98 %) | 28-30 | 15-18 | 2-4 |
+| same, excluding coin T | 15 | 14 | 13 | 12 | 1 |
+| reference: all 60 episodes, okx/kucoin hedge | 60 | 23 | 18 | 14-15 | 5 |
 
-Missing perps on the core venues: PROMPT, XCN, EPIC, MEZO, SLC (7 alerts). Latency re-check survival in the
-same log: 85 of 145 (59 %) - apply on top.
+What the GO set keeps: the 13 hedgeable episodes are all non-T (T: no OKX perp, KuCoin T perp < $1k depth);
+the share of hedgeable episodes excluding T is 13 / 15 (87 %). Of the 9 pessimistic survivors, **8 are ANIME**
+(binance -> kucoin, hedged on okx or kucoin) and 1 is IRYS. Their summed pessimistic net is ~$35 over the
+~21 h ($41 expected). Upper-bound arithmetic, not a forecast: x 720/21 h x 59 % latency survival ~ $700/month
+before basis risk, leg reserve, USDT rebalance and tax, against the ~$310/month pre-tax needed for 2 % on
+$10k after 35 % tax. Two facts cut this down hard: (1) the B6 concentration rule (result ex top-2 coins)
+removes ANIME and IRYS, i.e. **everything** in this sample; (2) nothing clears 0.5 % pessimistic, so a small
+adverse basis move (R) per trade erases the edge. Missing perps on the hedge venues also remove PROMPT, XCN,
+EPIC, MEZO, SLC and T. Latency re-check survival in the same log: 85 of 145 (59 %) - apply on top.
 
-Main risk, stated plainly: spot spreads appear on coins in a squeeze. T (28 of 60 alerts) had its Binance
-perp at **-5.4 % vs index** with funding **-0.36 %/h** (shorts pay); STEEM -0.61 %/4 h, CVC -0.47 %/4 h,
-XEC (KuCoin) -0.92 %/4 h. A short hedge pays this funding, and the basis (R) on such coins can move by more
-than the 0.5-1.6 % edge within one transfer window. The pre-checks keep a meaningful share of trades
-mechanically, but R is expected to be the deciding term and its sign is unknown; only the paper run
-measures it. Concentration (B6, ex top-2 coins) will likely bind because T dominates. Prior confidence that HT
-clears 2 %/month after 35 % tax on the holdout: low (<30 %), but it is the only tested variant without
-directional exposure.
+Main risk, stated plainly: spot spreads appear on coins in a squeeze. T (25 of the 40 core-venue alerts) had
+its Binance perp at -5.1..-5.4 % vs index with funding -0.36..-0.50 %/h (shorts pay); KuCoin T -1.9..-2.0 %/4 h;
+STEEM -0.61 %/4 h, CVC -0.47 %/4 h, XEC (KuCoin) -0.92 %/4 h. A short hedge pays this funding, and the basis
+(R) on such coins can move by more than the 0.3-1.6 % edge within one transfer window. Without binance perps
+the GO set mechanically avoids T, but its sample is then one coin deep. R is expected to be the deciding term
+and its sign is unknown; only the paper run measures it. Prior confidence that `ht_excl_conditional` clears
+2 %/month after 35 % tax on the holdout **including the B6 concentration test: very low (~10 %)**. It needs
+the alert mix to broaden to several coins with okx/kucoin perps. The `_bn` context set has a larger sample
+but T dominates it and its funding is strongly negative; it is also not GO-eligible today.
 
 ## 15. Open points / risks
 
-- Futures access is a real-world gate: derivatives availability for the user's residency/KYC on Binance,
-  OKX, KuCoin (lawyer + user). Paper can run without it; GO cannot.
+- Futures access is a real-world gate: derivatives availability for the user's residency/KYC (lawyer +
+  user, `docs/legal/futures-access.md`). GO set hedges on OKX/KuCoin only; Binance perps only after G1.1a +
+  G5.3. Paper can run without it; GO cannot.
 - Binance max leverage/MMR tiers need a signed endpoint -> assumed (L = 2 is available on practically every
   USDⓈ-M symbol; MMR 2.5 % conservative). With the read-only key a later task can read brackets.
 - Withdrawal processing times are not published; the lognormal model is a judgement call. Calibrate later from
