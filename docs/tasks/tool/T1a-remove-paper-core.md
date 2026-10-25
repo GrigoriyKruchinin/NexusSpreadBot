@@ -6,7 +6,7 @@
 - complexity: high (wide cut through scanner/container/config with 1041 tests to keep green)
 - size: L
 - depends_on: T0
-- status: todo
+- status: done
 
 ## Goal
 Delete the paper-trading and GO-report machinery completely while the scanner, alerts and spread/episode persistence keep working.

@@ -36,22 +36,18 @@ from nexus.engine.estimator import EstimatorConfig, NetSpreadEstimator
 from nexus.interfaces.market_data import ITradingFeeSource
 from nexus.interfaces.repositories import ExchangeMetadataStats, IMetadataStatsRepository
 from nexus.scanner import service
-from nexus.scanner.capstats import CapStatsBuffer
 from nexus.scanner.episodes import EpisodeTracker
 from nexus.scanner.health import ExchangeHealthTracker
-from nexus.scanner.paper import PaperBook, PaperTrader
 from nexus.scanner.quarantine import QuarantineManager
 from nexus.scanner.service import Repositories, Scanner, ScannerConfig
 from nexus.scanner.streams import OrderBookStreams
 from nexus.scanner.universe import UniverseFilter
-from nexus.simulation.portfolio import PaperConfig, RebalanceStatus, SkipReason
 from tests.fakes import (
     FakeExchange,
     ManualClock,
     MemoryCooldowns,
     MemoryEpisodes,
     MemoryHeartbeat,
-    MemoryPaper,
     MemoryQuarantine,
     MemoryRepos,
     RecordingDispatcher,
@@ -90,12 +86,8 @@ class Harness:
         require_verified: bool = False,
         episodes: bool = False,
         quarantine: bool = False,
-        paper: bool = False,
-        paper_sets: dict[str, frozenset[str] | None] | None = None,
         max_candidates: int = 10,
-        paper_config: PaperConfig | None = None,
     ) -> None:
-        self.paper_config = paper_config or _paper_config()
         self.clock = ManualClock()
         self.a = (FeeLookupExchange if fee_lookup else FakeExchange)("a", self.clock)
         self.streaming_b = StreamingExchange("b", self.clock)
@@ -117,7 +109,6 @@ class Harness:
             if quarantine
             else None
         )
-        self.paper_repo = MemoryPaper()
         self.episode_repo = MemoryEpisodes()
         self.episodes = (
             EpisodeTracker(self.episode_repo, close_gap_ms=60_000, clock=self.clock)
@@ -175,36 +166,7 @@ class Harness:
             streams=self.streams,
             episodes=self.episodes,
             quarantine=self.quarantine,
-            paper=self._paper_book(spread, paper_sets) if paper else None,
         )
-
-    def _paper_book(
-        self, spread: EstimatorConfig, sets: dict[str, frozenset[str] | None] | None
-    ) -> PaperBook:
-        estimator = NetSpreadEstimator(replace(spread, include_transfer_cost=False), self.clock)
-        return PaperBook(
-            {
-                name: PaperTrader(
-                    self.paper_config,
-                    self.paper_repo,
-                    estimator,
-                    self.clock,
-                    portfolio_id=name,
-                    venues=venues,
-                )
-                for name, venues in (sets or {"all": None}).items()
-            },
-            CapStatsBuffer(self.paper_repo),
-        )
-
-
-def _paper_config() -> PaperConfig:
-    return PaperConfig(
-        usdt_per_exchange=D(1000),
-        coin_per_route_usd=D(1000),
-        rebalance_threshold_pct=D(20),
-        rebalance_delay_ms=30 * 60_000,
-    )
 
 
 @pytest.fixture
@@ -1000,141 +962,6 @@ async def test_stale_snapshot_expires_while_the_store_is_down() -> None:
     assert (await h.scanner.sweep()).quarantined == 1  # last snapshot still applies
     h.clock.now += 24 * 3_600_000
     assert (await h.scanner.sweep()).quarantined == 0  # but it expires on the clock
-
-
-# ------------------------------------------------------------------ paper trading
-
-
-def _usdt_and_abc_transfers(h: Harness, *, usdt_verified: bool) -> None:
-    for exchange in (h.a, h.b):
-        networks = (NetworkInfo("TRC20", True, True, D(1)),) if usdt_verified else ()
-        exchange.transfers = {
-            "ABC": AssetTransferInfo(
-                exchange=exchange.name,
-                asset="ABC",
-                networks=(NetworkInfo("TRC20", True, True, D("0.001")),),
-            ),
-            "USDT": AssetTransferInfo(exchange=exchange.name, asset="USDT", networks=networks),
-        }
-
-
-async def test_alert_is_paper_traded_after_latency_and_rebalanced() -> None:
-    h = _episode_harness(paper=True)
-    _usdt_and_abc_transfers(h, usdt_verified=True)
-    await h.scanner.refresh_metadata()
-    assert (await h.scanner.sweep()).alerts == 1
-    await _settle(h)
-    (outcome, episode_id) = h.paper_repo.trades[0]
-    assert outcome.executed
-    assert episode_id == 1
-    assert outcome.breakdown is not None
-    assert outcome.breakdown.transfer_fee_usd == 0  # no per-trade transfer: rebalancing
-    portfolio = h.scanner._paper.trader().portfolio  # type: ignore[union-attr]
-    # The whole USDT on A and the coin on B were used: both sides are rebalanced virtually.
-    routes = {
-        (r.asset, r.from_exchange, r.to_exchange): r for r in h.paper_repo.rebalances.values()
-    }
-    assert set(routes) == {("USDT", "b", "a"), ("ABC", "a", "b")}
-    assert routes[("USDT", "b", "a")].fee == D(1)
-    assert routes[("ABC", "a", "b")].fee == D("0.001")
-    assert all(r.status is RebalanceStatus.IN_FLIGHT for r in routes.values())
-    valuation = portfolio.valuation()
-    assert valuation.realized == outcome.net_usd
-    assert valuation.rebalance_costs == D(1) + D("0.001") * portfolio.prices["ABC"]
-    h.clock.now += 30 * 60_000
-    await h.scanner.sweep()  # transfers arrive
-    assert all(r.status is RebalanceStatus.COMPLETED for r in h.paper_repo.rebalances.values())
-    assert portfolio.balance("a", "USDT") > D(900)
-    assert portfolio.in_flight == []
-
-
-async def test_rebalance_without_verified_network_is_blocked_and_reported() -> None:
-    h = _episode_harness(paper=True)
-    _usdt_and_abc_transfers(h, usdt_verified=False)
-    await h.scanner.refresh_metadata()
-    await h.scanner.sweep()
-    await _settle(h)
-    blocked = [r for r in h.paper_repo.rebalances.values() if r.asset == "USDT"]
-    assert [r.status for r in blocked] == [RebalanceStatus.BLOCKED]
-
-
-async def test_paper_storage_failure_does_not_break_the_sweep() -> None:
-    h = _episode_harness(paper=True)
-    _usdt_and_abc_transfers(h, usdt_verified=True)
-    await h.scanner.refresh_metadata()
-    h.paper_repo.fail_next = True
-    assert (await h.scanner.sweep()).alerts == 1
-    await _settle(h)  # the trade's commit failed: logged, scanner keeps running
-    h.clock.now += 10_000
-    await h.scanner.sweep()
-
-
-async def test_paper_portfolio_resumes_after_restart() -> None:
-    h = _episode_harness(paper=True)
-    _usdt_and_abc_transfers(h, usdt_verified=True)
-    await h.scanner.refresh_metadata()
-    await h.scanner._paper.start()  # type: ignore[union-attr]  # registers the run
-    await h.scanner.sweep()
-    await _settle(h)
-    before = h.scanner._paper.trader().portfolio  # type: ignore[union-attr]
-    resumed = PaperTrader(
-        before.config,
-        h.paper_repo,
-        NetSpreadEstimator(
-            replace(h.scanner._estimator.config, include_transfer_cost=False), h.clock
-        ),
-        h.clock,
-    )
-    await resumed.start()
-    assert resumed.portfolio.balances == before.balances
-    assert resumed.portfolio.seeds == before.seeds
-    assert len(resumed.portfolio.in_flight) == 2
-    assert resumed.portfolio.valuation() == before.valuation()
-
-
-async def test_failed_commit_rolls_back_memory() -> None:
-    h = _episode_harness(paper=True)
-    _usdt_and_abc_transfers(h, usdt_verified=True)
-    await h.scanner.refresh_metadata()
-    h.paper_repo.fail_next = True
-    await h.scanner.sweep()
-    await _settle(h)
-    portfolio = h.scanner._paper.trader().portfolio  # type: ignore[union-attr]
-    assert portfolio.realized == 0  # the trade was not persisted -> not kept in memory
-    assert portfolio.in_flight == []
-    assert h.paper_repo.trades == []
-
-
-async def test_route_is_paper_traded_once_per_minute() -> None:
-    h = _episode_harness(paper=True)
-    _usdt_and_abc_transfers(h, usdt_verified=True)
-    await h.scanner.refresh_metadata()
-    await h.scanner.sweep()
-    await _settle(h)
-    h.b.quote("ABC/USDT", "101.6", "101.7")  # +50 % growth -> re-alert 10 s later
-    h.clock.now += 10_000
-    assert (await h.scanner.sweep()).alerts == 1
-    await _settle(h)
-    reasons = [t.skip_reason for t, _ in h.paper_repo.trades]
-    assert reasons == [None, SkipReason.RECENT_FILL]
-
-
-async def test_resume_failure_disables_paper_trading() -> None:
-    h = _episode_harness(paper=True)
-
-    async def broken(*args: object) -> None:
-        raise ConnectionError("db down")
-
-    h.paper_repo.ensure_run = broken  # type: ignore[method-assign,assignment]
-    stop = asyncio.Event()
-
-    async def beat_then_stop(service: str, ttl_s: int) -> None:
-        stop.set()
-
-    h.heartbeat.beat = beat_then_stop  # type: ignore[method-assign]
-    await asyncio.wait_for(h.scanner.run(stop), timeout=5)
-    assert h.scanner._paper is None
-    assert h.paper_repo.trades == []
 
 
 async def test_metadata_refresh_records_coverage_stats() -> None:

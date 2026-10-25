@@ -60,7 +60,6 @@ from nexus.interfaces.repositories import (
 )
 from nexus.scanner.episodes import EpisodeTracker
 from nexus.scanner.health import ExchangeHealthTracker
-from nexus.scanner.paper import PaperBook
 from nexus.scanner.quarantine import QuarantineManager
 from nexus.scanner.streams import OrderBookStreams
 from nexus.scanner.universe import MarketUniverse, UniverseFilter
@@ -178,9 +177,7 @@ class SweepResult:
     routes_by_pair: dict[str, int] = field(default_factory=dict)
     """Positive-gross routes per directed exchange pair (``buy>sell``)."""
     candidates_cap: int = 0
-    """The per-set (or global) cap; ``candidates / candidates_cap`` is the set expansion."""
-    candidates_by_set: dict[str, int] = field(default_factory=dict)
-    """Routes kept by each venue set's own top-N."""
+    """The cap; ``candidates / candidates_cap`` is the set expansion."""
 
 
 class Scanner:
@@ -204,7 +201,6 @@ class Scanner:
         streams: OrderBookStreams | None = None,
         episodes: EpisodeTracker | None = None,
         quarantine: QuarantineManager | None = None,
-        paper: PaperBook | None = None,
         ip_unbound_venues: tuple[str, ...] = (),
     ) -> None:
         self._ip_unbound_venues = ip_unbound_venues
@@ -224,12 +220,6 @@ class Scanner:
         self._streams = streams
         self._episodes = episodes
         self._quarantine = quarantine
-        self._paper = paper
-        self._route_sets: dict[str, frozenset[str]] | None = None
-        """Route -> shadow portfolios it is a candidate of in the current sweep
-        (``None`` = no per-set cap in force)."""
-        self._set_candidates: dict[str, int] = {}
-        """Per set: routes kept by its own top-N in the last sweep (cap-expansion metric)."""
         self._new_quarantines: list[RouteQuarantine] = []
         self._parked_at: dict[str, int] = {}
         """Last stored ticker-level record per quarantined route (rate limit)."""
@@ -261,14 +251,6 @@ class Scanner:
                 return
             if self._episodes is not None:
                 await self._announce_closed(await self._episodes.start())
-            if self._paper is not None:
-                try:
-                    await self._paper.start()
-                except Exception:
-                    # Never start a fresh portfolio on top of existing history: totals and
-                    # open transfers would be mixed. Paper trading is off for this run.
-                    log.exception("paper_resume_failed_disabled")
-                    self._paper = None
             await self._announce_start()
             last_refresh = time.monotonic()
             while not stop.is_set():
@@ -287,12 +269,6 @@ class Scanner:
             for check in tuple(self._latency_checks):
                 check.cancel()
             await asyncio.gather(*self._latency_checks, return_exceptions=True)
-            if self._paper is not None:
-                with contextlib.suppress(Exception):
-                    await asyncio.wait_for(
-                        self._paper.flush_cap_stats(self._clock.now_ms(), force=True),
-                        EVENT_EMIT_TIMEOUT_S,
-                    )
             if self._streams is not None:
                 with contextlib.suppress(Exception):
                     await asyncio.wait_for(self._streams.close(), EVENT_EMIT_TIMEOUT_S)
@@ -411,8 +387,6 @@ class Scanner:
     async def sweep(self) -> SweepResult:
         """One scanning iteration."""
         tickers = await self._fetch_all_tickers()
-        if self._paper is not None:
-            self._paper.mark_prices(tickers, self._universe.markets)
         routes = self._finder.rank_routes(tickers, self._universe.markets)
         if self._config.snapshot_top_k and routes:
             await self._repos.snapshots.add_snapshots(
@@ -421,7 +395,7 @@ class Scanner:
         quarantined = await self._refresh_quarantine()
         live = [r for r in routes if _route_key(r) not in quarantined]
         parked = [r for r in routes if _route_key(r) in quarantined]
-        candidates = self._select_candidates(live)
+        candidates = self._finder.select(live, self._config.max_candidates_per_sweep)
         parked_evaluations = self._parked_evaluations(parked, quarantined)
         self._streamed_books = 0
         evaluations, timed_out = await self._evaluate_candidates(candidates)
@@ -448,15 +422,6 @@ class Scanner:
             else:
                 sent = await self._alert_episode(evaluation_id, evaluation, episode_id)
             alerts += sent
-        if self._paper is not None:
-            try:
-                await self._paper.on_sweep(self._asset_transfer)
-            except Exception:
-                log.exception("paper_sweep_failed")
-            try:
-                await self._paper.flush_cap_stats(self._clock.now_ms())
-            except Exception:
-                log.exception("paper_cap_stats_failed")
         if len(tickers) >= MIN_LIVE_EXCHANGES:
             # A sweep with fewer than two live venues cannot find routes: stay "unhealthy".
             await self._heartbeat.beat(HEARTBEAT_SERVICE, self._config.heartbeat_ttl_s)
@@ -474,7 +439,6 @@ class Scanner:
                 sorted(Counter(f"{r.buy_exchange}>{r.sell_exchange}" for r in routes).items())
             ),
             candidates_cap=self._config.max_candidates_per_sweep,
-            candidates_by_set=dict(self._set_candidates),
         )
         log.info(
             "sweep_done",
@@ -489,32 +453,9 @@ class Scanner:
             evaluated_symbols=result.evaluated_symbols,
             routes_by_pair=result.routes_by_pair,
             candidates_cap=result.candidates_cap,
-            candidates_by_set=result.candidates_by_set,
             active_streams=self._streams.active if self._streams is not None else 0,
         )
         return result
-
-    def _select_candidates(self, live: list[RouteQuote]) -> list[RouteQuote]:
-        """Top-N routes to evaluate; with shadow portfolios the cap applies inside every set.
-
-        The evaluation list is the union over the sets, and ``self._route_sets`` remembers
-        which sets each route is a candidate of (a set only paper-trades its own candidates).
-        """
-        limit = self._config.max_candidates_per_sweep
-        sets = (
-            {pid: venues for pid, venues in self._paper.sets.items() if venues is not None}
-            if self._paper is not None
-            else {}
-        )
-        if not sets or self._paper is None:
-            self._route_sets = None
-            self._set_candidates = {}
-            return self._finder.select(live, limit)
-        picked = self._finder.select_per_set(live, limit, sets)
-        self._route_sets = picked.membership
-        self._set_candidates = {pid: st.selected for pid, st in picked.stats.items()}
-        self._paper.record_sweep(self._clock.now_ms(), picked.stats)
-        return picked.routes
 
     async def _track_episodes(
         self, evaluations: Sequence[SpreadEvaluation]
@@ -762,8 +703,6 @@ class Scanner:
             await self._episodes.update(episode.mark_alerted(self._clock.now_ms(), net, kind))
         except Exception:  # the Redis dedup key still prevents a duplicate alert
             log.exception("episode_alert_mark_failed", episode_id=episode_id)
-        if self._paper is not None:
-            self._spawn(self._paper_trade(episode_id, evaluation, self._membership(evaluation)))
         log.info(
             "opportunity_alerted",
             route=evaluation.route_key,
@@ -774,75 +713,11 @@ class Scanner:
         )
         return True
 
-    def _membership(self, evaluation: SpreadEvaluation) -> frozenset[str] | None:
-        """Sets whose own top-N held the route this sweep (``None`` = no per-set cap).
-
-        Fail closed: with per-set caps in force, a route without membership trades nowhere.
-        """
-        if self._route_sets is None or self._paper is None:
-            return None
-        held = self._route_sets.get(evaluation.route_key)
-        if held is None:
-            log.warning("paper_membership_missing", route=evaluation.route_key)
-            held = frozenset()
-        self._paper.record_alert(
-            self._clock.now_ms(), evaluation.buy_exchange, evaluation.sell_exchange, held
-        )
-        return held
-
     def _spawn(self, work: Coroutine[Any, Any, None]) -> None:
         """Background task bound to the scanner's lifetime (cancelled on shutdown)."""
         task = asyncio.create_task(work)
         self._latency_checks.add(task)
         task.add_done_callback(self._latency_checks.discard)
-
-    async def _paper_trade(
-        self,
-        episode_id: int,
-        evaluation: SpreadEvaluation,
-        portfolio_ids: frozenset[str] | None,
-    ) -> None:
-        """Execute the alert on paper, on REST books taken after the simulated latency.
-
-        ``portfolio_ids`` = the shadow portfolios whose own top-N held the route this sweep
-        (``None`` = no per-set cap in force: every set containing both legs trades).
-        """
-        if self._paper is None:  # pragma: no cover - only scheduled with a paper trader
-            return
-        try:
-            await asyncio.sleep(self._config.latency_check_ms / 1000)
-            symbol = evaluation.symbol
-            buy, sell = await asyncio.gather(
-                self._fetch_book(evaluation.buy_exchange, symbol, allow_stream=False),
-                self._fetch_book(evaluation.sell_exchange, symbol, allow_stream=False),
-            )
-            await self._paper.execute(
-                portfolio_ids=portfolio_ids,
-                episode_id=episode_id,
-                symbol=symbol,
-                base=evaluation.base,
-                buy_book=buy,
-                sell_book=sell,
-                buy_market=self._universe.market(evaluation.buy_exchange, symbol),
-                sell_market=self._universe.market(evaluation.sell_exchange, symbol),
-                transfer=self._route_transfer(
-                    symbol, evaluation.buy_exchange, evaluation.sell_exchange
-                ),
-                network_quote=self._asset_transfer,
-                buy_exchange=evaluation.buy_exchange,
-                sell_exchange=evaluation.sell_exchange,
-            )
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            log.exception("paper_trade_failed", route=evaluation.route_key)
-
-    def _asset_transfer(self, asset: str, from_exchange: str, to_exchange: str) -> TransferQuote:
-        """Cheapest verified path of ``asset`` between two venues (read-only metadata)."""
-        return select_transfer_route(
-            self._universe.transfer_info(from_exchange, asset),
-            self._universe.transfer_info(to_exchange, asset),
-        )
 
     async def _check_latency(self, episode: OpportunityEpisode) -> None:
         """Did the opportunity survive the simulated execution latency (REST books)?"""

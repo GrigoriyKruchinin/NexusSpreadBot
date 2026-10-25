@@ -24,7 +24,6 @@ from nexus.domain.events import (
     SystemEvent,
     WatchdogAlert,
     WatchdogRecovered,
-    WatchdogRetired,
 )
 from nexus.domain.spread import SpreadEvaluation, TransferStatus
 
@@ -55,9 +54,7 @@ EPISODE_CLOSE_REASONS: Final[dict[str, str]] = {
 WATCHDOG_TITLES: Final[dict[str, str]] = {
     "scanner": "Сканер",
     "backup": "Резервная копия",
-    "paper_sets": "Paper-наборы",
 }
-PAPER_SET_CHECK_PREFIX: Final = "paper_set:"
 WATCHDOG_REASONS: Final[dict[str, str]] = {
     "scanner_stale": "сканер не записывает данные уже {minutes} мин: проверьте контейнер scanner",
     "scanner_no_data": "в базе нет записей работы сканера",
@@ -66,7 +63,6 @@ WATCHDOG_REASONS: Final[dict[str, str]] = {
     "backup_failed": "последняя резервная копия завершилась ошибкой ({minutes} мин назад)",
     "backup_not_copied": "копия дампа не сохранена вне контейнера (диск не подключён?)",
     "check_error": "проверка не выполняется (база данных или файл статуса недоступны)",
-    "paper_set_stale": "данные paper-набора не обновляются {minutes} мин: проверьте логи сканера",
     "backup_stale": "последняя резервная копия была {minutes} мин назад",
 }
 STOP_REASONS: Final[dict[str, str]] = {
@@ -75,9 +71,7 @@ STOP_REASONS: Final[dict[str, str]] = {
 
 
 def watchdog_title(check: str) -> str:
-    """Title of a check; a per-set check shows the set name only (``a-z0-9_``, validated)."""
-    if check.startswith(PAPER_SET_CHECK_PREFIX):
-        return f"Paper-набор {check.removeprefix(PAPER_SET_CHECK_PREFIX)}"
+    """Human title of a check."""
     return WATCHDOG_TITLES.get(check, check)
 
 
@@ -281,13 +275,6 @@ class SystemEventFormatter:
                 return (
                     f"✅ <b>{esc(title)}: проблема устранена</b>\n"
                     f"Длилась около <b>{fmt_duration(event.downtime_min * 60)}</b>"
-                )
-            case WatchdogRetired():
-                name = watchdog_title(event.check)
-                return (
-                    f"ℹ️ <b>{esc(name)} больше не отслеживается</b>\n"
-                    f"Данных нет более {event.hours} ч, считаю удалённым из конфигурации. "
-                    "Проверьте, нужен ли он."
                 )
 
     @staticmethod

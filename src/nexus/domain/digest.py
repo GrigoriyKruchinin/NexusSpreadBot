@@ -2,15 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
-from typing import Final
-
-from nexus.domain.models import ZERO
-
-HUNDRED = Decimal(100)
-HOUR_MS = 3_600_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,146 +37,6 @@ class EpisodeStats:
 
 
 @dataclass(frozen=True, slots=True)
-class PaperStats:
-    """Paper trading: window activity and the portfolio since start."""
-
-    trades: int = 0
-    skipped: dict[str, int] = field(default_factory=dict)
-    realized_usd: Decimal = ZERO
-    """Realized arbitrage profit in the window."""
-    rebalance_usd: Decimal = ZERO
-    """Virtual transfer fees in the window."""
-    rebalances: int = 0
-    blocked_rebalances: int = 0
-    capital_usd: Decimal = ZERO
-    equity_usd: Decimal = ZERO
-    realized_total_usd: Decimal = ZERO
-    rebalance_total_usd: Decimal = ZERO
-    realized_total_excl_conditional_usd: Decimal | None = None
-    """Since start, trades not touching a conditional venue (no equity/MTM); ``None`` = unknown."""
-    rebalance_total_excl_conditional_usd: Decimal | None = None
-
-    @property
-    def total_pnl_usd(self) -> Decimal:
-        """Since start: equity minus capital."""
-        return self.equity_usd - self.capital_usd
-
-    @property
-    def mark_to_market_usd(self) -> Decimal:
-        """Since start: price effect on inventory (total minus trading and transfers)."""
-        return self.total_pnl_usd - self.realized_total_usd + self.rebalance_total_usd
-
-    @property
-    def hedged_pnl_usd(self) -> Decimal:
-        """Since start, as if inventory price risk were hedged: arbitrage minus transfers."""
-        return self.realized_total_usd - self.rebalance_total_usd
-
-    @property
-    def hedged_pnl_excl_conditional_usd(self) -> Decimal | None:
-        """Hedged P&L from rows not touching any conditional venue; ``None`` if not computed."""
-        realized = self.realized_total_excl_conditional_usd
-        rebalance = self.rebalance_total_excl_conditional_usd
-        if realized is None or rebalance is None:
-            return None
-        return realized - rebalance
-
-    @property
-    def hedged_roc_pct(self) -> Decimal | None:
-        """Hedged P&L over capital, percent."""
-        if self.capital_usd <= ZERO:
-            return None
-        return self.hedged_pnl_usd / self.capital_usd * HUNDRED
-
-    @property
-    def roc_pct(self) -> Decimal | None:
-        """Since start: return on capital, percent."""
-        if self.capital_usd <= ZERO:
-            return None
-        return self.total_pnl_usd / self.capital_usd * HUNDRED
-
-
-@dataclass(frozen=True, slots=True)
-class PortfolioSummary:
-    """One shadow portfolio (venue set) since its first record - never backfilled."""
-
-    portfolio_id: str
-    since_ms: int
-    trades: int
-    hedged_pnl_usd: Decimal
-    """Realized arbitrage minus virtual transfer fees since ``since_ms``."""
-    restarted: bool = False
-    """The run began inside the digest window although an earlier run of this set existed
-    (its definition changed): the set restarted with full capital and this new ``since``."""
-
-
-@dataclass(frozen=True, slots=True)
-class SetCoverage:
-    """How continuously the scanner swept one shadow portfolio (venue set) in the window.
-
-    Only complete hours after the set's first record are judged; the partial first and last
-    hours are skipped, so a set added today is never blamed for the time before it existed.
-    """
-
-    portfolio_id: str
-    hours_expected: int
-    hours_gap: int
-    """Hours with fewer sweeps than the configured minimum (includes hours with no row)."""
-    downtime_min: int
-    """Estimated minutes without sweeping: missing share of the expected rate, per hour."""
-
-
-#: The newest hour is judged only once this long after it closed (counters flush every 5 min).
-FLUSH_LAG_MS: Final = 5 * 60_000
-#: An hour below this share of the expected sweeps contributes to the downtime estimate.
-DOWNTIME_TOLERANCE: Final = 0.9
-
-
-def compute_set_coverage(
-    sweeps_by_hour: Mapping[str, Mapping[int, int]],
-    first_seen_ms: Mapping[str, int],
-    window_start_ms: int,
-    window_end_ms: int,
-    min_sweeps_per_hour: int,
-    expected_sweeps_per_hour: int | None = None,
-) -> tuple[SetCoverage, ...]:
-    """Per-set gap accounting from ``paper_cap_stats.sweeps`` (hour start ms -> sweeps).
-
-    An hour with fewer than ``min_sweeps_per_hour`` sweeps is a *gap hour* (a flag only).
-    Downtime is measured against the expected rate: ``expected_sweeps_per_hour`` (nominal, from
-    the sweep interval) capped by the median of the set's healthy hours, so a slow-but-steady
-    scanner is not blamed. Hours under 90 % of it add their missing share, so a 45-minute outage
-    inside one hour is not hidden. The newest hour is skipped until its counters were flushed.
-    This is an estimate for the digest; the GO report recomputes from raw ``sweeps``.
-    """
-    first_full = -(-window_start_ms // HOUR_MS) * HOUR_MS  # ceil to a whole hour
-    last_end = (window_end_ms - FLUSH_LAG_MS) // HOUR_MS * HOUR_MS
-    result: list[SetCoverage] = []
-    for pid, first_seen in sorted(first_seen_ms.items()):
-        start = max(first_full, first_seen - first_seen % HOUR_MS + HOUR_MS)
-        hours = range(start, last_end, HOUR_MS)
-        counts = sweeps_by_hour.get(pid, {})
-        gaps = [h for h in hours if counts.get(h, 0) < min_sweeps_per_hour]
-        expected = _expected_rate(
-            [counts.get(h, 0) for h in hours], min_sweeps_per_hour, expected_sweeps_per_hour
-        )
-        missing = 0
-        for h in hours:
-            share = counts.get(h, 0) / expected
-            if share < DOWNTIME_TOLERANCE:
-                missing += round(60 * (1 - share))
-        result.append(SetCoverage(pid, len(hours), len(gaps), missing))
-    result.sort(key=lambda c: (c.portfolio_id != "all", c.portfolio_id))
-    return tuple(result)
-
-
-def _expected_rate(counts: list[int], minimum: int, nominal: int | None) -> int:
-    healthy = sorted(c for c in counts if c >= minimum)
-    median = healthy[len(healthy) // 2] if healthy else None
-    candidates = [v for v in (nominal, median) if v is not None]
-    return max(minimum, min(candidates)) if candidates else minimum
-
-
-@dataclass(frozen=True, slots=True)
 class QuarantineSummary:
     """A quarantine started in the window."""
 
@@ -200,7 +53,6 @@ class DigestData:
     window_start_ms: int
     window_end_ms: int
     episodes: EpisodeStats
-    paper: PaperStats | None
     quarantines: tuple[QuarantineSummary, ...]
     active_quarantines: int
     uptime_pct: dict[str, int | None]
@@ -211,7 +63,3 @@ class DigestData:
     """Configured conditional venues (lowercase ids)."""
     unverified_evaluations: int = 0
     """Qualifying evaluations that were not alerted for lack of a verified transfer path."""
-    portfolios: tuple[PortfolioSummary, ...] = ()
-    """Shadow portfolios that have records (``all`` first)."""
-    coverage: tuple[SetCoverage, ...] = ()
-    """Per-set scanner coverage / downtime in the window (empty = nothing recorded)."""

@@ -299,7 +299,7 @@ def test_empty_required_value_is_still_missing(monkeypatch: pytest.MonkeyPatch) 
 def test_episode_gap_must_span_two_sweeps(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("POSTGRES_PASSWORD", "a-strong-password")
     assert ScannerRoleSettings.load().episodes.close_gap_s == 300
-    assert ScannerRoleSettings.load().paper.latency_ms == 2_000
+    assert ScannerRoleSettings.load().scanner.latency_check_ms == 2_000
     monkeypatch.setenv("SCANNER_TICKER_INTERVAL_S", "151")
     with pytest.raises(ValueError, match="EPISODE_CLOSE_GAP_S"):
         ScannerRoleSettings.load()

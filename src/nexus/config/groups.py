@@ -16,7 +16,6 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from nexus.config.base import NexusBaseSettings, StrTuple
-from nexus.config.venue_sets import DEFAULT_VENUE_SETS, validate_venue_sets_syntax
 
 _EXCHANGE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _MIN_DB_PASSWORD_LENGTH = 12
@@ -260,6 +259,9 @@ class ScannerSettings(NexusBaseSettings):
     """Stream order books of recently profitable routes over WebSocket (hot-set)."""
     ws_max_streams: int = Field(default=20, ge=0, le=200)
     ws_hot_ttl_s: int = Field(default=300, ge=30, le=3_600)
+    latency_check_ms: int = Field(default=2_000, ge=0, le=60_000)
+    """A new episode is re-checked on REST books taken this long after detection ("survived
+    latency", a measure of how long a spread lives)."""
 
     @field_validator("quote_assets", "symbols_whitelist", "symbols_blacklist")
     @classmethod
@@ -378,46 +380,6 @@ class QuarantineSettings(NexusBaseSettings):
         return self
 
 
-class PaperSettings(NexusBaseSettings):
-    """Paper trading simulation (``PAPER_*``)."""
-
-    model_config = SettingsConfigDict(env_prefix="PAPER_")
-
-    enabled: bool = True
-    """Simulate trades and inventory on every alert (no exchange access, nothing moves)."""
-    capital_usd: Decimal = Field(default=Decimal(10_000), gt=0)
-    """Fixed virtual capital of EVERY venue set (user decision 2026-10-23), split equally over
-    the set's venues. Replaces the old per-venue seed that grew with every new route."""
-    usdt_share_pct: Decimal = Field(default=Decimal(50), gt=0, lt=100)
-    """Share of each venue's capital held as USDT; the rest is the coin inventory budget."""
-    coin_per_route_usd: Decimal = Field(default=Decimal(250), gt=0)
-    """Virtual coin inventory seeded on the sell venue at the first-seen mid price, taken from
-    the venue's coin budget (when the budget is used up, further coins are not seeded)."""
-    venue_sets: str = DEFAULT_VENUE_SETS
-    """Shadow portfolios (``name`` or ``name=spec``, ``;``-separated), see
-    :mod:`nexus.config.venue_sets`. Data of a set accrues only from the moment it is added
-    (no backfill); removing a set stops accrual, its rows stay."""
-    coin_idle_release_h: int = Field(default=24, ge=0, le=24 * 365)
-    """A coin slot idle this many hours is freed (converted back to USDT, cost booked) when a
-    new coin needs the venue's coin budget, so the soak does not freeze on the first coins seen.
-    0 = never free (first-come lock-in; skipped routes then count as COIN_BUDGET_EXHAUSTED)."""
-    conversion_cost_pct: Decimal = Field(default=Decimal("0.3"), ge=0, lt=100)
-    """Estimated cost of that conversion (taker fee + half the spread), percent of its value."""
-    trade_notional_usd: Decimal = Field(default=Decimal(1_000), gt=0)
-    rebalance_threshold_pct: Decimal = Field(default=Decimal(20), gt=0, lt=100)
-    """A balance below this share of its starting amount triggers a virtual rebalance."""
-    rebalance_delay_min: int = Field(default=30, ge=0, le=24 * 60)
-    """Rebalanced funds are locked (in transit) this long."""
-    latency_ms: int = Field(default=2_000, ge=0, le=60_000)
-    """Simulated detection-to-execution latency: a new episode is re-checked on REST books
-    taken this long after detection ("survived latency")."""
-
-    @field_validator("venue_sets")
-    @classmethod
-    def _venue_sets_syntax(cls, value: str) -> str:
-        return validate_venue_sets_syntax(value)
-
-
 class DigestSettings(NexusBaseSettings):
     """Daily Telegram digest (``DIGEST_*``)."""
 
@@ -464,7 +426,7 @@ class MaintenanceSettings(NexusBaseSettings):
     model_config = SettingsConfigDict(env_prefix="MAINTENANCE_")
 
     snapshot_retention_days: int = Field(default=7, ge=1)
-    """Spread snapshots, exchange health, metadata stats, old paper balance snapshots."""
+    """Spread snapshots, exchange health, metadata stats."""
     evaluation_retention_days: int = Field(default=30, ge=1)
     episode_retention_days: int = Field(default=90, ge=1)
     """Closed opportunity episodes and the quarantine history (digest analytics)."""
@@ -485,24 +447,6 @@ class WatchdogSettings(NexusBaseSettings):
     """Status file written by ``scripts/backup.sh`` (mounted read-only into the worker)."""
     backup_max_age_h: int = Field(default=26, ge=1)
     """Alert when the last backup finished longer ago than this (daily cron + slack)."""
-    coverage_min_sweeps_per_hour: int = Field(default=60, ge=1)
-    """An hour with fewer recorded sweeps of a set counts as a scanner gap in the digest."""
-    expected_sweeps_per_hour: int = Field(default=360, ge=1)
-    """Nominal sweeps per hour (3600 / scanner.ticker_interval_s); digest downtime baseline."""
-
-    paper_set_stale_h: int = Field(default=3, ge=2)
-    """Alert when a paper venue set has no ``paper_cap_stats`` hour newer than this. Measured
-    from the hour start, so a healthy set already shows ~1 h 5 min (hour + flush lag)."""
-    paper_set_retire_h: int = Field(default=168, ge=3)
-    """A set silent for longer than this counts as removed from PAPER_VENUE_SETS (no alert; a
-    set that was firing gets one "no longer tracked" message). Must exceed paper_set_stale_h."""
-
-    @model_validator(mode="after")
-    def _retire_after_stale(self) -> WatchdogSettings:
-        if self.paper_set_retire_h <= self.paper_set_stale_h:
-            msg = "WATCHDOG_PAPER_SET_RETIRE_H must be greater than WATCHDOG_PAPER_SET_STALE_H"
-            raise ValueError(msg)
-        return self
 
     @field_validator("backup_status_path")
     @classmethod

@@ -73,6 +73,8 @@ rate_limit_backoff_s = 60
 ws_enabled = true
 ws_max_streams = 20
 ws_hot_ttl_s = 300
+# A new episode is re-checked on REST books this long after detection ("survived latency")
+latency_check_ms = 2000
 
 [spread]
 min_net_profit_pct = 0.3
@@ -102,21 +104,6 @@ ttl_h = 24
 window_h = 6
 max_episodes = 5
 
-[paper]
-enabled = true
-# Shadow portfolios, ";"-separated (see nexus.config.venue_sets)
-venue_sets = "all;excl_conditional;excl_bybit=-bybit;excl_gateio=-gateio"
-# Fixed virtual capital of EVERY venue set (nothing real moves)
-capital_usd = 10000
-usdt_share_pct = 50
-coin_per_route_usd = 250
-coin_idle_release_h = 24
-conversion_cost_pct = 0.3
-trade_notional_usd = 1000
-latency_ms = 2000
-rebalance_threshold_pct = 20
-rebalance_delay_min = 30
-
 [maintenance]
 # Lowering retention deletes data on the next cleanup: review such changes carefully.
 snapshot_retention_days = 7
@@ -130,7 +117,7 @@ time = "09:00"
 tz = "Europe/Moscow"
 
 [watchdog]
-# Liveness checks (beat task in the maintenance worker) and digest coverage accounting.
+# Liveness checks (beat task in the maintenance worker).
 enabled = true
 interval_s = 300
 # Alert when the scanner recorded no exchange call for this many minutes
@@ -139,12 +126,3 @@ scanner_stale_min = 10
 backup_status_path = "/backups/last_backup.json"
 # Alert when the last backup finished longer ago than this (daily cron + slack)
 backup_max_age_h = 26
-# An hour with fewer sweeps of a venue set counts as a scanner gap in the digest
-coverage_min_sweeps_per_hour = 60
-# Nominal sweeps per hour (3600 / ticker_interval_s); downtime in the digest is measured against it
-expected_sweeps_per_hour = 360
-# Alert when a paper venue set has no paper_cap_stats hour newer than this (measured from the hour
-# start, so a healthy set already shows ~1 h 5 min with the flush lag)
-paper_set_stale_h = 3
-# A set silent longer than this is treated as removed from PAPER_VENUE_SETS (no alert)
-paper_set_retire_h = 168

@@ -7,8 +7,7 @@
   after env > TOML > default merge; Decimals normalized; deployment plumbing POSTGRES_/REDIS_/LOG_
   excluded). SECRET and ENV-ONLY fields are excluded entirely: not even a
   hash of a credential is derived. It is independent of the service role, so every container of
-  one run logs the same value. It is separate from the paper run ``config_hash`` of B15 (which
-  covers the derived paper/estimator parameters of one portfolio) and does not change it.
+  one run logs the same value.
 """
 
 from __future__ import annotations
@@ -39,7 +38,6 @@ from nexus.config.groups import (
     ExchangesSettings,
     LoggingSettings,
     MaintenanceSettings,
-    PaperSettings,
     QuarantineSettings,
     RedisSettings,
     ScannerSettings,
@@ -119,7 +117,6 @@ def settings_hash() -> str:
         AlertPolicySettings(),
         EpisodeSettings(),
         QuarantineSettings(),
-        PaperSettings(),
         MaintenanceSettings(),
         DigestSettings(),
     ]

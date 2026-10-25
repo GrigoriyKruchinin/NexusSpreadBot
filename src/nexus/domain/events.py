@@ -134,19 +134,6 @@ class WatchdogRecovered:
     downtime_min: int
 
 
-@dataclass(frozen=True, slots=True)
-class WatchdogRetired:
-    """A firing paper set was silent so long that it is considered removed from the config.
-
-    Not a recovery: the set never came back. Sent once, then the incident state is cleared.
-    """
-
-    kind: ClassVar[EventKind] = "watchdog_retired"
-    check: str
-    hours: int
-    """The retire threshold (hours without data)."""
-
-
 SystemEvent = (
     ScannerStarted
     | ScannerStopped
@@ -156,7 +143,6 @@ SystemEvent = (
     | RoutesQuarantined
     | WatchdogAlert
     | WatchdogRecovered
-    | WatchdogRetired
 )
 
 _EVENT_TYPES: dict[str, type[Any]] = {
@@ -170,7 +156,6 @@ _EVENT_TYPES: dict[str, type[Any]] = {
         RoutesQuarantined,
         WatchdogAlert,
         WatchdogRecovered,
-        WatchdogRetired,
     )
 }
 
@@ -247,7 +232,6 @@ __all__ = [
     "SystemEvent",
     "WatchdogAlert",
     "WatchdogRecovered",
-    "WatchdogRetired",
     "decimal_str",
     "event_from_payload",
     "event_to_payload",

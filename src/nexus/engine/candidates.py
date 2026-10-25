@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
 
 from nexus.domain.models import ZERO, MarketInfo, Ticker
-from nexus.domain.quarantine import route_key
 
 HUNDRED = Decimal(100)
 
@@ -34,38 +33,6 @@ class CandidateFilter:
     min_net_profit_pct: Decimal
     max_gross_spread_pct: Decimal
     min_quote_volume_usd: Decimal
-
-
-@dataclass(frozen=True, slots=True)
-class SetSweepStats:
-    """Cap pressure of one venue set in one sweep."""
-
-    eligible: int
-    """Routes inside the set that pass the candidate filters (before the top-N cap)."""
-    selected: int
-    """Routes of the set kept by its own top-N cap."""
-
-    @property
-    def dropped(self) -> int:
-        """Eligible routes cut by the cap."""
-        return self.eligible - self.selected
-
-    @property
-    def cap_bound(self) -> bool:
-        """True when the cap removed at least one eligible route."""
-        return self.eligible > self.selected
-
-
-@dataclass(frozen=True, slots=True)
-class SetSelection:
-    """Union of the per-set top-N candidates and which sets each route is a candidate of."""
-
-    routes: list[RouteQuote]
-    """Ranked like :meth:`CandidateFinder.select` (best fee-bound net first), no duplicates."""
-    membership: dict[str, frozenset[str]]
-    """``route_key -> names of the venue sets whose own top-N contains the route``."""
-    stats: dict[str, SetSweepStats] = field(default_factory=dict)
-    """Per set: eligible vs selected routes this sweep (cap-binding count)."""
 
 
 class CandidateFinder:
@@ -135,30 +102,6 @@ class CandidateFinder:
         ]
         selected.sort(key=lambda r: (-r.fee_bound_net_pct, r.symbol))
         return selected
-
-    def select_per_set(
-        self, routes: list[RouteQuote], limit: int, sets: Mapping[str, frozenset[str]]
-    ) -> SetSelection:
-        """Apply the top-N cap separately inside every venue set.
-
-        A route belongs to a set only if BOTH legs are in the set; the cap is applied after
-        that restriction, so a route crowded out of ``all`` by conditional-venue routes still
-        competes in ``excl_conditional`` (no crowd-out bias). The evaluation list is the union.
-        """
-        members: dict[str, set[str]] = defaultdict(set)
-        by_key: dict[str, RouteQuote] = {}
-        stats: dict[str, SetSweepStats] = {}
-        for name, venues in sets.items():
-            inside = [r for r in routes if r.buy_exchange in venues and r.sell_exchange in venues]
-            eligible = self._qualifying(inside)
-            kept = eligible[:limit]
-            stats[name] = SetSweepStats(eligible=len(eligible), selected=len(kept))
-            for route in kept:
-                key = route_key(route.symbol, route.buy_exchange, route.sell_exchange)
-                by_key[key] = route
-                members[key].add(name)
-        union = sorted(by_key.values(), key=lambda r: (-r.fee_bound_net_pct, r.symbol))
-        return SetSelection(union, {k: frozenset(v) for k, v in members.items()}, stats)
 
     def _liquid(self, ticker: Ticker) -> bool:
         threshold = self._config.min_quote_volume_usd

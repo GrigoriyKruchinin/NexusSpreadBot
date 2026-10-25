@@ -25,14 +25,11 @@ from nexus.config.file import (
     ConfigFileError,
     _denied,
 )
-from nexus.config.groups import ConditionalVenuesSettings, PaperSettings
 from nexus.config.provenance import env_overridden_names, log_settings_provenance, settings_hash
-from nexus.config.venue_sets import resolve_venue_sets
 from tests.db_guard import UnsafeDatabaseError, assert_test_database
 
 ROOT = Path(__file__).resolve().parents[3]
 REPO_TOML = ROOT / "config" / "nexus.toml"
-SOAK_VENUE_SETS = "all;excl_conditional;excl_bybit=-bybit;excl_gateio=-gateio"
 PW = "unit-test-password-123"
 SECRET_VALUE = "s3cr3t-value-that-must-never-leak"
 
@@ -116,23 +113,7 @@ def test_repo_toml_equals_code_defaults(monkeypatch: pytest.MonkeyPatch) -> None
     with_file = dump()
     monkeypatch.delenv("NEXUS_CONFIG_FILE")  # default path in the empty tmp cwd: absent
     without_file = dump()
-    # The one deliberate deviation (user decision 2026-10-23: soak runs 4 venue sets).
-    for dumped in with_file:
-        if "venue_sets" in dumped:
-            assert dumped.pop("venue_sets") == SOAK_VENUE_SETS
-    assert with_file == [{k: v for k, v in d.items() if k != "venue_sets"} for d in without_file]
-
-
-def test_soak_venue_sets_resolve_with_default_venues(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("NEXUS_CONFIG_FILE", str(REPO_TOML))
-    paper = PaperSettings()
-    resolved = resolve_venue_sets(
-        paper.venue_sets,
-        ExchangesSettings().enabled,
-        ConditionalVenuesSettings().venues,
-        strict=True,
-    )
-    assert list(resolved) == ["all", "excl_conditional", "excl_bybit", "excl_gateio"]
+    assert with_file == without_file
 
 
 def test_repo_toml_completeness_and_classification() -> None:

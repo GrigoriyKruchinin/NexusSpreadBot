@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
-from dataclasses import replace
 
 import structlog
 from redis.asyncio import Redis
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import nexus.adapters.cex  # noqa: F401 - registers built-in exchange adapters
 from nexus.adapters.key_policy import verify_key_policies
@@ -18,7 +16,7 @@ from nexus.config.roles import (
     MaintenanceWorkerSettings,
     ScannerRoleSettings,
 )
-from nexus.domain.clock import Clock, SystemClock
+from nexus.domain.clock import SystemClock
 from nexus.engine.candidates import CandidateFilter, CandidateFinder
 from nexus.engine.estimator import EstimatorConfig, NetSpreadEstimator
 from nexus.infra.backup_status import FileBackupStatus
@@ -40,17 +38,13 @@ from nexus.persistence.repositories import (
     ExchangeHealthRepository,
     MarketRepository,
     MetadataStatsRepository,
-    PaperRepository,
-    PaperSetActivityRepository,
     QuarantineRepository,
     RetentionRepository,
     ScannerActivityRepository,
     SnapshotRepository,
 )
-from nexus.scanner.capstats import CapStatsBuffer
 from nexus.scanner.episodes import EpisodeTracker
 from nexus.scanner.health import ExchangeHealthTracker
-from nexus.scanner.paper import PaperBook, PaperTrader
 from nexus.scanner.quarantine import QuarantineManager
 from nexus.scanner.service import Repositories, Scanner, ScannerConfig
 from nexus.scanner.streams import OrderBookStreams
@@ -59,7 +53,6 @@ from nexus.services.alerts import AlertService
 from nexus.services.digest import DigestService
 from nexus.services.maintenance import RetentionService
 from nexus.services.watchdog import LivenessWatchdog
-from nexus.simulation.portfolio import PaperConfig, allocate_capital
 from nexus.workers.dispatch import CeleryAlertDispatcher
 
 log = structlog.get_logger(__name__)
@@ -75,72 +68,6 @@ def build_adapters(settings: ScannerRoleSettings) -> dict[str, BaseExchangeAdapt
         name: exchange_registry.create(name, settings.credentials[name], options)
         for name in settings.exchanges.enabled
     }
-
-
-def build_paper_book(
-    settings: ScannerRoleSettings, sessions: async_sessionmaker[AsyncSession], clock: Clock
-) -> PaperBook | None:
-    """Shadow paper portfolios (``PAPER_ENABLED``, ``PAPER_VENUE_SETS``): one independent
-    :class:`PaperTrader` per venue set with the SAME fixed capital (``PAPER_CAPITAL_USD``),
-    trades priced at the paper notional without per-trade transfer cost (inventory is
-    rebalanced virtually instead)."""
-    paper = settings.paper
-    if not paper.enabled:
-        return None
-    pricing = replace(
-        EstimatorConfig.from_settings(settings.spread),
-        reference_notional_usd=paper.trade_notional_usd,
-        include_transfer_cost=False,
-    )
-    repository = PaperRepository(sessions)
-    traders: dict[str, PaperTrader] = {}
-    for name, venues in settings.venue_sets.items():
-        usdt, coin_budget = allocate_capital(paper.capital_usd, len(venues), paper.usdt_share_pct)
-        traders[name] = PaperTrader(
-            PaperConfig(
-                usdt_per_exchange=usdt,
-                coin_per_route_usd=min(paper.coin_per_route_usd, coin_budget),
-                rebalance_threshold_pct=paper.rebalance_threshold_pct,
-                rebalance_delay_ms=paper.rebalance_delay_min * 60_000,
-                trade_notional_usd=paper.trade_notional_usd,
-                transfer_tax_pct=dict(settings.spread.transfer_tax_pct),
-                coin_budget_per_venue_usd=coin_budget,
-                coin_idle_release_ms=paper.coin_idle_release_h * 3_600_000 or None,
-                conversion_cost_pct=paper.conversion_cost_pct,
-            ),
-            repository,
-            NetSpreadEstimator(pricing, clock),
-            clock,
-            portfolio_id=name,
-            venues=frozenset(venues),
-            strategy={
-                "latency_ms": str(paper.latency_ms),
-                "max_candidates_per_sweep": str(settings.scanner.max_candidates_per_sweep),
-                "alert_cooldown_s": str(settings.spread.alert_cooldown_s),
-                "realert_growth_pct": str(settings.alerts.realert_growth_pct),
-                "default_taker_fee_pct": str(settings.spread.default_taker_fee_pct),
-                "max_unverified_gross_spread_pct": str(
-                    settings.spread.max_unverified_gross_spread_pct
-                ),
-                "min_quote_volume_usd": str(settings.scanner.min_quote_volume_usd),
-                # universe: which routes/coins are eligible at all
-                "quote_assets": ",".join(sorted(settings.scanner.quote_assets)),
-                "symbols_whitelist": ",".join(sorted(settings.scanner.symbols_whitelist)),
-                "symbols_blacklist": ",".join(sorted(settings.scanner.symbols_blacklist)),
-                "orderbook_depth": str(settings.scanner.orderbook_depth),
-                "quarantine_persist_min": str(settings.quarantine.persist_min),
-                "quarantine_ttl_h": str(settings.quarantine.ttl_h),
-                "quarantine_window_h": str(settings.quarantine.window_h),
-                "quarantine_max_episodes": str(settings.quarantine.max_episodes),
-            },
-        )
-        log.info(
-            "paper_portfolio_configured",
-            portfolio=name,
-            venues=list(venues),
-            capital_usd=str(paper.capital_usd),
-        )
-    return PaperBook(traders, CapStatsBuffer(repository))
 
 
 def redis_client(url: str, socket_timeout_s: float) -> Redis:
@@ -226,7 +153,7 @@ async def scanner_scope(settings: ScannerRoleSettings) -> AsyncIterator[Scanner]
                 alert_cooldown_s=spread.alert_cooldown_s,
                 # Books older than the freshness limit are rejected anyway.
                 book_deadline_s=max(2.0, spread.max_orderbook_age_ms / 1000),
-                latency_check_ms=settings.paper.latency_ms,
+                latency_check_ms=scan.latency_check_ms,
                 realert_growth_pct=settings.alerts.realert_growth_pct,
             ),
             clock=clock,
@@ -236,7 +163,6 @@ async def scanner_scope(settings: ScannerRoleSettings) -> AsyncIterator[Scanner]
                 close_gap_ms=settings.episodes.close_gap_s * 1000,
                 clock=clock,
             ),
-            paper=build_paper_book(settings, sessions, clock),
             quarantine=QuarantineManager(
                 RedisQuarantineStore(redis, clock),
                 QuarantineRepository(sessions),
@@ -280,8 +206,6 @@ async def digest_scope(settings: AlertsWorkerSettings) -> AsyncIterator[DigestSe
             DigestRepository(
                 create_session_factory(engine),
                 conditional_venues=settings.conditional.venues,
-                coverage_min_sweeps_per_hour=settings.watchdog.coverage_min_sweeps_per_hour,
-                expected_sweeps_per_hour=settings.watchdog.expected_sweeps_per_hour,
             ),
             notifier,
             SystemClock(),
@@ -322,7 +246,6 @@ async def watchdog_scope(settings: MaintenanceWorkerSettings) -> AsyncIterator[L
             dispatcher=CeleryAlertDispatcher(create_celery_app(settings.celery)),
             clock=SystemClock(),
             settings=settings.watchdog,
-            paper_sets=PaperSetActivityRepository(create_session_factory(engine)),
         )
     finally:
         await redis.aclose()

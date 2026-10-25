@@ -14,7 +14,6 @@ from nexus.domain.events import (
     ExchangeRecovered,
     WatchdogAlert,
     WatchdogRecovered,
-    WatchdogRetired,
     event_from_payload,
 )
 from nexus.interfaces.notifications import INotifier, OutgoingMessage
@@ -112,7 +111,7 @@ class AlertService:
         # Watchdog events are state-gated (one per incident, never misleading when late) and the
         # incident is already marked as announced, so they must survive an alerts-worker outage.
         if isinstance(emitted_at_ms, int) and not isinstance(
-            event, WatchdogAlert | WatchdogRecovered | WatchdogRetired
+            event, WatchdogAlert | WatchdogRecovered
         ):
             age_ms = self._clock.now_ms() - emitted_at_ms
             if age_ms > self._event_max_age_ms:

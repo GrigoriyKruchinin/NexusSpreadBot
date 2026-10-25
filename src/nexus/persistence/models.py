@@ -25,8 +25,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from nexus.simulation.portfolio import DEFAULT_PORTFOLIO_ID
-
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
     "uq": "uq_%(table_name)s_%(column_0_name)s",
@@ -230,123 +228,6 @@ class RouteQuarantineRow(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     lifted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-
-class PaperPortfolioRow(Base):
-    """Registry of paper portfolio runs (one row per run; the latest row of a name is current).
-
-    ``started_at`` is the portfolio's ``since``: unlike the snapshots it is never purged by
-    retention. A changed definition (``config_hash``) starts a new run with fresh capital.
-    """
-
-    __tablename__ = "paper_portfolios"
-    __table_args__ = (
-        Index("ix_paper_portfolios_portfolio_started_at", "portfolio_id", "started_at"),
-    )
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    """Run id."""
-    portfolio_id: Mapped[str] = mapped_column(String(32))
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    venues: Mapped[str] = mapped_column(Text)
-    """Sorted venue names, comma-separated (empty for the legacy pre-B15 run)."""
-    capital_usd: Mapped[Decimal] = mapped_column(Money)
-    config_hash: Mapped[str] = mapped_column(String(64))
-    """SHA-256 of the run definition (``legacy`` for the backfilled pre-B15 run)."""
-
-
-class PaperCapStatsRow(Base):
-    """Hourly per-set cap-binding counters (is the candidate cap distorting a set?)."""
-
-    __tablename__ = "paper_cap_stats"
-
-    portfolio_id: Mapped[str] = mapped_column(String(32), primary_key=True)
-    hour: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
-    sweeps: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    sweeps_cap_bound: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    """Sweeps in which the set's own top-N cut at least one eligible route."""
-    dropped_routes: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    """Eligible routes cut by the cap, summed over the hour's sweeps."""
-    alerts_cap_excluded: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    """Alerts on routes inside the set but outside its top-N that sweep (not paper-traded)."""
-
-
-class PaperTradeRow(Base):
-    """A simulated trade (executed or skipped with a reason)."""
-
-    __tablename__ = "paper_trades"
-    __table_args__ = (
-        Index("ix_paper_trades_portfolio_executed_at", "portfolio_id", "executed_at"),
-    )
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    portfolio_id: Mapped[str] = mapped_column(
-        String(32), default=DEFAULT_PORTFOLIO_ID, server_default=DEFAULT_PORTFOLIO_ID
-    )
-    """Venue set (shadow portfolio) the trade belongs to."""
-    executed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    episode_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("opportunity_episodes.id", ondelete="SET NULL")
-    )
-    symbol: Mapped[str] = mapped_column(String(64))
-    base: Mapped[str] = mapped_column(String(32))
-    buy_exchange: Mapped[str] = mapped_column(String(32))
-    sell_exchange: Mapped[str] = mapped_column(String(32))
-    executed: Mapped[bool] = mapped_column(Boolean)
-    skip_reason: Mapped[str | None] = mapped_column(String(32))
-    cost_quote: Mapped[Decimal | None] = mapped_column(Money)
-    proceeds_quote: Mapped[Decimal | None] = mapped_column(Money)
-    base_bought: Mapped[Decimal | None] = mapped_column(Money)
-    base_sold: Mapped[Decimal | None] = mapped_column(Money)
-    net_usd: Mapped[Decimal | None] = mapped_column(Money)
-    net_pct: Mapped[Decimal | None] = mapped_column(Money)
-
-
-class PaperRebalanceRow(Base):
-    """A virtual inventory transfer (simulation only - nothing is ever transferred)."""
-
-    __tablename__ = "paper_rebalances"
-    __table_args__ = (
-        Index("ix_paper_rebalances_portfolio_started_at", "portfolio_id", "started_at"),
-        Index("ix_paper_rebalances_portfolio_status", "portfolio_id", "status"),
-    )
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    portfolio_id: Mapped[str] = mapped_column(
-        String(32), default=DEFAULT_PORTFOLIO_ID, server_default=DEFAULT_PORTFOLIO_ID
-    )
-    asset: Mapped[str] = mapped_column(String(32))
-    from_exchange: Mapped[str] = mapped_column(String(32))
-    to_exchange: Mapped[str] = mapped_column(String(32))
-    amount: Mapped[Decimal] = mapped_column(Money)
-    fee: Mapped[Decimal] = mapped_column(Money)
-    fee_usd: Mapped[Decimal] = mapped_column(Money)
-    network: Mapped[str | None] = mapped_column(String(64))
-    status: Mapped[str] = mapped_column(String(16))
-    note: Mapped[str] = mapped_column(Text, default="")
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    arrives_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-
-
-class PaperBalanceSnapshotRow(Base):
-    """Paper holdings of one venue at a point in time (the latest set restores the state)."""
-
-    __tablename__ = "paper_balance_snapshots"
-    __table_args__ = (
-        Index("ix_paper_balance_snapshots_portfolio_captured_at", "portfolio_id", "captured_at"),
-    )
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    portfolio_id: Mapped[str] = mapped_column(
-        String(32), default=DEFAULT_PORTFOLIO_ID, server_default=DEFAULT_PORTFOLIO_ID
-    )
-    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    exchange: Mapped[str] = mapped_column(String(32))
-    asset: Mapped[str] = mapped_column(String(32))
-    amount: Mapped[Decimal] = mapped_column(Money)
-    seed_amount: Mapped[Decimal | None] = mapped_column(Money)
-    seed_price: Mapped[Decimal | None] = mapped_column(Money)
-    price_usd: Mapped[Decimal | None] = mapped_column(Money)
 
 
 class ExchangeMetadataStatsRow(Base):

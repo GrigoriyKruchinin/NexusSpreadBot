@@ -14,8 +14,6 @@ from typing import Final
 CHECK_SCANNER: Final = "scanner"
 CHECK_BACKUP: Final = "backup"
 CHECKS: Final = (CHECK_SCANNER, CHECK_BACKUP)
-#: Prefix of the per-venue-set check name (``paper_set:<set>``); one incident state per set.
-CHECK_PAPER_SET_PREFIX: Final = "paper_set:"
 
 SCANNER_STALE: Final = "scanner_stale"
 SCANNER_NO_DATA: Final = "scanner_no_data"
@@ -24,16 +22,11 @@ BACKUP_UNREADABLE: Final = "backup_unreadable"
 BACKUP_FAILED: Final = "backup_failed"
 BACKUP_NOT_COPIED: Final = "backup_not_copied"
 BACKUP_STALE: Final = "backup_stale"
-PAPER_SET_STALE: Final = "paper_set_stale"
-#: Silent for longer than the retire threshold: treated as removed from the configuration.
-PAPER_SET_RETIRED: Final = "paper_set_retired"
 CHECK_ERROR: Final = "check_error"
 
 #: Reasons that can be a normal state right after a fresh start (no data / no backup yet):
 #: they alert only after persisting for the check's grace period.
-GRACE_REASONS: Final = frozenset(
-    {SCANNER_NO_DATA, BACKUP_MISSING, BACKUP_UNREADABLE, CHECK_ERROR, PAPER_SET_STALE}
-)
+GRACE_REASONS: Final = frozenset({SCANNER_NO_DATA, BACKUP_MISSING, BACKUP_UNREADABLE, CHECK_ERROR})
 
 #: Severity rank: a firing incident is announced again when its reason ranks higher.
 SEVERITY: Final[dict[str, int]] = {
@@ -43,7 +36,6 @@ SEVERITY: Final[dict[str, int]] = {
     CHECK_ERROR: 1,
     BACKUP_NOT_COPIED: 2,
     SCANNER_STALE: 3,
-    PAPER_SET_STALE: 3,
     BACKUP_STALE: 3,
     BACKUP_FAILED: 3,
 }
@@ -106,35 +98,3 @@ def check_backup(raw: str | None, now_ms: int, max_age_h: int) -> Finding:
     if not copied:
         return Finding(CHECK_BACKUP, BACKUP_NOT_COPIED, age_min)
     return Finding(CHECK_BACKUP)
-
-
-def paper_set_check(name: str) -> str:
-    """Check name (and Redis state key part) of one venue set."""
-    return f"{CHECK_PAPER_SET_PREFIX}{name}"
-
-
-def check_paper_set(
-    name: str,
-    started_ms: int,
-    newest_hour_ms: int | None,
-    now_ms: int,
-    stale_h: int,
-    retire_h: int,
-) -> Finding:
-    """A venue set must keep producing hourly ``paper_cap_stats`` rows.
-
-    ``started_ms`` is the start of the set's current run (registry); ``newest_hour_ms`` is the
-    start of its newest stats hour (``None`` = no row yet). The age is measured from the hour
-    start, so a healthy set shows up to ~65 min (hour + flush interval); ``stale_h`` must leave
-    room for that. A set silent for longer than ``retire_h`` is treated as removed from the
-    configuration (its rows stay, nothing more is expected): the finding carries
-    ``PAPER_SET_RETIRED`` and the service clears the incident state (see ``_retire``).
-    """
-    last_ms = max(started_ms, newest_hour_ms or 0)
-    age_min = max(0, (now_ms - last_ms) // MINUTE_MS)
-    check = paper_set_check(name)
-    if age_min >= retire_h * 60:
-        return Finding(check, PAPER_SET_RETIRED, age_min)
-    if age_min >= stale_h * 60:
-        return Finding(check, PAPER_SET_STALE, age_min)
-    return Finding(check)

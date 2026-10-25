@@ -6,7 +6,7 @@
 - complexity: medium (focused on 5-6 modules, existing tests as safety net)
 - size: M
 - depends_on: T1a
-- status: todo
+- status: done
 
 ## Goal
 Digest and watchdog keep working for the scanner only; per-set paper freshness (D-08) and paper retention are gone.

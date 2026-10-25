@@ -2,18 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from datetime import datetime
-from decimal import Decimal
 from typing import Final
 from zoneinfo import ZoneInfo
 
 from nexus.domain.digest import (
     DigestData,
     EpisodeStats,
-    PaperStats,
-    PortfolioSummary,
-    SetCoverage,
 )
 from nexus.notifications.formatting import (
     QUARANTINE_REASONS,
@@ -27,18 +22,6 @@ from nexus.notifications.formatting import (
 )
 
 QUARANTINES_SHOWN: Final = 5
-SKIP_REASONS: Final[dict[str, str]] = {
-    "insufficient_usdt": "не хватает USDT",
-    "insufficient_coin": "не хватает монеты",
-    "rebalance_in_flight": "идёт виртуальный перевод",
-    "no_rebalance_path": "нет пути пополнения",
-    "spread_gone": "спред исчез за время задержки",
-    "books_unavailable": "стаканы недоступны",
-    "unfillable": "стакан не подходит (тонкий/устарел/ниже минимума)",
-    "no_price": "нет цены монеты",
-    "recent_fill": "связка только что торговалась",
-}
-MIN_PORTFOLIOS_SHOWN: Final = 2
 LATENCY_MARK: Final[dict[bool | None, str]] = {True: " ⚡", False: " 🐢", None: ""}
 
 
@@ -59,11 +42,6 @@ class DigestFormatter:
             SEPARATOR,
             *self._episodes(data.episodes),
             SEPARATOR,
-            *self._paper(data.paper),
-            *self._restarts(data.portfolios, local),
-            *self._portfolios(data.portfolios, local),
-            *self._coverage(data.coverage),
-            SEPARATOR,
             *self._quarantine(data),
             SEPARATOR,
             *self._exchanges(data),
@@ -74,18 +52,9 @@ class DigestFormatter:
 
     @staticmethod
     def _conditional(data: DigestData) -> list[str]:
-        """Conditional-venue note and the two combined totals (all / excluding conditional)."""
-        paper = data.paper
+        """Conditional-venue note and the episode totals (all / excluding conditional)."""
         if not data.conditional_venues:
-            return [
-                "Условные биржи: нет",
-                SEPARATOR,
-                f"Эпизоды:   все {data.episodes.total}",
-                "Бумажный P&amp;L (hedged): "
-                + (f"все {fmt_usd(paper.hedged_pnl_usd, signed=True)}" if paper else "н/д"),
-            ]
-        excl = paper.hedged_pnl_excl_conditional_usd if paper else None
-        excl_text = "н/д" if excl is None else f"≈ {fmt_usd(excl, signed=True)} (оценка)"
+            return ["Условные биржи: нет", SEPARATOR, f"Эпизоды:   все {data.episodes.total}"]
         ep_excl = data.episodes.total_excl_conditional
         names = ", ".join(esc(exchange_name(v)) for v in data.conditional_venues)
         return [
@@ -93,65 +62,7 @@ class DigestFormatter:
             SEPARATOR,
             f"Эпизоды:   все {data.episodes.total} | без условных "
             f"(фильтр) {'н/д' if ep_excl is None else ep_excl}",
-            "Бумажный P&amp;L (hedged): "
-            + (
-                f"все {fmt_usd(paper.hedged_pnl_usd, signed=True)} "
-                f"| без условных (фильтр) {excl_text}"
-                if paper
-                else "н/д"
-            ),
         ]
-
-    @staticmethod
-    def _restarts(
-        portfolios: tuple[PortfolioSummary, ...], local: Callable[[int], str]
-    ) -> list[str]:
-        """A set whose definition changed restarted its soak window: say so, with the new start."""
-        return [
-            f"⚠️ Набор <code>{esc(p.portfolio_id)}</code> перезапущен {local(p.since_ms)}: "
-            "параметры изменились, новый прогон с полным капиталом, учёт с этой даты"
-            for p in portfolios
-            if p.restarted
-        ]
-
-    @staticmethod
-    def _portfolios(
-        portfolios: tuple[PortfolioSummary, ...], local: Callable[[int], str]
-    ) -> list[str]:
-        """Per-set simulation lines, only once more than one set has records."""
-        if len(portfolios) < MIN_PORTFOLIOS_SHOWN:
-            return []
-        lines = [SEPARATOR, "📦 <b>Наборы бирж</b> (реальная симуляция по набору)"]
-        lines.extend(
-            f"• <code>{esc(p.portfolio_id)}</code> с {local(p.since_ms)}: сделок {p.trades}"
-            f" · hedged {fmt_usd(p.hedged_pnl_usd, signed=True)}"
-            for p in portfolios
-        )
-        lines.append(
-            "<blockquote>Данные набора копятся только с момента добавления набора "
-            "(смена его параметров = новый прогон с полным капиталом): "
-            "без истории назад. Строки «фильтр» выше - оценка по уже записанным сделкам."
-            "</blockquote>"
-        )
-        return lines
-
-    @staticmethod
-    def _coverage(coverage: tuple[SetCoverage, ...]) -> list[str]:
-        """Scanner continuity per set (gap = hours with too few recorded sweeps)."""
-        if not coverage:
-            return []
-        lines = [SEPARATOR, "🩺 <b>Непрерывность работы сканера</b> (по полным часам)"]
-        for c in coverage:
-            if c.hours_expected == 0:
-                lines.append(f"• <code>{esc(c.portfolio_id)}</code>: данных за полный час ещё нет")
-                continue
-            ok = c.hours_expected - c.hours_gap
-            mark = "✅" if c.hours_gap == 0 else "⚠️"
-            lines.append(
-                f"{mark} <code>{esc(c.portfolio_id)}</code>: {ok} из {c.hours_expected} ч"
-                f" · простой ≈ {fmt_duration(c.downtime_min * 60)}"
-            )
-        return lines
 
     @staticmethod
     def _episodes(stats: EpisodeStats) -> list[str]:
@@ -182,31 +93,6 @@ class DigestFormatter:
                     f"{LATENCY_MARK[e.survived_latency]}"
                 )
         return lines
-
-    @staticmethod
-    def _paper(paper: PaperStats | None) -> list[str]:
-        if paper is None:
-            return ["📝 <b>Бумажная торговля</b>: пока нет активности"]
-        skipped = ", ".join(
-            f"{esc(SKIP_REASONS.get(k, k))} {v}" for k, v in sorted(paper.skipped.items())
-        )
-        roc, hedged_roc = paper.roc_pct, paper.hedged_roc_pct
-        return [
-            "📝 <b>Бумажная торговля</b>",
-            f"Сделок: <b>{paper.trades}</b>" + (f" · пропущено: {skipped}" if skipped else ""),
-            f"За 24 ч: заработано <b>{fmt_usd(paper.realized_usd, signed=True)}</b>"
-            f" · переводы {fmt_usd(-paper.rebalance_usd, signed=True)} ({paper.rebalances})"
-            + (f" · заблокировано {paper.blocked_rebalances}" if paper.blocked_rebalances else ""),
-            f"С начала: P&amp;L <b>{fmt_usd(paper.total_pnl_usd, signed=True)}</b>"
-            f" = арбитраж {fmt_usd(paper.realized_total_usd, signed=True)}"
-            f" − переводы {fmt_usd(paper.rebalance_total_usd)}"
-            f" + переоценка {fmt_usd(paper.mark_to_market_usd, signed=True)}",
-            f"Капитал {fmt_usd(paper.capital_usd)} · доходность "
-            + (f"<b>{_signed_pct(roc)}</b>" if roc is not None else "н/д"),
-            f"🛡 С хеджем (без ценового риска инвентаря): <b>"
-            f"{fmt_usd(paper.hedged_pnl_usd, signed=True)}</b>"
-            + (f" · доходность <b>{_signed_pct(hedged_roc)}</b>" if hedged_roc is not None else ""),
-        ]
 
     @staticmethod
     def _quarantine(data: DigestData) -> list[str]:
@@ -241,8 +127,3 @@ class DigestFormatter:
 
 def _pct_cell(value: int | None) -> str:
     return "н/д" if value is None else f"{value}%"
-
-
-def _signed_pct(value: Decimal) -> str:
-    text = fmt_pct(value)
-    return text if value < 0 else f"+{text}"

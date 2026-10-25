@@ -8,7 +8,6 @@ from structlog.testing import capture_logs
 
 from nexus.config import ExchangesSettings, SpreadSettings
 from nexus.config.file import ConfigFileError
-from nexus.config.groups import PaperSettings
 from nexus.config.provenance import (
     dotenv_setting_names,
     log_settings_provenance,
@@ -65,9 +64,9 @@ def test_empty_env_dict_does_not_drop_toml(tmp_path: Path, monkeypatch: pytest.M
 def test_dotenv_setting_names_are_names_only(tmp_path: Path) -> None:
     Path(".env").write_text(
         "LOG_LEVEL=DEBUG\nSPREAD_MIN_NET_PROFIT_USD=\nTELEGRAM_BOT_TOKEN=hush-hush\n"
-        "paper_capital_usd=5\n"
+        "spread_min_net_profit_usd=5\n"
     )
-    assert dotenv_setting_names() == ["LOG_LEVEL", "PAPER_CAPITAL_USD"]
+    assert dotenv_setting_names() == ["LOG_LEVEL", "SPREAD_MIN_NET_PROFIT_USD"]
 
 
 def test_dotenv_setting_names_without_file() -> None:
@@ -99,11 +98,11 @@ def test_hash_ignores_deployment_location(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_hash_normalizes_decimal_spelling(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PAPER_CAPITAL_USD", "20000")
+    monkeypatch.setenv("SPREAD_MIN_NET_PROFIT_USD", "20000")
     plain = settings_hash()
-    monkeypatch.setenv("PAPER_CAPITAL_USD", "20000.0")
+    monkeypatch.setenv("SPREAD_MIN_NET_PROFIT_USD", "20000.0")
     assert settings_hash() == plain
-    monkeypatch.setenv("PAPER_CAPITAL_USD", "2E+4")
+    monkeypatch.setenv("SPREAD_MIN_NET_PROFIT_USD", "2E+4")
     assert settings_hash() == plain
     monkeypatch.setenv("SPREAD_TRANSFER_TAX_PCT", '{"A":"1.50"}')
     taxed = settings_hash()
@@ -113,9 +112,9 @@ def test_hash_normalizes_decimal_spelling(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_hash_still_tracks_strategy_values(monkeypatch: pytest.MonkeyPatch) -> None:
     base = settings_hash()
-    monkeypatch.setenv("PAPER_CAPITAL_USD", "123")
+    monkeypatch.setenv("SPREAD_MIN_NET_PROFIT_USD", "123")
     assert settings_hash() != base
-    assert PaperSettings().capital_usd == 123
+    assert SpreadSettings().min_net_profit_usd == 123
 
 
 # ------------------------------------------------------------------ L1: key names redaction

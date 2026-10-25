@@ -11,9 +11,7 @@ from nexus.domain.watchdog import (
     BACKUP_UNREADABLE,
     SCANNER_NO_DATA,
     SCANNER_STALE,
-    Finding,
     check_backup,
-    check_paper_set,
     check_scanner,
 )
 
@@ -102,21 +100,3 @@ def test_backup_naive_timestamp_is_utc() -> None:
 
 def test_backup_future_finish_is_not_stale() -> None:
     assert check_backup(_status(finished_at="2026-10-23T13:00:00Z"), NOW, 26).ok
-
-
-def test_check_paper_set_thresholds() -> None:
-    now = 1_000_000 * MIN
-    hour = 60 * MIN
-    assert check_paper_set("a", now - 99 * hour, now - 2 * hour, now, 3, 168) == Finding(
-        "paper_set:a"
-    )
-    stale = check_paper_set("a", now - 99 * hour, now - 3 * hour, now, 3, 168)
-    assert (stale.check, stale.reason, stale.minutes) == ("paper_set:a", "paper_set_stale", 180)
-    assert stale.needs_grace
-    # never wrote stats: the run start is the baseline
-    assert check_paper_set("a", now - hour, None, now, 3, 168).ok
-    assert not check_paper_set("a", now - 4 * hour, None, now, 3, 168).ok
-    # a redefined set (newer run than its last stats hour) is judged from the run start
-    assert check_paper_set("a", now - hour, now - 50 * hour, now, 3, 168).ok
-    retired = check_paper_set("a", now - 200 * hour, now - 169 * hour, now, 3, 168)
-    assert retired.reason == "paper_set_retired"

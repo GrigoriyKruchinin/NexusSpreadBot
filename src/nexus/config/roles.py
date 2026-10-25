@@ -24,7 +24,6 @@ from nexus.config.groups import (
     KeyPolicySettings,
     LoggingSettings,
     MaintenanceSettings,
-    PaperSettings,
     QuarantineSettings,
     RedisSettings,
     ScannerSettings,
@@ -32,7 +31,6 @@ from nexus.config.groups import (
     TelegramSettings,
     WatchdogSettings,
 )
-from nexus.config.venue_sets import resolve_venue_sets
 
 log = structlog.get_logger(__name__)
 
@@ -87,7 +85,6 @@ class ScannerRoleSettings(_RoleSettings):
     scanner: ScannerSettings
     spread: SpreadSettings
     episodes: EpisodeSettings
-    paper: PaperSettings
     alerts: AlertPolicySettings
     quarantine: QuarantineSettings
     logging: LoggingSettings
@@ -109,22 +106,6 @@ class ScannerRoleSettings(_RoleSettings):
             msg = f"CONDITIONAL_VENUES not in EXCHANGES_ENABLED: {', '.join(unknown)}"
             raise ValueError(msg)
         return self
-
-    @model_validator(mode="after")
-    def _venue_sets_valid(self) -> Self:
-        """Fail closed on a bad ``PAPER_VENUE_SETS`` (the error names the set and venue)."""
-        _ = self.venue_sets  # resolved eagerly so a bad spec stops startup
-        return self
-
-    @property
-    def venue_sets(self) -> dict[str, tuple[str, ...]]:
-        """Resolved shadow-portfolio venue sets, ``all`` first."""
-        return resolve_venue_sets(
-            self.paper.venue_sets,
-            self.exchanges.enabled,
-            self.conditional.venues,
-            strict="venue_sets" in self.paper.model_fields_set,
-        )
 
     @classmethod
     def load(cls) -> Self:
@@ -154,7 +135,6 @@ class ScannerRoleSettings(_RoleSettings):
             scanner=ScannerSettings(),
             spread=SpreadSettings(),
             episodes=EpisodeSettings(),
-            paper=PaperSettings(),
             alerts=AlertPolicySettings(),
             quarantine=QuarantineSettings(),
             logging=LoggingSettings(),

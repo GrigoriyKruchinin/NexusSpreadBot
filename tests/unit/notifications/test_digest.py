@@ -5,8 +5,6 @@ from nexus.domain.digest import (
     DigestData,
     EpisodeStats,
     EpisodeSummary,
-    PaperStats,
-    PortfolioSummary,
     QuarantineSummary,
 )
 from nexus.notifications.digest import DigestFormatter
@@ -33,18 +31,6 @@ def _data() -> DigestData:
                 EpisodeSummary("<b>X</b>/USDT", "mexc", "gateio", D("6"), D("0.6"), 30, None),
             ),
         ),
-        paper=PaperStats(
-            trades=4,
-            skipped={"spread_gone": 1, "insufficient_coin": 2},
-            realized_usd=D("20.1"),
-            rebalance_usd=D(3),
-            rebalances=2,
-            blocked_rebalances=1,
-            capital_usd=D(7000),
-            equity_usd=D(7015),
-            realized_total_usd=D(30),
-            rebalance_total_usd=D(5),
-        ),
         quarantines=(QuarantineSummary("ZIL/USDT", "binance", "okx", "unverified_persistent"),),
         active_quarantines=3,
         uptime_pct={"binance": 99, "okx": 100, "bitget": None},
@@ -60,7 +46,6 @@ def test_digest_snapshot() -> None:
         "Условные биржи: нет\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Эпизоды:   все 9\n"
-        "Бумажный P&amp;L (hedged): все +$25.00\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "🔀 <b>Эпизодов возможностей: 9</b>\n"
         "✅ подтверждённых 5 · ⚠️ неподтверждённых 3 · 🚫 в карантине 1\n"
@@ -69,16 +54,6 @@ def test_digest_snapshot() -> None:
         "<b>Топ связок по пиковой чистой прибыли</b>\n"
         "1. <code>ERA/USDT</code> Bybit → OKX — <b>+$12.35</b> (1.23%) · 3 мин 20 с ⚡\n"
         "2. <code>&lt;b&gt;X&lt;/b&gt;/USDT</code> MEXC → Gate.io — <b>+$6.00</b> (0.60%) · 30 с\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "📝 <b>Бумажная торговля</b>\n"
-        "Сделок: <b>4</b> · пропущено: не хватает монеты 2,"
-        " спред исчез за время задержки 1\n"
-        "За 24 ч: заработано <b>+$20.10</b> · переводы -$3.00 (2) · заблокировано 1\n"
-        "С начала: P&amp;L <b>+$15.00</b> = арбитраж +$30.00 − переводы $5.00"
-        " + переоценка -$10.00\n"
-        "Капитал $7,000.00 · доходность <b>+0.21%</b>\n"
-        "🛡 С хеджем (без ценового риска инвентаря): <b>+$25.00</b>"
-        " · доходность <b>+0.36%</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "🚫 <b>Карантин</b>: новых 1 · активных 3\n"
         "• <code>ZIL/USDT</code> Binance → OKX: спред держится,"
@@ -98,7 +73,6 @@ def test_empty_digest() -> None:
         window_start_ms=T0,
         window_end_ms=T0 + DAY,
         episodes=EpisodeStats(),
-        paper=None,
         quarantines=(),
         active_quarantines=0,
         uptime_pct={},
@@ -107,7 +81,7 @@ def test_empty_digest() -> None:
     text = DigestFormatter().render(data, "UTC")
     assert "🔀 <b>Эпизодов возможностей: 0</b>" in text
     assert "Пережили задержку" not in text
-    assert "📝 <b>Бумажная торговля</b>: пока нет активности" in text
+    assert "Бумажн" not in text
     assert "🌐 <b>Биржи</b>: нет данных" in text
     assert "(UTC)" in text
 
@@ -137,12 +111,6 @@ def _cond_data(conditional: tuple[str, ...]) -> DigestData:
         window_start_ms=base.window_start_ms,
         window_end_ms=base.window_end_ms,
         episodes=EpisodeStats(total=24, total_excl_conditional=6),
-        paper=PaperStats(
-            realized_total_usd=D("50.20"),
-            rebalance_total_usd=D("9"),
-            realized_total_excl_conditional_usd=D("12.75"),
-            rebalance_total_excl_conditional_usd=D("3"),
-        ),
         quarantines=(),
         active_quarantines=0,
         uptime_pct={},
@@ -153,11 +121,10 @@ def _cond_data(conditional: tuple[str, ...]) -> DigestData:
 
 def test_digest_conditional_block_golden() -> None:
     text = DigestFormatter().render(_cond_data(("bybit", "gateio")), "UTC")
-    assert text.split("\n")[2:7] == [
+    assert text.split("\n")[2:6] == [
         "⚠️ Условные биржи (данные собираются, торговать пока нельзя): Bybit, Gate.io",
         "━━━━━━━━━━━━━━━━━━━━",
         "Эпизоды:   все 24 | без условных (фильтр) 6",
-        "Бумажный P&amp;L (hedged): все +$41.20 | без условных (фильтр) ≈ +$9.75 (оценка)",
         "━━━━━━━━━━━━━━━━━━━━",
     ]
     assert len(text) < 4096
@@ -165,11 +132,10 @@ def test_digest_conditional_block_golden() -> None:
 
 def test_digest_conditional_block_empty_list() -> None:
     text = DigestFormatter().render(_cond_data(()), "UTC")
-    assert text.split("\n")[2:6] == [
+    assert text.split("\n")[2:5] == [
         "Условные биржи: нет",
         "━━━━━━━━━━━━━━━━━━━━",
         "Эпизоды:   все 24",
-        "Бумажный P&amp;L (hedged): все +$41.20",
     ]
     assert "без условных" not in text
 
@@ -182,42 +148,10 @@ def test_digest_conditional_names_are_escaped() -> None:
     assert "<b>x" not in text
 
 
-def test_paper_hedged_excl_is_unknown_until_computed() -> None:
-    p = PaperStats(realized_total_usd=D(5), rebalance_total_usd=D(1))
-    assert p.hedged_pnl_usd == D(4)
-    assert p.hedged_pnl_excl_conditional_usd is None  # never a silent +$0.00
-    done = PaperStats(
-        realized_total_excl_conditional_usd=D(5), rebalance_total_excl_conditional_usd=D(1)
-    )
-    assert done.hedged_pnl_excl_conditional_usd == D(4)
-
-
 def test_digest_shows_na_when_excl_values_are_missing() -> None:
-    base = _cond_data(("bybit", "gateio"))
-    data = replace(
-        base,
-        episodes=EpisodeStats(total=24),
-        paper=PaperStats(realized_total_usd=D("50.20"), rebalance_total_usd=D("9")),
-    )
+    data = replace(_cond_data(("bybit", "gateio")), episodes=EpisodeStats(total=24))
     lines = DigestFormatter().render(data, "UTC").split("\n")
     assert lines[4] == "Эпизоды:   все 24 | без условных (фильтр) н/д"
-    assert lines[5] == "Бумажный P&amp;L (hedged): все +$41.20 | без условных (фильтр) н/д"
-    no_paper = DigestFormatter().render(replace(base, paper=None), "UTC").split("\n")
-    assert no_paper[5] == "Бумажный P&amp;L (hedged): н/д"
-
-
-async def test_digest_log_na_when_excl_missing() -> None:
-    from nexus.services.digest import summary_totals
-
-    data = replace(
-        _cond_data(("bybit",)),
-        episodes=EpisodeStats(total=3),
-        paper=PaperStats(realized_total_usd=D(2)),
-    )
-    assert summary_totals(data, excl_conditional=True) == {
-        "episodes": None,
-        "paper_hedged_pnl_usd": None,
-    }
 
 
 async def test_digest_log_has_conditional_fields() -> None:
@@ -236,84 +170,5 @@ async def test_digest_log_has_conditional_fields() -> None:
         await DigestService(_Repo(), RecordingNotifier(), ManualClock(T0)).send("UTC")  # type: ignore[arg-type]
     [record] = [r for r in logs if r["event"] == "digest_sent"]
     assert record["conditional_venues"] == ["bybit", "gateio"]
-    assert record["total_all"] == {"episodes": 24, "paper_hedged_pnl_usd": "41.20"}
-    assert record["total_excl_conditional"] == {"episodes": 6, "paper_hedged_pnl_usd": "9.75"}
-
-
-def test_digest_portfolio_lines_and_accrual_footer() -> None:
-    data = replace(
-        _cond_data(("bybit", "gateio")),
-        portfolios=(
-            PortfolioSummary("all", T0 - 5 * DAY, 120, D("41.20")),
-            PortfolioSummary("excl_conditional", T0 - DAY, 40, D("-3.50")),
-            PortfolioSummary("<b>x", T0, 0, D(0)),
-        ),
-    )
-    text = DigestFormatter().render(data, "UTC")
-    assert "📦 <b>Наборы бирж</b> (реальная симуляция по набору)" in text
-    assert "• <code>all</code> с 13 Oct 06:00: сделок 120 · hedged +$41.20" in text
-    assert "• <code>excl_conditional</code> с 17 Oct 06:00: сделок 40 · hedged -$3.50" in text
-    assert "&lt;b&gt;x" in text
-    assert "<b>x" not in text
-    assert "копятся только с момента добавления набора" in text
-    assert len(text) < 4096
-
-
-def test_digest_since_is_rendered_in_the_digest_timezone() -> None:
-    data = replace(
-        _cond_data(("bybit", "gateio")),
-        portfolios=(
-            PortfolioSummary("all", T0 - 5 * DAY, 120, D("41.20")),
-            PortfolioSummary("ab", T0 - DAY, 40, D("-3.50")),
-        ),
-    )
-    text = DigestFormatter().render(data, "Asia/Tokyo")  # UTC+9, no DST
-    assert "• <code>all</code> с 13 Oct 15:00: сделок 120" in text
-    assert "• <code>ab</code> с 17 Oct 15:00: сделок 40" in text
-    assert "13 Oct 06:00" not in text
-
-
-def test_digest_says_when_a_set_restarted_with_its_new_since() -> None:
-    data = replace(
-        _cond_data(("bybit", "gateio")),
-        portfolios=(PortfolioSummary("all", T0 - DAY, 5, D(1), restarted=True),),
-    )
-    text = DigestFormatter().render(data, "UTC")  # one set only: no set block, still the notice
-    assert "Набор <code>all</code> перезапущен 17 Oct 06:00" in text
-    assert "полным капиталом" in text
-    quiet = replace(data, portfolios=(PortfolioSummary("all", T0 - DAY, 5, D(1)),))
-    assert "перезапущен" not in DigestFormatter().render(quiet, "UTC")
-
-
-def test_digest_without_extra_portfolios_has_no_set_block() -> None:
-    only_all = replace(_cond_data(("bybit",)), portfolios=(PortfolioSummary("all", T0, 3, D("1")),))
-    text = DigestFormatter().render(only_all, "UTC")
-    assert "Наборы бирж" not in text
-    assert "копятся" not in text
-    assert "Наборы бирж" not in DigestFormatter().render(_cond_data(("bybit",)), "UTC")
-
-
-def test_digest_coverage_block_marks_gaps() -> None:
-    from nexus.domain.digest import SetCoverage
-
-    data = replace(
-        _data(),
-        coverage=(SetCoverage("all", 23, 0, 0), SetCoverage("excl_bybit", 23, 2, 90)),
-    )
-    lines = DigestFormatter().render(data, "UTC").splitlines()
-    assert "🩺 <b>Непрерывность работы сканера</b> (по полным часам)" in lines
-    assert "✅ <code>all</code>: 23 из 23 ч · простой ≈ 0 с" in lines
-    assert "⚠️ <code>excl_bybit</code>: 21 из 23 ч · простой ≈ 1 ч 30 мин" in lines
-
-
-def test_digest_coverage_for_a_set_without_a_full_hour() -> None:
-    from nexus.domain.digest import SetCoverage
-
-    data = replace(_data(), coverage=(SetCoverage("new", 0, 0, 0),))
-    assert "• <code>new</code>: данных за полный час ещё нет" in DigestFormatter().render(
-        data, "UTC"
-    )
-
-
-def test_digest_without_coverage_has_no_block() -> None:
-    assert "Непрерывность" not in DigestFormatter().render(_data(), "UTC")
+    assert record["episodes"] == 24
+    assert record["episodes_excl_conditional"] == 6

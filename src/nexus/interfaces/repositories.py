@@ -6,7 +6,6 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal
 from enum import StrEnum
 
 from nexus.domain.digest import DigestData
@@ -15,7 +14,6 @@ from nexus.domain.models import MarketInfo
 from nexus.domain.quarantine import RouteQuarantine
 from nexus.domain.spread import SpreadEvaluation
 from nexus.engine.candidates import RouteQuote
-from nexus.simulation.portfolio import Rebalance, Seed, TradeOutcome
 
 
 class AlertDeliveryStatus(StrEnum):
@@ -98,96 +96,6 @@ class IQuarantineRepository(ABC):
 
 
 @dataclass(frozen=True, slots=True)
-class PaperHolding:
-    """One venue of a paper balance snapshot."""
-
-    exchange: str
-    asset: str
-    amount: Decimal
-    seed: Seed | None
-    price_usd: Decimal | None
-
-
-@dataclass(frozen=True, slots=True)
-class PaperState:
-    """Everything needed to resume the paper portfolio after a restart."""
-
-    holdings: list[PaperHolding]
-    in_flight: list[Rebalance]
-    realized: Decimal
-    rebalance_costs: Decimal
-
-
-@dataclass(frozen=True, slots=True)
-class RunDefinition:
-    """What a paper portfolio run was configured with (``config_hash`` identifies it)."""
-
-    venues: tuple[str, ...]
-    capital_usd: Decimal
-    config_hash: str
-
-
-@dataclass(frozen=True, slots=True)
-class PortfolioRun:
-    """One run of a named portfolio: a fresh capital start under one definition."""
-
-    portfolio_id: str
-    run_id: int
-    started_at_ms: int
-    definition: RunDefinition
-    created: bool = False
-    """True when this call started the run (fresh capital); False = resumed the stored one."""
-    previous_hash: str | None = None
-    """Definition hash of the run this one replaced (``None`` = first run of the name)."""
-
-
-@dataclass(frozen=True, slots=True)
-class CapStatsDelta:
-    """Per-set, per-hour cap-binding counters to add to the stored aggregate."""
-
-    portfolio_id: str
-    hour_ms: int
-    sweeps: int = 0
-    sweeps_cap_bound: int = 0
-    dropped_routes: int = 0
-    alerts_cap_excluded: int = 0
-
-
-class IPaperRepository(ABC):
-    """Paper trading records."""
-
-    @abstractmethod
-    async def ensure_run(
-        self, portfolio_id: str, definition: RunDefinition, now_ms: int
-    ) -> PortfolioRun:
-        """Resume the latest run of the portfolio if its definition is identical, else start a
-        NEW run (``created=True``; the old rows stay but are never restored). The run's
-        ``started_at`` is the portfolio's ``since``; it lives outside the purged snapshots."""
-
-    @abstractmethod
-    async def add_cap_stats(self, deltas: Sequence[CapStatsDelta]) -> None:
-        """Add the counters to the stored hourly aggregates (upsert, additive)."""
-
-    @abstractmethod
-    async def commit(
-        self,
-        *,
-        portfolio_id: str,
-        at_ms: int,
-        trades: Sequence[tuple[TradeOutcome, int | None]],
-        rebalances: Sequence[Rebalance],
-        holdings: Sequence[PaperHolding],
-    ) -> list[Rebalance]:
-        """Atomically store trades (with episode ids), rebalance inserts/updates and a full
-        balance snapshot of one portfolio; returns the rebalances with their ids."""
-
-    @abstractmethod
-    async def load_state(self, portfolio_id: str, since_ms: int = 0) -> PaperState | None:
-        """Latest snapshot, in-flight rebalances and running totals of one portfolio, counting
-        only rows at or after ``since_ms`` (the current run; ``None`` = nothing to resume)."""
-
-
-@dataclass(frozen=True, slots=True)
 class ExchangeMetadataStats:
     """Metadata quality of one exchange after a refresh."""
 
@@ -209,7 +117,7 @@ class IDigestRepository(ABC):
 
     @abstractmethod
     async def collect(self, since_ms: int, until_ms: int) -> DigestData:
-        """Aggregate the window ``[since_ms, until_ms)`` (portfolio values: latest state)."""
+        """Aggregate the window ``[since_ms, until_ms)``."""
 
 
 class IAlertLogRepository(ABC):
@@ -265,9 +173,4 @@ class IRetentionRepository(ABC):
         evaluations_before: datetime,
         episodes_before: datetime,
     ) -> dict[str, int]:
-        """Delete rows past their retention window; returns counts per table.
-
-        Paper trades and transfers are kept (portfolio totals are summed from them). Paper
-        balance snapshot sets older than the window are thinned to the last set of each UTC
-        day per portfolio (daily equity curve for the GO report); the latest set always survives.
-        """
+        """Delete rows past their retention window; returns counts per table."""

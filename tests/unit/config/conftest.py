@@ -17,7 +17,6 @@ _PREFIXES = (
     "ALERT_",
     "DIGEST_",
     "QUARANTINE_",
-    "PAPER_",
     "MEXC_",
     "BITGET_",
     "BYBIT_",

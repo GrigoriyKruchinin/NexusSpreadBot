@@ -116,7 +116,6 @@ async def test_snapshots_health_and_retention(sessions: Sessions) -> None:
         "spread_snapshots": 1,
         "exchange_health": 0,
         "spread_evaluations": 1,
-        "paper_balance_snapshots": 0,
         "exchange_metadata_stats": 0,
         "opportunity_episodes": 0,
         "route_quarantine": 0,
