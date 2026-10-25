@@ -1,0 +1,7 @@
+# Optional: publish PostgreSQL on the host, loopback only (127.0.0.1), for your own SQL client.
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.postgres-port.yml make up
+# Change the host port if 5432 is taken:  POSTGRES_HOST_PORT=15432  (shell variable or .env)
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"

@@ -55,7 +55,8 @@ x-telegram-env: &telegram-env
 
 services:
   postgres:
-    image: postgres:17-alpine
+    # Digest-pinned (security R5); refresh tag+digest together on a deliberate update.
+    image: postgres:17-alpine@sha256:eee6c6e1b0894fa4fe0075eb054af9fd1cf39a35321c2d4110626cfe506411fb
     restart: unless-stopped
     environment:
       # Must equal [postgres] db / user in config/nexus.toml (checked by tests/unit/test_compose.py).
@@ -64,8 +65,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
     volumes:
       - postgres-data:/var/lib/postgresql/data
-    ports:
-      - "127.0.0.1:5432:5432"  # local analytics access only (never exposed publicly)
+    # No published port by default (nothing on the host can clash with 5432). For SQL access from the host
+    # add docker-compose.postgres-port.yml (127.0.0.1 only), see README.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -73,7 +74,7 @@ services:
       retries: 20
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000"]
     volumes:
