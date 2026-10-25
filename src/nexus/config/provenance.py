@@ -39,6 +39,7 @@ from nexus.config.groups import (
     ExchangesSettings,
     LoggingSettings,
     MaintenanceSettings,
+    PaperHedgedSettings,
     PaperSettings,
     QuarantineSettings,
     RedisSettings,
@@ -120,6 +121,7 @@ def settings_hash() -> str:
         EpisodeSettings(),
         QuarantineSettings(),
         PaperSettings(),
+        PaperHedgedSettings(),
         MaintenanceSettings(),
         DigestSettings(),
     ]

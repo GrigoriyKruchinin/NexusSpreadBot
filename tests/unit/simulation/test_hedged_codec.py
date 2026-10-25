@@ -2,8 +2,11 @@
 
 from decimal import Decimal as D
 
+import pytest
+
 from nexus.interfaces.repositories import HedgedPoolState
 from nexus.persistence.hedged_repository import (
+    HedgedPayloadVersionError,
     payload_to_position,
     payload_to_state,
     position_to_payload,
@@ -55,3 +58,29 @@ def test_pool_state_round_trip() -> None:
         rebalance_fee_paid=D("0.75"),
     )
     assert payload_to_state(state_to_payload(state)) == state
+
+
+def test_payloads_carry_a_version() -> None:
+    assert position_to_payload(_position())["payload_version"] == 1
+    assert (
+        state_to_payload(HedgedPoolState(pools={}, rebalances=[], rebalance_fee_paid=D(0)))[
+            "payload_version"
+        ]
+        == 1
+    )
+
+
+@pytest.mark.parametrize("bad", [None, 0, 2, "1"])
+def test_unknown_payload_version_is_rejected_loudly(bad: object) -> None:
+    pos_payload = position_to_payload(_position())
+    state_payload = state_to_payload(
+        HedgedPoolState(pools={}, rebalances=[], rebalance_fee_paid=D(0))
+    )
+    for payload, loader in ((pos_payload, payload_to_position), (state_payload, payload_to_state)):
+        broken = dict(payload)
+        if bad is None:
+            del broken["payload_version"]
+        else:
+            broken["payload_version"] = bad
+        with pytest.raises(HedgedPayloadVersionError, match="payload_version"):
+            loader(broken)

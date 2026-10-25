@@ -42,6 +42,21 @@ from nexus.simulation.hedged_portfolio import (
 Sessions = async_sessionmaker[AsyncSession]
 _DEC = "$d"
 _SET = "$s"
+PAYLOAD_VERSION = 1
+"""Layout version of the JSONB position / pool-state payloads; bump on any field change."""
+_VERSION_KEY = "payload_version"
+
+
+class HedgedPayloadVersionError(ValueError):
+    """A stored payload has a missing or unsupported ``payload_version`` (restore refuses it)."""
+
+
+def _check_version(payload: Mapping[str, object], kind: str) -> dict[str, object]:
+    version = payload.get(_VERSION_KEY)
+    if version != PAYLOAD_VERSION:
+        msg = f"hedged {kind} payload_version {version!r} unsupported (expected {PAYLOAD_VERSION})"
+        raise HedgedPayloadVersionError(msg)
+    return {k: v for k, v in payload.items() if k != _VERSION_KEY}
 
 
 def encode(value: object) -> object:
@@ -74,12 +89,13 @@ def decode(value: object) -> object:
 
 def position_to_payload(pos: HedgedPosition) -> dict[str, object]:
     """Full position state as JSON (``asdict`` recurses into the plan and the P&L lines)."""
-    return cast("dict[str, object]", encode(asdict(pos)))
+    data = cast("dict[str, object]", encode(asdict(pos)))
+    return {_VERSION_KEY: PAYLOAD_VERSION, **data}
 
 
 def payload_to_position(payload: Mapping[str, object]) -> HedgedPosition:
     """Rebuild a position stored by :func:`position_to_payload`."""
-    data = cast("dict[str, Any]", decode(dict(payload)))
+    data = cast("dict[str, Any]", decode(_check_version(payload, "position")))
     data["plan"] = EntryPlan(**data["plan"])
     if data.get("lines") is not None:
         data["lines"] = PnlLines(**data["lines"])
@@ -93,6 +109,7 @@ def state_to_payload(state: HedgedPoolState) -> dict[str, object]:
         "dict[str, object]",
         encode(
             {
+                _VERSION_KEY: PAYLOAD_VERSION,
                 "pools": state.pools,
                 "rebalances": [asdict(r) for r in state.rebalances],
                 "rebalance_fee_paid": state.rebalance_fee_paid,
@@ -103,7 +120,7 @@ def state_to_payload(state: HedgedPoolState) -> dict[str, object]:
 
 def payload_to_state(payload: Mapping[str, object]) -> HedgedPoolState:
     """Inverse of :func:`state_to_payload`."""
-    data = cast("dict[str, Any]", decode(dict(payload)))
+    data = cast("dict[str, Any]", decode(_check_version(payload, "state")))
     return HedgedPoolState(
         pools=data["pools"],
         rebalances=[Rebalance(**r) for r in data["rebalances"]],

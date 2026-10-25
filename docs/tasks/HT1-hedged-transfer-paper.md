@@ -155,7 +155,7 @@ sweep unaffected). S0 reduced to the `test_safety` additions.
   `persistence/hedged_repository.py` (`ensure_run`, atomic commit, restore, idempotent events). AC
   (integration, `nexus_test`/CI): upgrade creates only the new tables, downgrade drops only them; full
   position round trip; duplicate funding event rejected by the unique key.
-- [ ] **S11 Config.** `PaperHedgedSettings` (`PAPER_HEDGED_*`, `[paper_hedged]`, code default
+- [x] **S11 Config.** (done; HT-only: no parent hash, `sets`/`spot_venues` explicit, hash pinned in `tests/unit/config/test_paper_hedged.py`, `payload_version` 1 in the repository codec) `PaperHedgedSettings` (`PAPER_HEDGED_*`, `[paper_hedged]`, code default
   `enabled=false`), `TOML_ALLOWED` keys, validation (hedge venues within the parent set and the enabled
   exchanges, parent set exists, leverage 1-5, thresholds > 0, id <= 32 chars); HT run hash = HT params +
   parent definition hash. TOML gets both HT sets but `enabled = false`. AC: S0 pins pass; config tests;
