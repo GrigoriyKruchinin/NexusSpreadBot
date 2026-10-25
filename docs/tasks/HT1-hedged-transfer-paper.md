@@ -151,7 +151,7 @@ sweep unaffected). S0 reduced to the `test_safety` additions.
 - [x] **S9 Hedged portfolio II: hold + exit + capital.** Funding accrual (idempotent per funding time),
   liquidation (kline high and poll), partial/forced exit, unpriceable hedge rule (C8), USDT rebalancing,
   valuation (open basis MTM). AC = card AC1 + AC3; P&L identity sums exactly.
-- [ ] **S10 Migration + ORM + repository.** Additive revision (`paper_hedged_*` only), `IHedgedPaperRepository` /
+- [x] **S10 Migration + ORM + repository.** Additive revision (`paper_hedged_*` only), `IHedgedPaperRepository` /
   `persistence/hedged_repository.py` (`ensure_run`, atomic commit, restore, idempotent events). AC
   (integration, `nexus_test`/CI): upgrade creates only the new tables, downgrade drops only them; full
   position round trip; duplicate funding event rejected by the unique key.
@@ -186,3 +186,8 @@ within 15 min. Expected soak gap ~1-2 min.
 ## Out of scope
 Real trading, withdrawals, internal transfers, leverage setting, Binance signed leverage brackets, variants
 `sell_venue`/`buy_venue` running in the soak, DEX.
+
+Progress 2026-10-25: S9 (97ef621) and S10 done. S10 adds revision `a7c1d93e5b20` (six `paper_hedged_*` tables incl.
+`paper_hedged_coverage` hourly counters, sources `sweep` and `perp:<venue>`; writes wired in S13),
+`IHedgedPaperRepository` + `persistence/hedged_repository.py` (JSON payload codec unit-tested; DB round trip and
+migration up/down tests are integration, CI-only on `nexus_test`, not run locally). Next: S11.

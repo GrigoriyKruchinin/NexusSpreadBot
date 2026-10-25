@@ -185,3 +185,29 @@ def test_upgrade_on_empty_tables_creates_no_legacy_run(db_settings: DatabaseSett
     _truncate(db_settings)
     command.upgrade(cfg, "head")
     assert _count(db_settings, "paper_portfolios") == 0
+
+
+HEDGED_TABLES = {
+    "paper_hedged_runs",
+    "paper_hedged_positions",
+    "paper_hedged_events",
+    "paper_hedged_skips",
+    "paper_hedged_state",
+    "paper_hedged_coverage",
+}
+BEFORE_HEDGED = "b15a7c3e91d2"
+
+
+def test_hedged_migration_adds_and_drops_only_its_tables(db_settings: DatabaseSettings) -> None:
+    """HT1 S10: upgrade creates only paper_hedged_*, downgrade drops only them."""
+    assert_test_database(db_settings.db)
+    cfg = Config("alembic.ini")
+    command.downgrade(cfg, BEFORE_HEDGED)
+    before = _tables(db_settings)
+    assert not HEDGED_TABLES & before
+    command.upgrade(cfg, "head")
+    after = _tables(db_settings)
+    assert after - before == HEDGED_TABLES
+    command.downgrade(cfg, BEFORE_HEDGED)
+    assert _tables(db_settings) == before
+    command.upgrade(cfg, "head")
