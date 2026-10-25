@@ -348,12 +348,15 @@ class Scanner:
         """Reload markets and transfer metadata from every exchange."""
         markets: dict[str, Sequence[MarketInfo]] = {}
         transfers: dict[str, Mapping[str, AssetTransferInfo] | None] = {}
+        loaded_at: dict[str, int] = {}
 
         async def load(name: str, adapter: BaseExchangeAdapter) -> None:
             started = time.monotonic()
             try:
                 markets[name] = await adapter.load_markets()
                 transfers[name] = await adapter.load_transfer_info()
+                if transfers[name] is not None:
+                    loaded_at[name] = int(time.time() * 1000)
             except Exception as exc:  # one venue's parse bug must not drop the others (R-02)
                 await self._record(name, "load_metadata", started, _as_exchange_error(name, exc))
                 previous = self._universe.markets.get(name)
@@ -367,9 +370,9 @@ class Scanner:
         await gather_isolated(
             {n: load(n, a) for n, a in self._adapters.items()}, event="metadata_load_failed"
         )
-        self._universe = MarketUniverse.build(markets, transfers, self._filter).with_taker_fees(
-            self._fresh_account_fees()
-        )
+        self._universe = MarketUniverse.build(
+            markets, transfers, self._filter, loaded_at
+        ).with_taker_fees(self._fresh_account_fees())
         await self._lift_verified_quarantines()
         all_markets = [
             m for by_symbol in self._universe.markets.values() for m in by_symbol.values()

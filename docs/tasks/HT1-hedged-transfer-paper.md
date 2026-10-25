@@ -134,7 +134,7 @@ sweep unaffected). S0 reduced to the `test_safety` additions.
   depth20/100).
 - [x] **S4 Binance USDⓈ-M adapter.** Same AC as S2. A test asserts that `leverageBracket` (signed) is
   never called.
-- [ ] **S5 Transfer metadata extension.** `NetworkInfo` gets `withdraw_min`, `deposit_min`,
+- [x] **S5 Transfer metadata extension.** `NetworkInfo` gets `withdraw_min`, `deposit_min`,
   `deposit_confirmations`, `est_arrival_min`, `busy` (optional, default None); parsers (ccxt, binance
   public, kucoin, okx); per-venue `transfers_loaded_at_ms` on `MarketUniverse`; pure
   `list_transfer_routes()` (added to the safety allowlist, security sign-off). AC: regression test that
@@ -170,7 +170,9 @@ sweep unaffected). S0 reduced to the `test_safety` additions.
   HT on) + AC7; isolation tests: a blocking fake feed never delays `sweep()`, and an exception in HT leaves
   `PaperBook` outcomes identical.
 - [ ] **S14 GO report HT section** (`reports/go_hedged.py` + render, JSON + Markdown; directional-MTM
-  leak, basis-dominated, hedge-break, late-exit, unpriceable flags; shadow-exit P&L). AC = card AC8
+  leak, basis-dominated, hedge-break, late-exit, unpriceable flags; shadow-exit P&L) **plus the short-window
+  preliminary verdict, spec section 16.6 fields** (active/gap hours, base + pessimistic rate per 720 active h,
+  6 h + day block bootstrap, LB/UB, ex-top-2, label + flags; needs per-hour coverage counters from S10/S13). AC = card AC8
   (integration fixture on `nexus_test`).
 - [ ] **S15 Docs + deploy prep.** Russian guide in `docs/guides/`, English config comments, deploy checklist
   (pinned hashes vs the go-report, expected log lines: 4x `paper_resumed`, 0x `paper_run_restarted`, 2x

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from decimal import Decimal
 from typing import Any, Final
 
 import httpx
@@ -135,6 +136,34 @@ class BinancePublicTransferSource(ITransferStatusSource):
                     contract=contract.strip()
                     if isinstance(contract, str) and contract.strip()
                     else None,
+                    withdraw_min=_non_negative(to_decimal(entry.get("withdrawMin"))),
+                    deposit_min=_non_negative(to_decimal(entry.get("depositDust"))),
+                    deposit_confirmations=_confirmations(entry.get("minConfirm")),
+                    est_arrival_min=_arrival_minutes(entry.get("estimatedArrivalTime")),
+                    busy=_flag(entry.get("busy")),
                 )
             )
         return networks
+
+
+def _non_negative(value: Decimal | None) -> Decimal | None:
+    return value if value is not None and value >= ZERO else None
+
+
+def _confirmations(value: Any) -> int | None:
+    """Positive integer confirmation count (bool is not a count)."""
+    if isinstance(value, bool) or not isinstance(value, int | str):
+        return None
+    try:
+        number = int(value)
+    except ValueError:
+        return None
+    return number if number > 0 else None
+
+
+def _arrival_minutes(value: Any) -> Decimal | None:
+    """Estimated arrival in minutes (Binance publishes minutes as a number)."""
+    if isinstance(value, bool):
+        return None
+    number = to_decimal(value)
+    return number if number is not None and number > ZERO else None

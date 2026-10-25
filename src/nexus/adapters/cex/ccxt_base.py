@@ -436,6 +436,9 @@ class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook, ITradingFeeS
                     deposit_enabled=deposit,
                     withdraw_fee=fee if fee is None or fee >= ZERO else None,
                     contract=self._extract_contract(network),
+                    withdraw_min=_limit_min(network, "withdraw"),
+                    deposit_min=_limit_min(network, "deposit"),
+                    deposit_confirmations=_confirmations(network),
                 )
             )
         return tuple(parsed)
@@ -595,3 +598,37 @@ class CcxtExchangeAdapter(BaseExchangeAdapter, IWebSocketOrderbook, ITradingFeeS
                 continue
             levels.append(PriceLevel(price, amount))
         return tuple(levels)
+
+
+_CONFIRMATION_KEYS: tuple[str, ...] = (
+    "minDepArrivalConfirm",  # OKX
+    "confirms",  # KuCoin
+    "minConfirm",  # Binance / Bybit style
+    "depositConfirmations",
+)
+
+
+def _limit_min(network: Mapping[str, Any], side: str) -> Decimal | None:
+    """Minimum withdraw/deposit amount from a ccxt network ``limits`` block."""
+    limits = network.get("limits")
+    entry = limits.get(side) if isinstance(limits, Mapping) else None
+    value = to_decimal(entry.get("min")) if isinstance(entry, Mapping) else None
+    return value if value is not None and value >= ZERO else None
+
+
+def _confirmations(network: Mapping[str, Any]) -> int | None:
+    """Deposit confirmations from the raw network ``info`` (``None`` if not published)."""
+    info = network.get("info")
+    if not isinstance(info, Mapping):
+        return None
+    for key in _CONFIRMATION_KEYS:
+        value = info.get(key)
+        if isinstance(value, bool) or not isinstance(value, int | str):
+            continue
+        try:
+            number = int(value)
+        except ValueError:
+            continue
+        if number > 0:
+            return number
+    return None

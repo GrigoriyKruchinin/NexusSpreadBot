@@ -33,6 +33,8 @@ class MarketUniverse:
     """exchange -> symbol -> market (only symbols listed on >= 2 exchanges)."""
     transfers: Mapping[str, Mapping[str, AssetTransferInfo] | None] = field(default_factory=dict)
     """exchange -> asset -> transfer info (``None`` when the exchange exposes no data)."""
+    transfers_loaded_at_ms: Mapping[str, int] = field(default_factory=dict)
+    """exchange -> epoch ms of the last successful transfer metadata load (staleness guard)."""
 
     @classmethod
     def build(
@@ -40,6 +42,7 @@ class MarketUniverse:
         markets_by_exchange: Mapping[str, Iterable[MarketInfo]],
         transfers: Mapping[str, Mapping[str, AssetTransferInfo] | None],
         rules: UniverseFilter,
+        transfers_loaded_at_ms: Mapping[str, int] | None = None,
     ) -> MarketUniverse:
         """Keep active, accepted markets whose symbol trades on at least two exchanges."""
         accepted: dict[str, dict[str, MarketInfo]] = {}
@@ -56,6 +59,7 @@ class MarketUniverse:
                 for ex, by_symbol in accepted.items()
             },
             transfers=dict(transfers),
+            transfers_loaded_at_ms=dict(transfers_loaded_at_ms or {}),
         )
 
     def with_taker_fees(self, fees: Mapping[tuple[str, str], Decimal]) -> MarketUniverse:
@@ -71,7 +75,7 @@ class MarketUniverse:
             }
             for exchange, by_symbol in self.markets.items()
         }
-        return MarketUniverse(markets=markets, transfers=self.transfers)
+        return replace(self, markets=markets)
 
     @property
     def common_symbols(self) -> frozenset[str]:

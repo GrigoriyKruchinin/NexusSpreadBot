@@ -129,6 +129,16 @@ class NetworkInfo:
     withdraw_fee: Decimal | None
     contract: str | None = None
     """Token contract address on this network, when published (detects ticker collisions)."""
+    withdraw_min: Decimal | None = None
+    """Minimum withdrawal size in the asset (``None`` = not published)."""
+    deposit_min: Decimal | None = None
+    """Minimum deposit size in the asset (deposits below it are not credited)."""
+    deposit_confirmations: int | None = None
+    """Block confirmations before a deposit is credited."""
+    est_arrival_min: Decimal | None = None
+    """Exchange-estimated arrival time in minutes."""
+    busy: bool | None = None
+    """Venue flags the network as congested/busy."""
 
 
 @dataclass(frozen=True, slots=True)

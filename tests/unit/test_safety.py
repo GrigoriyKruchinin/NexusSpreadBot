@@ -36,6 +36,7 @@ _FORBIDDEN_CALL = re.compile(
 _ALLOWED_CALLS = frozenset(
     {
         "fetch_deposit_withdraw_fees",  # ccxt read-only (GET) fee table
+        "list_transfer_routes",  # pure multi-route listing (engine); security sign-off pending
         "load_transfer_info",  # our read-only metadata interface
         "select_transfer_route",  # pure route selection (engine)
         "transfer_info",  # universe lookup
