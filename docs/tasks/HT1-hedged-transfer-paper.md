@@ -142,7 +142,7 @@ sweep unaffected). S0 reduced to the `test_safety` additions.
   tests unchanged; S0 pins still pass.
 - [x] **S6 Transit-time model** (`simulation/transit.py`, pure): block-time table, seeded lognormal +
   p_stuck, `tau_p50`/`tau_p95`, seed from `position_key`. AC = card AC4.
-- [ ] **S7 Basis buffer + vol stats** (`simulation/basis.py`, pure): fixed-point `array('q')` ring
+- [x] **S7 Basis buffer + vol stats** (`simulation/basis.py`, pure): fixed-point `array('q')` ring
   buffer, median/std at lag, z-score, warm-up; sigma_1m and max rise from klines. AC: hand-computed
   stats; memory bound test (keys x 720 x 8 B); missing samples are not imputed.
 - [ ] **S8 Hedged portfolio I: pre-checks + entry** (`simulation/hedged.py`, pure Decimal): pools,
