@@ -29,6 +29,7 @@ _FORBIDDEN_CALL = re.compile(
     r".*withdraw.*|.*transfer.*|.*deposit_?address.*|"
     r"create_?\w*order\w*|cancel\w*order\w*|edit_?\w*order\w*|"
     r"fetch2?|request|sign|"
+    r"set_?leverage|set_?margin\w*|set_?position_?mode|(add|reduce)_?margin|"
     r"(private|sapi|papi|fapi|dapi|v\d)\w*(post|put|delete)\w*"
     r")$"
 )
@@ -109,6 +110,11 @@ def test_no_fund_moving_or_order_calls_in_source() -> None:
         "client.private_withdrawals_post_withdrawals({})",
         "client.fetch_deposit_addresses_by_network('USDT')",
         "client.create_order('BTC/USDT', 'market', 'buy', 1)",
+        "client.set_leverage(5, 'BTC/USDT:USDT')",
+        "client.setMarginMode('isolated', 'BTC/USDT:USDT')",
+        "client.set_position_mode(True)",
+        "client.add_margin('BTC/USDT:USDT', 1)",
+        "client.reduceMargin('BTC/USDT:USDT', 1)",
         "client.request('capital/withdraw/apply', 'sapi', 'POST')",
         "getattr(client, 'withdraw')('USDT', 1)",
         "import ccxt\ngetattr(client, name)()",

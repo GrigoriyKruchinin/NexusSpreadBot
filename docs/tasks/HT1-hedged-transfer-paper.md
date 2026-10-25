@@ -97,8 +97,14 @@ Where these amendments conflict with Scope above, they override it:
   (skip code `PERP_HISTORY_MISSING`), C6 (relative-basis estimator), C8 (final booking of an unpriceable
   hedge).
 
+## Override 2026-10-25 (user): HT is the only strategy
+The 4 running spot sets and their data are retired at HT deploy (fresh DB). Therefore: no golden-hash pins
+(S0 pins dropped), AC5 and C9 are void, and nothing exists only to keep the old sets byte-identical. Spot
+paper code stays (analytical tool). Kept: C2 (own `paper_hedged_*` tables), C3/C4 (HedgedBook separate,
+sweep unaffected). S0 reduced to the `test_safety` additions.
+
 ## Implementation steps (one commit each; `make check` green; HT stays disabled in the TOML until S13)
-- [ ] **S0 Golden pins + safety rules.** Test pins the literal definition hashes of `all`,
+- [x] **S0 (safety part only; pins dropped) Golden pins + safety rules.** Test pins the literal definition hashes of `all`,
   `excl_conditional`, `excl_bybit`, `excl_gateio` from the committed `config/nexus.toml`. `test_safety`:
   forbid `set_?leverage`, `set_?margin\w*`, `set_?position_?mode`, `(add|reduce)_?margin`. AC: tests pass
   at HEAD with no production code change; the orchestrator records the pinned hashes and cross-checks them
