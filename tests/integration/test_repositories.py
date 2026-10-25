@@ -129,6 +129,8 @@ async def test_snapshots_health_and_retention(sessions: Sessions) -> None:
         "exchange_metadata_stats": 0,
         "opportunity_episodes": 0,
         "route_quarantine": 0,
+        "alert_hour_budget": 0,
+        "alert_log_stale_sending": 0,
     }
     async with sessions() as session:
         assert await session.scalar(select(func.count()).select_from(SpreadSnapshotRow)) == 2
