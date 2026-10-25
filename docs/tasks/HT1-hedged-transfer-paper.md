@@ -160,7 +160,7 @@ sweep unaffected). S0 reduced to the `test_safety` additions.
   exchanges, parent set exists, leverage 1-5, thresholds > 0, id <= 32 chars); HT run hash = HT params +
   parent definition hash. TOML gets both HT sets but `enabled = false`. AC: S0 pins pass; config tests;
   the HT hash changes when any HT parameter changes.
-- [ ] **S12 PerpFeed** (`scanner/perp_feed.py`): polling loop (30 s / 60 s), cache + ages, per-venue
+- [x] **S12 PerpFeed** (`scanner/perp_feed.py`): polling loop (30 s / 60 s), cache + ages, per-venue
   backoff/health (separate from spot), kline/tier incremental cache + prefetch API, basis sampling. AC:
   fake-port tests for cadence, 429 pause of the perp venue only, stale flags, cancellation (no hang on
   stop), never-raise loop.
@@ -191,3 +191,10 @@ Progress 2026-10-25: S9 (97ef621) and S10 done. S10 adds revision `a7c1d93e5b20`
 `paper_hedged_coverage` hourly counters, sources `sweep` and `perp:<venue>`; writes wired in S13),
 `IHedgedPaperRepository` + `persistence/hedged_repository.py` (JSON payload codec unit-tested; DB round trip and
 migration up/down tests are integration, CI-only on `nexus_test`, not run locally). Next: S11.
+
+Progress 2026-10-25 (later): security F1-F3 (639e0aa), S11 (b446a3c) and S12 done. S11: `PaperHedgedSettings`
+(`config/groups.py`), `config/hedged_sets.py`, `simulation/hedged_run.py` (`build_hedged_config`, `hedged_set_specs`,
+`hedged_run_hash`; hashes pinned in `tests/unit/config/test_paper_hedged.py`), `payload_version` 1 in the codec
+(`HedgedPayloadVersionError` on restore). S12: `scanner/perp_feed.py` (`PerpFeed`: per-venue loops, own health,
+caches, klines/tiers prefetch, `update_spot` + basis sampling, `set_watch`/`set_open`). Coverage-counter writes
+(handoff item 1) and the wiring of `PerpFeed` counters are for S13. Next: S13.
