@@ -172,33 +172,3 @@ def _contracts_match(a: NetworkInfo, b: NetworkInfo) -> bool:
     if not (a.contract and b.contract):
         return False
     return a.contract.strip().lower() == b.contract.strip().lower()
-
-
-def list_transfer_routes(
-    source: AssetTransferInfo | None, destination: AssetTransferInfo | None
-) -> tuple[tuple[str, NetworkInfo, NetworkInfo], ...]:
-    """Every VERIFIED shared network, sorted by withdrawal fee then code (pure, read-only).
-
-    A network qualifies under the same rules as :func:`select_transfer_route`: withdraw-enabled
-    on the source, deposit-enabled on the destination, no contract conflict, known fee, code
-    not ambiguous. Returns ``(code, source_network, destination_network)`` triples; empty when
-    the asset cannot be moved or is not verifiable. No transfer is ever made.
-    """
-    if source is None or destination is None:
-        return ()
-    if source.withdraw_enabled is False or destination.deposit_enabled is False:
-        return ()
-    src, src_ambiguous = _index_networks(source)
-    dst, dst_ambiguous = _index_networks(destination)
-    routes: list[tuple[Decimal, str, NetworkInfo, NetworkInfo]] = []
-    for code in sorted(set(src) & set(dst)):
-        out, into = src[code], dst[code]
-        if code in src_ambiguous or code in dst_ambiguous:
-            continue
-        if out.withdraw_enabled is not True or into.deposit_enabled is not True:
-            continue
-        if out.withdraw_fee is None or _contracts_conflict(out, into):
-            continue
-        routes.append((out.withdraw_fee, code, out, into))
-    routes.sort(key=lambda r: (r[0], r[1]))
-    return tuple((code, out, into) for _, code, out, into in routes)

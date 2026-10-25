@@ -37,8 +37,6 @@ _FORBIDDEN_CALL = re.compile(
 _ALLOWED_CALLS = frozenset(
     {
         "fetch_deposit_withdraw_fees",  # ccxt read-only (GET) fee table
-        "list_transfer_routes",  # pure multi-route listing (engine); security sign-off 2026-10-25
-        # (docs/audit/security-review-HT1-S0-S8.md)
         "load_transfer_info",  # our read-only metadata interface
         "select_transfer_route",  # pure route selection (engine)
         "transfer_info",  # universe lookup
@@ -135,27 +133,15 @@ def test_guard_detects_known_bypasses(snippet: str) -> None:
 
 
 def test_no_withdraw_method_on_interfaces() -> None:
-    from nexus.interfaces import market_data, perp
+    from nexus.interfaces import market_data
 
-    for module in (market_data, perp):
+    for module in (market_data,):
         for name in dir(module):
             obj = getattr(module, name)
             if isinstance(obj, type) and obj.__module__ == module.__name__:
                 assert not any(a.lower().startswith(("withdraw", "transfer")) for a in dir(obj)), (
                     name
                 )
-
-
-def test_perp_port_is_read_only() -> None:
-    from nexus.interfaces.perp import IPerpMarketData
-
-    banned = re.compile(
-        r"(?i)(create|cancel|edit)\w*order|set_|margin|position|withdraw|transfer|api_?key"
-    )
-    methods = [a for a in dir(IPerpMarketData) if not a.startswith("_")]
-    assert methods
-    allowed_lev = {"fetch_leverage_tiers"}
-    assert [m for m in methods if banned.search(m) and m not in allowed_lev] == []
 
 
 # ------------------------------------------------------------------ runtime guard

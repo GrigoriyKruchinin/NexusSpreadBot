@@ -15,8 +15,6 @@ from nexus.domain.models import MarketInfo
 from nexus.domain.quarantine import RouteQuarantine
 from nexus.domain.spread import SpreadEvaluation
 from nexus.engine.candidates import RouteQuote
-from nexus.simulation.hedged_portfolio import HedgedPosition
-from nexus.simulation.hedged_portfolio import Rebalance as HedgedRebalance
 from nexus.simulation.portfolio import Rebalance, Seed, TradeOutcome
 
 
@@ -273,88 +271,3 @@ class IRetentionRepository(ABC):
         balance snapshot sets older than the window are thinned to the last set of each UTC
         day per portfolio (daily equity curve for the GO report); the latest set always survives.
         """
-
-
-@dataclass(frozen=True, slots=True)
-class HedgedEvent:
-    """One idempotent ledger event of a hedged position (funding, liquidation, exit fill)."""
-
-    position_key: str
-    kind: str
-    event_ms: int
-    """Funding time / fill time: with ``(run, position, kind)`` it is the idempotency key."""
-    amount: Decimal
-    detail: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class HedgedSkip:
-    """A rejected entry with its exact skip reason."""
-
-    at_ms: int
-    coin: str
-    buy_venue: str
-    sell_venue: str
-    reason: str
-    detail: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class HedgedPoolState:
-    """Mutable portfolio state outside the positions: USDT pools and in-flight rebalances."""
-
-    pools: dict[str, Decimal]
-    rebalances: list[HedgedRebalance]
-    rebalance_fee_paid: Decimal
-
-
-@dataclass(frozen=True, slots=True)
-class HedgedStored:
-    """Everything needed to resume one hedged run after a restart."""
-
-    state: HedgedPoolState | None
-    positions: list[HedgedPosition]
-
-
-@dataclass(frozen=True, slots=True)
-class HedgedCoverageDelta:
-    """Minutes of feed coverage in one UTC hour (spec 16.2 active-hour counters)."""
-
-    hour_ms: int
-    source: str
-    """``sweep`` (complete spot sweep) or ``perp:<venue>`` (fresh ticker and funding)."""
-    minutes: int
-
-
-class IHedgedPaperRepository(ABC):
-    """Hedged-transfer paper records (``paper_hedged_*`` tables only)."""
-
-    @abstractmethod
-    async def ensure_run(self, set_id: str, definition: RunDefinition, now_ms: int) -> PortfolioRun:
-        """Resume the latest run of the set if its definition hash matches, else start a new one."""
-
-    @abstractmethod
-    async def commit(
-        self,
-        *,
-        run_id: int,
-        at_ms: int,
-        positions: Sequence[HedgedPosition],
-        events: Sequence[HedgedEvent],
-        skips: Sequence[HedgedSkip],
-        state: HedgedPoolState,
-    ) -> int:
-        """One transaction: upsert positions, insert events (duplicates ignored), skips and the
-        pool state. Returns the number of NEW events."""
-
-    @abstractmethod
-    async def load_state(self, run_id: int) -> HedgedStored:
-        """Pool state and all positions of the run."""
-
-    @abstractmethod
-    async def add_coverage(self, run_id: int, deltas: Sequence[HedgedCoverageDelta]) -> None:
-        """Add minutes to the hourly coverage counters (upsert, additive)."""
-
-    @abstractmethod
-    async def load_coverage(self, run_id: int) -> list[HedgedCoverageDelta]:
-        """All coverage counters of the run."""

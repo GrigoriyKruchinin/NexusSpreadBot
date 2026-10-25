@@ -24,7 +24,6 @@ from nexus.config.groups import (
     KeyPolicySettings,
     LoggingSettings,
     MaintenanceSettings,
-    PaperHedgedSettings,
     PaperSettings,
     QuarantineSettings,
     RedisSettings,
@@ -89,7 +88,6 @@ class ScannerRoleSettings(_RoleSettings):
     spread: SpreadSettings
     episodes: EpisodeSettings
     paper: PaperSettings
-    paper_hedged: PaperHedgedSettings = Field(default_factory=PaperHedgedSettings)
     alerts: AlertPolicySettings
     quarantine: QuarantineSettings
     logging: LoggingSettings
@@ -116,16 +114,6 @@ class ScannerRoleSettings(_RoleSettings):
     def _venue_sets_valid(self) -> Self:
         """Fail closed on a bad ``PAPER_VENUE_SETS`` (the error names the set and venue)."""
         _ = self.venue_sets  # resolved eagerly so a bad spec stops startup
-        return self
-
-    @model_validator(mode="after")
-    def _hedged_venues_enabled(self) -> Self:
-        """An enabled HT run needs its spot venues among the enabled exchanges."""
-        if self.paper_hedged.enabled:
-            missing = sorted(set(self.paper_hedged.spot_venues) - set(self.exchanges.enabled))
-            if missing:
-                msg = f"PAPER_HEDGED_SPOT_VENUES not in EXCHANGES_ENABLED: {', '.join(missing)}"
-                raise ValueError(msg)
         return self
 
     @property
@@ -167,7 +155,6 @@ class ScannerRoleSettings(_RoleSettings):
             spread=SpreadSettings(),
             episodes=EpisodeSettings(),
             paper=PaperSettings(),
-            paper_hedged=PaperHedgedSettings(),
             alerts=AlertPolicySettings(),
             quarantine=QuarantineSettings(),
             logging=LoggingSettings(),

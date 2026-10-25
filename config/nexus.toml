@@ -117,47 +117,6 @@ latency_ms = 2000
 rebalance_threshold_pct = 20
 rebalance_delay_min = 30
 
-[paper_hedged]
-# Hedged-transfer paper test (HT1, docs/quant/hedged-transfer-spec.md section 13). All values are
-# pre-registered and belong to the run hash. Public read-only data; no order code exists.
-# DISABLED until step S13 wires the runtime.
-enabled = false
-sets = "ht_excl_conditional=okx,kucoin;ht_excl_conditional_bn=binance,okx,kucoin"
-spot_venues = "binance,okx,kucoin"
-hedge_policy = "best"
-capital_usd = 10000
-trade_notional_usd = 1000
-min_trade_usd = 100
-leverage = 2
-mmr_pct = 2.5
-liq_min_distance_pct = 30
-liq_sigma_k = 5
-max_slippage_pct = 0.5
-perp_taker_fee_pct = "binance=0.05,okx=0.05,kucoin=0.06"
-min_net_profit_pct = 0.3
-min_net_profit_usd = 3
-max_funding_cost_pct = 0.3
-funding_negative_stress = 1.5
-basis_window_h = 6
-basis_min_samples = 60
-basis_z_max = 2.5
-basis_std_floor = 0.0001
-basis_pair_tolerance_s = 15
-basis_spot_max_age_s = 15
-kline_min_coverage = 0.9
-unpriced_grace_h = 6
-leg_risk_reserve_pct = 0.05
-max_open_positions = 4
-max_open_per_coin = 1
-route_cooldown_s = 60
-p_stuck = 0.01
-stuck_h = 6
-max_hold_h = 24
-latency_ms = 2000
-refill_threshold_usd = 1500
-perp_ticker_interval_s = 30
-funding_refresh_s = 60
-
 [maintenance]
 # Lowering retention deletes data on the next cleanup: review such changes carefully.
 snapshot_retention_days = 7

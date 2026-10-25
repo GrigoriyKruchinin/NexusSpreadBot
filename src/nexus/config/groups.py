@@ -16,12 +16,6 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from nexus.config.base import NexusBaseSettings, StrTuple
-from nexus.config.hedged_sets import (
-    DEFAULT_HEDGED_SETS,
-    normalize_hedged_sets,
-    parse_hedged_sets,
-    parse_perp_fees,
-)
 from nexus.config.venue_sets import DEFAULT_VENUE_SETS, validate_venue_sets_syntax
 
 _EXCHANGE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -422,86 +416,6 @@ class PaperSettings(NexusBaseSettings):
     @classmethod
     def _venue_sets_syntax(cls, value: str) -> str:
         return validate_venue_sets_syntax(value)
-
-
-class PaperHedgedSettings(NexusBaseSettings):
-    """Hedged-transfer paper test, HT1 (``PAPER_HEDGED_*``; quant spec section 13).
-    . Every value here belongs to the pre-registered run hash. Percent values are
-     percent (0.3 = 0.3 %). Public read-only data only: nothing here can place an order."""
-
-    model_config = SettingsConfigDict(env_prefix="PAPER_HEDGED_")
-
-    enabled: bool = False
-    """Master switch (code default off; the TOML turns it on at deploy, step S13)."""
-    sets: str = DEFAULT_HEDGED_SETS
-    """HT sets as ``id=hedge_venue,hedge_venue`` entries separated by ``;`` (id <= 32 chars)."""
-    spot_venues: StrTuple = ("binance", "okx", "kucoin")
-    """Spot venues of every HT set: an alert episode is consumed when both its venues are here."""
-    hedge_policy: Literal["best"] = "best"
-    """Which hedge venue is used per position (``best`` = highest expected net)."""
-    capital_usd: Decimal = Field(default=Decimal(10_000), gt=0)
-    trade_notional_usd: Decimal = Field(default=Decimal(1_000), gt=0)
-    min_trade_usd: Decimal = Field(default=Decimal(100), gt=0)
-    leverage: Decimal = Field(default=Decimal(2), ge=1, le=5)
-    """Paper leverage used for margin and liquidation maths only (never set on an exchange)."""
-    mmr_pct: Decimal = Field(default=Decimal("2.5"), gt=0, lt=100)
-    liq_min_distance_pct: Decimal = Field(default=Decimal(30), gt=0, lt=100)
-    liq_sigma_k: Decimal = Field(default=Decimal(5), gt=0)
-    max_slippage_pct: Decimal = Field(default=Decimal("0.5"), gt=0, lt=100)
-    perp_taker_fee_pct: str = "binance=0.05,okx=0.05,kucoin=0.06"
-    """Perp taker fee per venue (VIP0), ``venue=pct`` pairs separated by commas."""
-    min_net_profit_pct: Decimal = Field(default=Decimal("0.3"), gt=0)
-    min_net_profit_usd: Decimal = Field(default=Decimal(3), gt=0)
-    max_funding_cost_pct: Decimal = Field(default=Decimal("0.3"), gt=0)
-    funding_negative_stress: Decimal = Field(default=Decimal("1.5"), gt=0)
-    basis_window_h: int = Field(default=6, ge=1, le=24)
-    basis_min_samples: int = Field(default=60, ge=1)
-    basis_z_max: Decimal = Field(default=Decimal("2.5"), gt=0)
-    basis_std_floor: Decimal = Field(default=Decimal("0.0001"), gt=0)
-    basis_pair_tolerance_s: int = Field(default=15, ge=1)
-    basis_spot_max_age_s: int = Field(default=15, ge=1)
-    kline_min_coverage: Decimal = Field(default=Decimal("0.9"), gt=0, le=1)
-    unpriced_grace_h: int = Field(default=6, ge=1)
-    leg_risk_reserve_pct: Decimal = Field(default=Decimal("0.05"), ge=0)
-    max_open_positions: int = Field(default=4, ge=1)
-    max_open_per_coin: int = Field(default=1, ge=1)
-    route_cooldown_s: int = Field(default=60, ge=0)
-    p_stuck: float = Field(default=0.01, ge=0, lt=1)
-    stuck_h: int = Field(default=6, ge=1)
-    max_hold_h: int = Field(default=24, ge=1)
-    latency_ms: int = Field(default=2_000, ge=0, le=60_000)
-    refill_threshold_usd: Decimal = Field(default=Decimal(1_500), gt=0)
-    perp_ticker_interval_s: int = Field(default=30, ge=5)
-    funding_refresh_s: int = Field(default=60, ge=5)
-
-    @field_validator("sets")
-    @classmethod
-    def _sets_syntax(cls, value: str) -> str:
-        return normalize_hedged_sets(value)
-
-    @field_validator("spot_venues")
-    @classmethod
-    def _spot_venues_valid(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        names = tuple(v.strip().lower() for v in value)
-        if len(names) < 2 or len(set(names)) != len(names):
-            msg = "PAPER_HEDGED_SPOT_VENUES needs at least two distinct venues"
-            raise ValueError(msg)
-        return names
-
-    @field_validator("perp_taker_fee_pct")
-    @classmethod
-    def _fees_valid(cls, value: str) -> str:
-        parse_perp_fees(value)
-        return value
-
-    @model_validator(mode="after")
-    def _hedge_venues_within_spot(self) -> Self:
-        for set_id, hedge in parse_hedged_sets(self.sets).items():
-            outside = sorted(set(hedge) - set(self.spot_venues))
-            if outside:
-                msg = f"PAPER_HEDGED_SETS: set {set_id!r} hedges on non-spot venue(s) {outside}"
-                raise ValueError(msg)
-        return self
 
 
 class DigestSettings(NexusBaseSettings):

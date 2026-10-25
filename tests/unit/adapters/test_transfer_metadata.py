@@ -1,4 +1,4 @@
-"""HT1 S5: extended NetworkInfo fields, regression of the old ones, list_transfer_routes."""
+"""HT1 S5: extended NetworkInfo fields, regression of the old ones."""
 
 import json
 from collections.abc import Mapping
@@ -10,8 +10,7 @@ import httpx
 import pytest
 
 from nexus.adapters.cex.binance_public import BinancePublicTransferSource
-from nexus.domain.models import AssetTransferInfo, NetworkInfo
-from nexus.engine.transfer import list_transfer_routes, select_transfer_route
+from nexus.domain.models import AssetTransferInfo
 from nexus.scanner.universe import MarketUniverse, UniverseFilter
 from tests.unit.adapters.fake_ccxt import FakeCcxtClient, load_fixture
 from tests.unit.adapters.test_ccxt_adapters import _adapter
@@ -158,74 +157,6 @@ async def test_ccxt_missing_or_invalid_extras_are_none() -> None:
     info2 = await _adapter("okx", client2).load_transfer_info()
     assert info2 is not None
     assert info2["USDT"].networks[0].deposit_confirmations is None
-
-
-# ------------------------------------------------------------------ list_transfer_routes
-
-
-def _net(
-    name: str,
-    *,
-    w: bool | None = True,
-    d: bool | None = True,
-    fee: str | None = "1",
-    contract: str | None = None,
-) -> NetworkInfo:
-    return NetworkInfo(
-        network=name,
-        withdraw_enabled=w,
-        deposit_enabled=d,
-        withdraw_fee=D(fee) if fee else None,
-        contract=contract,
-    )
-
-
-def _info(exchange: str, *networks: NetworkInfo, **kw: bool) -> AssetTransferInfo:
-    return AssetTransferInfo(exchange=exchange, asset="ABC", networks=networks, **kw)
-
-
-def test_list_routes_returns_every_verified_network_sorted_by_fee() -> None:
-    src = _info("a", _net("ERC20", fee="5"), _net("trc20", fee="1"), _net("SOL", fee="1"))
-    dst = _info("b", _net("ERC20"), _net("TRC20"), _net("SOL"), _net("BSC"))
-    routes = list_transfer_routes(src, dst)
-    assert [code for code, _, _ in routes] == ["SOL", "TRC20", "ERC20"]
-    assert routes[0][1].withdraw_fee == D(1)
-    # the cheapest-only selector is consistent with the head of the list
-    assert select_transfer_route(src, dst).network == "SOL"
-
-
-def test_list_routes_excludes_unverifiable_networks() -> None:
-    src = _info(
-        "a",
-        _net("ERC20", w=False),
-        _net("TRC20", fee=None),
-        _net("SOL", w=None),
-        _net("ARB", contract="0xaaaa" + "0" * 36),
-        _net("OP"),
-        _net("BEP20", d=True),
-    )
-    dst = _info(
-        "b",
-        _net("ERC20"),
-        _net("TRC20"),
-        _net("SOL"),
-        _net("ARB", contract="0xbbbb" + "0" * 36),
-        _net("OP", d=None),
-        _net("BEP20", d=False),
-    )
-    assert list_transfer_routes(src, dst) == ()
-
-
-def test_list_routes_ambiguous_code_and_asset_level_flags() -> None:
-    src = _info("a", _net("ETH"), _net("ERC20"))  # both collapse to ERC20
-    dst = _info("b", _net("ERC20"))
-    assert list_transfer_routes(src, dst) == ()
-    ok_src, ok_dst = _info("a", _net("ERC20")), _info("b", _net("ERC20"))
-    assert len(list_transfer_routes(ok_src, ok_dst)) == 1
-    assert list_transfer_routes(None, ok_dst) == ()
-    assert list_transfer_routes(ok_src, None) == ()
-    assert list_transfer_routes(_info("a", _net("ERC20"), withdraw_enabled=False), ok_dst) == ()
-    assert list_transfer_routes(ok_src, _info("b", _net("ERC20"), deposit_enabled=False)) == ()
 
 
 def test_universe_records_transfer_load_time() -> None:
