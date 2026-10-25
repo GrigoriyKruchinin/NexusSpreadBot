@@ -1,6 +1,8 @@
 # STATE (updated 2026-10-24)
 
 ## Where we are
+- **LICENSE: Apache-2.0 (user decision 2026-10-25)**; LICENSE + NOTICE added, pyproject `license`. Legal T13: only the
+  owner's PRIVATE channel/chat is OK on all venues; public channels breach OKX/KuCoin ToS; no monetisation.
 - **Stage S1-tool planned** (b018cdb; cards `docs/tasks/tool/`, T0..T14). User answers 2026-10-25: T2 squash migrations into
   one initial schema; alerts `[alert] language = en|ru` (default en, user ru); retire quant-analyst, risk-manager,
   creative-ceo, observability-engineer (T12); T9 drop human KEY_POLICY attestations for third parties, optional
