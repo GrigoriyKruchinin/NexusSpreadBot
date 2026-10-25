@@ -295,7 +295,8 @@ The H perp is *unpriceable* when no fresh perp book (stale-book guard) can be fe
 ## 11. GO report (HT section)
 
 New section per HT set, same windows (tuning >= 7 d, holdout >= 14 d, k >= 2 periods), same tax rows and B5/B6
-rules as B15. Fields:
+rules as B15. **For the ~1-week HT test the windows, stability and labels are replaced by section 16**
+(user decision 2026-10-25). Fields:
 - runs/since/config hash; entries, closes, open, skips by reason (codes from section 5) with shares.
 - capital: fixed, avg in-transit, avg margin, avg USDT in rebalance, avg idle; return on fixed capital.
 - P&L lines S, R, D, U, P, F, L, RB, liquidation losses, forced/stuck costs; **hedged total**.
@@ -334,7 +335,8 @@ needed and are retired at HT deploy (fresh DB, each data step with explicit U4 O
 - Deploy (U4, user OK): archive dump of the old DB -> fresh DB -> migrator (`alembic upgrade head`, exit 0) ->
   stack up. Check logs: 2x `hedged_run_started` (`ht_excl_conditional`, `ht_excl_conditional_bn`), first HT
   snapshot within 15 min. The GO report runs on the host (`make go-report`).
-- HT data accrue from its own start: earliest HT verdict = start + 21 days.
+- HT data accrue from its own start. Superseded by section 16 (user decision 2026-10-25): preliminary
+  label after >= 72 active hours, test length max ~1 week.
 
 ## 13. Parameters (pre-registered defaults; all in the run hash) - amended 2026-10-25 (architect C1, C5, C6, C8)
 
@@ -416,3 +418,111 @@ but T dominates it and its funding is strongly negative; it is also not GO-eligi
   the user's real transfer history (U3, read-only), never by moving funds.
 - ADR 0001: HT paper never needs transfer code. A real HT would need withdrawals and internal transfers ->
   new ADR + U4/U5 before Stage 2.
+
+## 16. Short-window preliminary verdict (user decision 2026-10-25)
+
+User decision 2026-10-25: the HT paper test runs **at most ~1 week**, with gaps (the PC is sometimes off), and
+the verdict is an extrapolation from the hours the system was really watching. This section replaces, for the
+HT test only, the B15 window rules (tuning >= 7 d, holdout >= 14 d, B5 periods >= 7 d) and the "earliest HT
+verdict = start + 21 days" line of section 12. B3 (tax on the window total, no refund of losses), B6 (strict
+ex-top-2 concentration) and the directional-MTM / basis flags of section 11 stay. The output is a
+**preliminary label**, not a B7 analytical GO; the UF GO/NO-GO decision stays with the user.
+
+### 16.1 Pre-registration (whole week = out-of-sample)
+
+- Before deploy, every section 13 parameter of both HT sets, plus the report parameters of this section
+  (active-hour thresholds, block lengths, bootstrap count and seed, minimums, label rules), is frozen in
+  `docs/quant/ht-preregistration.md` together with the expected HT run hash, and committed. No parameter is
+  tuned on HT data; there is **no tuning period**, so every HT hour is out-of-sample.
+- The report is given the pre-registered hash (CLI `--expected-hash`). If the run hash differs, the label is
+  INSUFFICIENT-DATA (`prereg_mismatch`). A hash change inside the window: only the segment with the
+  pre-registered hash counts; any other segment is shown, never pooled.
+- Multiple testing (section 11): the 2 HT hypotheses keep the Bonferroni note; see 16.4 for the bound used.
+
+### 16.2 Active hours and gaps
+
+- Clock = UTC hour buckets `[h, h+1)` inside the run window. An hour is **active** iff, in >= 54 of its 60
+  minutes, (a) at least one complete sweep ran (every spot venue of the set answered within the stale-book
+  guard) and (b) every hedge venue of the set had a perp ticker age <= 60 s and funding age <= 15 min.
+  All other hours are **gap hours** (PC off, container down, feed stale, partial hour).
+- Data dependency: the HT runtime must persist per-hour coverage counters per set (minutes with a complete
+  sweep, minutes with a fresh perp feed per hedge venue); without them active hours cannot be computed and
+  the label is INSUFFICIENT-DATA.
+- **Base version.** Numerator `P_base` = section 3 hedged total of positions *entered* in active hours
+  (closed, plus open positions valued at their exit price now: B bid, perp ask, both taker fees), plus USDT
+  rebalance costs. Denominator `H_base` = active hours. Positions entered in a gap hour are excluded and
+  listed.
+- **Pessimistic version.** Every position open at any point of a gap (or entered in a gap hour) is booked at
+  `min(drawn P&L, shadow-exit P&L, gap-worst P&L)`. Gap-worst = spot leg sold at the lowest B 1-minute
+  kline low and perp closed at the highest perp 1-minute kline high seen between gap start and the first
+  active minute after it (public klines, fetched after the fact; legs taken independently, so this is
+  deliberately too harsh), plus funding over the gap at the worst observed rate of the hold; LIQUIDATED if
+  that perp high >= `P_liq`. If klines are missing the position counts as a full loss of its margin `M`.
+  Denominator `H_pess` = active hours + every gap hour in which any capital was locked (coin in transit,
+  margin, USDT in rebalance) - locked capital earns nothing while the PC is off.
+- Monthly extrapolation: `rate(P, H) = after_tax(P) x 720 / H / capital_usd x 100` (%/month; 720 active
+  hours = one month of uninterrupted watching). Pre-tax, 15 % and **35 %** shown; the label uses 35 %.
+- Hour-of-day coverage: share of active hours in each 6 h UTC quadrant (00-06, 06-12, 12-18, 18-24). Flag
+  `hod_bias` if any quadrant has < 15 % of active hours (gaps are not random if the PC is off every night;
+  the extrapolation then assumes the missing hours look like the watched ones).
+
+### 16.3 Uncertainty (block bootstrap)
+
+- Blocks are built on the active-hour timeline (gap hours removed, active hours concatenated in time order):
+  primary **6 h blocks** (6 consecutive active hours), sensitivity **day blocks** (active hours of one UTC
+  calendar day). A position belongs to the block of its entry hour; in the pessimistic version locked gap
+  hours are added to the block that holds the position.
+- 10,000 resamples with replacement, fixed pre-registered seed; replicate rate = `rate(sum P, sum H)` over
+  the drawn blocks at 35 % tax (tax on the replicate total, as B3). Report the percentile **90 % interval**
+  (5th-95th) and the 2.5th percentile, for base and pessimistic, 6 h and day blocks.
+- Conservative combination: **lower bound** `LB` = the minimum 5th percentile over {6 h, day} of the
+  **pessimistic** version; **upper bound** `UB` = the maximum 95th percentile over {6 h, day} of the **base**
+  version. This widens the interval on purpose: more weeks end INCONCLUSIVE rather than falsely labelled.
+
+### 16.4 Minimums and labels (GO set `ht_excl_conditional` only; `_bn` reported, never labelled)
+
+- Before any label: **>= 72 active hours**, active hours on **>= 3** UTC days, **>= 12** 6 h blocks,
+  **>= 20 closed positions** on **>= 3 distinct coins**, run hash = pre-registered, no directional-MTM leak
+  flag, no `hedge_unpriced_final` positions left unresolved. Otherwise **INSUFFICIENT-DATA** (state what
+  is missing, e.g. "41 of 72 active hours").
+- **PRELIMINARY-GO** only if all of: `LB >= 2.0 %/month` after 35 % tax; strict concentration (B6) on the
+  pessimistic point estimate: ex-top-2 routes **and**, separately, ex-top-2 coins each >= 2.0 %/month after
+  35 % tax (top-2 ranked on this window's positive net; with <= 2 coins the ex-top-2 result is 0 -> fail);
+  no single UTC day contributes > 60 % of the positive net (`day_concentrated`, the B5 rule scaled down).
+- **PRELIMINARY-NO-GO** if `UB < 2.0 %/month` after 35 % tax.
+- Otherwise **INCONCLUSIVE** (the week cannot separate "works" from "does not"); print `LB`, `UB` and which
+  PRELIMINARY-GO condition failed.
+- Bonferroni (section 11, alpha/2 for 2 hypotheses): the user rule above uses the 5th percentile. The
+  report also prints the 2.5th-percentile lower bound and flags `bonferroni_fail` if it is < 2.0 % while
+  `LB` passes; the label is not changed by this flag unless the user decides otherwise.
+- Confidence is always stated as **low** (single regime, see 16.5); `hod_bias`, basis-dominated and a gap
+  share > 50 % of wall-clock hours are printed next to the label.
+- "What would refute it" (always printed): `LB`, the pessimistic point rate, the ex-top-2 results, the worst
+  day, the result with the largest single trade removed.
+
+### 16.5 What a 1-week test can and cannot show
+
+A week of partial watching can show whether the mechanics hold up on live data: how many alerts survive the
+pre-checks, whether the hedge really removes the directional MTM (the leak flag should stay quiet), the size
+and sign of the residual basis R per trade, funding paid, how much capital sits idle or in transit, and a
+rough order of magnitude of the net per active hour. It cannot show that this rate persists: it is one
+market regime (one volatility level, one funding environment, the few coins that happen to squeeze that
+week), so a good week can be a lucky week; the alert mix on okx/kucoin perps was one coin deep in the prior
+(section 14) and a week may again be dominated by 1-2 coins, which the strict concentration rule will then
+fail. Extrapolating 100-150 watched hours to 720 also assumes the unwatched hours (often nights) look like
+the watched ones, and the bootstrap only measures noise inside this week, not regime change; tail events
+(exchange suspends a withdrawal mid-transfer, a perp liquidation spike, a delisting) are unlikely to appear
+at all. PRELIMINARY-NO-GO from a week is fairly informative (an edge too small to survive costs rarely looks
+large by chance in the pessimistic version); PRELIMINARY-GO is only a reason to keep watching, not proof.
+
+### 16.6 GO-report fields for S14 (JSON + Markdown, per HT set)
+
+`prereg_hash`, `prereg_hash_match`; `wall_hours`, `active_hours`, `gap_hours`, `gap_share`, gap list
+(start, end, hours), `locked_gap_hours`, `active_days`, hour-of-day quadrant shares; `positions_total`,
+`positions_closed`, `positions_across_gap`, `positions_entered_in_gap`, `distinct_coins`, `distinct_routes`;
+`P_base`, `H_base`, `P_pess`, `H_pess`; `rate_base` and `rate_pess` pre-tax / 15 % / 35 %; per version and
+block type (6 h, day): `n_blocks`, `p2_5`, `p5`, `p50`, `p95`; `LB`, `UB`; `ex_top2_routes_rate`,
+`ex_top2_coins_rate`, `top1_day_share`, `rate_ex_largest_trade`; `label`
+(PRELIMINARY-GO / PRELIMINARY-NO-GO / INCONCLUSIVE / INSUFFICIENT-DATA), `label_reasons`, `confidence` = low;
+flags `prereg_mismatch`, `day_concentrated`, `hod_bias`, `bonferroni_fail`, `single_regime` (always true),
+`coverage_missing`. Bootstrap parameters (B = 10,000, seed, block lengths) printed in the report header.
