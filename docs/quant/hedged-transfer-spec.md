@@ -492,9 +492,10 @@ ex-top-2 concentration) and the directional-MTM / basis flags of section 11 stay
 - **PRELIMINARY-NO-GO** if `UB < 2.0 %/month` after 35 % tax.
 - Otherwise **INCONCLUSIVE** (the week cannot separate "works" from "does not"); print `LB`, `UB` and which
   PRELIMINARY-GO condition failed.
-- Bonferroni (section 11, alpha/2 for 2 hypotheses): the user rule above uses the 5th percentile. The
-  report also prints the 2.5th-percentile lower bound and flags `bonferroni_fail` if it is < 2.0 % while
-  `LB` passes; the label is not changed by this flag unless the user decides otherwise.
+- Bonferroni (section 11, alpha/2 for 2 hypotheses). **User decision 2026-10-25 (option b): PRELIMINARY-GO
+  uses the 2.5th-percentile lower bound `LB_bonf`** (pessimistic version, as `LB`) instead of the 5th
+  percentile; the report prints both. `bonferroni_fail` (LB passes, LB_bonf fails) blocks PRELIMINARY-GO
+  and yields INCONCLUSIVE.
 - Confidence is always stated as **low** (single regime, see 16.5); `hod_bias`, basis-dominated and a gap
   share > 50 % of wall-clock hours are printed next to the label.
 - "What would refute it" (always printed): `LB`, the pessimistic point rate, the ex-top-2 results, the worst
