@@ -15,3 +15,5 @@ Read before S11-S15 of `docs/tasks/HT1-hedged-transfer-paper.md`.
    `test_safety` patterns (`\w*` prefix for private endpoints, `close_?\w*position\w*`, `(borrow|repay)\w*margin\w*`,
    `modify_?margin\w*`) with bypass test cases; F2 install the read-only guard in `scripts/record_perp_fixtures.py` (or
    fix its docstring); F3 `scrub()` the `adapter_close_failed` log. Update the S5 allowlist comment to cite the review.
+6. **Payload version (from S10 risk):** add a `payload_version` to the JSONB position/pool-state payloads (and
+   reject unknown versions on restore with a clear skip/error, never silently) before deploy. Do it in S11 or S13.
