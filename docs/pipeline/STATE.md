@@ -1,6 +1,11 @@
 # STATE (updated 2026-10-24)
 
 ## Where we are
+- **2026-10-25 after NO-GO (user answers):** stack STOPPED (`docker compose stop`). User OK to delete ALL data: backups
+  (~/nexus-backups, C:\nexus-backups), old + soak1 volumes. Agent deletion was denied by permission settings -> commands
+  given to the user to run himself. HT1 code removal: backend-lead running. Product direction: tool that posts spreads on
+  venues (with and without keys) with key data to a Telegram channel and writes to the DB (as now). Next: project-manager
+  cards for the reshaped scope after user confirms details (paper portfolios removal, channel, alert fields).
 - **UF 2026-10-25: NO-GO (user decision).** Report `docs/reports/go-no-go.md`. Project = analytical spread-finder only.
   HT1 frozen after S12 (disabled). DB wipe planned for HT deploy is NOT done (no HT deploy). Open user questions: what the
   analytical tool must deliver; keep/stop old spot paper runs; keep/remove HT1 code; DB wipe; merge branch to `main`.
