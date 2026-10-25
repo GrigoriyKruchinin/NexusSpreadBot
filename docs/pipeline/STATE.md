@@ -1,6 +1,8 @@
 # STATE (updated 2026-10-24)
 
 ## Where we are
+- **User decision 2026-10-25 (tax): GO/HT verdict is judged PRE-TAX** (supersedes "2 %/month after 35 % tax" for HT);
+  after-tax shown as reference only. Bonferroni: PRELIMINARY-GO uses the 2.5th-percentile lower bound (option b).
 - **User decision 2026-10-25 (option a): finish HT and test it on paper.** Test length MAX ~1 week (not 3), with gaps
   (PC sometimes off); verdict by extrapolation from active hours. Quant to define a short-window, gap-aware preliminary
   verdict (params pre-registered before deploy => whole week is out-of-sample; label confidence honestly). HT1 progress:

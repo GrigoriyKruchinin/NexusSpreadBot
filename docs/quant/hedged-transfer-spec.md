@@ -294,6 +294,11 @@ The H perp is *unpriceable* when no fresh perp book (stale-book guard) can be fe
 
 ## 11. GO report (HT section)
 
+> **User decision 2026-10-25 (tax): the verdict basis is PRE-TAX.** Every threshold written as "after 35 % tax"
+> in sections 11 and 16 (2 %/month bar, LB/UB, LB_bonf, ex-top-2 tests, bootstrap replicates) applies to the
+> pre-tax figure. After-tax figures (15 % / 35 %) stay in the report as reference lines only and never change
+> the label. The tax netting question (spot vs perp legs) remains in `docs/legal/futures-access.md` for later.
+
 New section per HT set, same windows (tuning >= 7 d, holdout >= 14 d, k >= 2 periods), same tax rows and B5/B6
 rules as B15. **For the ~1-week HT test the windows, stability and labels are replaced by section 16**
 (user decision 2026-10-25). Fields:
@@ -420,6 +425,11 @@ but T dominates it and its funding is strongly negative; it is also not GO-eligi
   new ADR + U4/U5 before Stage 2.
 
 ## 16. Short-window preliminary verdict (user decision 2026-10-25)
+
+> **User decision 2026-10-25 (tax): the verdict basis is PRE-TAX.** Every threshold written as "after 35 % tax"
+> in sections 11 and 16 (2 %/month bar, LB/UB, LB_bonf, ex-top-2 tests, bootstrap replicates) applies to the
+> pre-tax figure. After-tax figures (15 % / 35 %) stay in the report as reference lines only and never change
+> the label. The tax netting question (spot vs perp legs) remains in `docs/legal/futures-access.md` for later.
 
 User decision 2026-10-25: the HT paper test runs **at most ~1 week**, with gaps (the PC is sometimes off), and
 the verdict is an extrapolation from the hours the system was really watching. This section replaces, for the
