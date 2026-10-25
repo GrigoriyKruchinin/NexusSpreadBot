@@ -1,0 +1,132 @@
+[
+ {
+  "datetime": "2026-10-22T08:00:00.003Z",
+  "fundingRate": -1.401e-05,
+  "info": {
+   "fundingRate": "-0.00001401",
+   "fundingTime": 1792656000003,
+   "markPrice": "82201.63960145",
+   "rateType": "Regular",
+   "symbol": "BTCUSDT"
+  },
+  "symbol": "BTC/USDT:USDT",
+  "timestamp": 1792656000003
+ },
+ {
+  "datetime": "2026-10-22T16:00:00.001Z",
+  "fundingRate": 1.265e-05,
+  "info": {
+   "fundingRate": "0.00001265",
+   "fundingTime": 1792684800001,
+   "markPrice": "81649.44494203",
+   "rateType": "Regular",
+   "symbol": "BTCUSDT"
+  },
+  "symbol": "BTC/USDT:USDT",
+  "timestamp": 1792684800001
+ },
+ {
+  "datetime": "2026-10-23T00:00:00.006Z",
+  "fundingRate": 5.369e-05,
+  "info": {
+   "fundingRate": "0.00005369",
+   "fundingTime": 1792713600006,
+   "markPrice": "81384.60000000",
+   "rateType": "Regular",
+   "symbol": "BTCUSDT"
+  },
+  "symbol": "BTC/USDT:USDT",
+  "timestamp": 1792713600006
+ },
+ {
+  "datetime": "2026-10-23T08:00:00.004Z",
+  "fundingRate": 7.075e-05,
+  "info": {
+   "fundingRate": "0.00007075",
+   "fundingTime": 1792742400004,
+   "markPrice": "81542.50000000",
+   "rateType": "Regular",
+   "symbol": "BTCUSDT"
+  },
+  "symbol": "BTC/USDT:USDT",
+  "timestamp": 1792742400004
+ },
+ {
+  "datetime": "2026-10-23T16:00:00.005Z",
+  "fundingRate": 0.0001,
+  "info": {
+   "fundingRate": "0.00010000",
+   "fundingTime": 1792771200005,
+   "markPrice": "81657.13073913",
+   "rateType": "Regular",
+   "symbol": "BTCUSDT"
+  },
+  "symbol": "BTC/USDT:USDT",
+  "timestamp": 1792771200005
+ },
+ {
+  "datetime": "2026-10-24T00:00:00.003Z",
+  "fundingRate": 3.939e-05,
+  "info": {
+   "fundingRate": "0.00003939",
+   "fundingTime": 1792800000003,
+   "markPrice": "81160.00000000",
+   "rateType": "Regular",
+   "symbol": "BTCUSDT"
+  },
+  "symbol": "BTC/USDT:USDT",
+  "timestamp": 1792800000003
+ },
+ {
+  "datetime": "2026-10-24T08:00:00.000Z",
+  "fundingRate": 3.431e-05,
+  "info": {
+   "fundingRate": "0.00003431",
+   "fundingTime": 1792828800000,
+   "markPrice": "80696.80000000",
+   "rateType": "Regular",
+   "symbol": "BTCUSDT"
+  },
+  "symbol": "BTC/USDT:USDT",
+  "timestamp": 1792828800000
+ },
+ {
+  "datetime": "2026-10-24T16:00:00.000Z",
+  "fundingRate": 9.6e-06,
+  "info": {
+   "fundingRate": "0.00000960",
+   "fundingTime": 1792857600000,
+   "markPrice": "79769.24157971",
+   "rateType": "Regular",
+   "symbol": "BTCUSDT"
+  },
+  "symbol": "BTC/USDT:USDT",
+  "timestamp": 1792857600000
+ },
+ {
+  "datetime": "2026-10-25T00:00:00.000Z",
+  "fundingRate": 9.409e-05,
+  "info": {
+   "fundingRate": "0.00009409",
+   "fundingTime": 1792886400000,
+   "markPrice": "80846.75728261",
+   "rateType": "Regular",
+   "symbol": "BTCUSDT"
+  },
+  "symbol": "BTC/USDT:USDT",
+  "timestamp": 1792886400000
+ },
+ {
+  "datetime": "2026-10-25T08:00:00.000Z",
+  "fundingRate": 6.005e-05,
+  "info": {
+   "fundingRate": "0.00006005",
+   "fundingTime": 1792915200000,
+   "markPrice": "80644.90000000",
+   "rateType": "Regular",
+   "symbol": "BTCUSDT"
+  },
+  "symbol": "BTC/USDT:USDT",
+  "timestamp": 1792915200000
+ }
+]

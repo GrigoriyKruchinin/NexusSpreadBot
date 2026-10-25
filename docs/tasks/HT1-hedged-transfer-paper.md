@@ -103,6 +103,18 @@ The 4 running spot sets and their data are retired at HT deploy (fresh DB). Ther
 paper code stays (analytical tool). Kept: C2 (own `paper_hedged_*` tables), C3/C4 (HedgedBook separate,
 sweep unaffected). S0 reduced to the `test_safety` additions.
 
+## Quant amendment 2026-10-25 (spec amended; C1/C5/C6/C8 done)
+- Spec sections 2, 5(b), 5(e), 5.1, 8.1, 11, 12, 13, 14 amended (tagged in the spec). C1: hedge venues per set,
+  prior recomputed: GO set keeps 13 / 40 core-venue episodes hedgeable (all T lost; 13 / 15 ex T), 9 pass the
+  pessimistic 0.3 %, 0 pass 0.5 %, 8 of the 9 are one coin (ANIME). C5: `PERP_HISTORY_MISSING` (kline coverage
+  >= 90 %, tiers loaded on okx/kucoin). C6: relative basis confirmed; buffer needs a parallel time array
+  (memory ~17-58 MB, not 9-29 MB); exit perp spread charged in `P_exp`. C8: both legs stay open while the hedge
+  is unpriceable; final adverse booking at `t0 + 30 h`.
+- **HT-only (user decision 2026-10-25):** AC5 and review C9 (golden hashes, "HT on == HT off", 4x
+  `paper_resumed`) are dropped. HT sets name `spot_venues` explicitly (no parent-set top-N membership); HT run
+  hash = HT params only. Deploy = fresh DB, 2x `hedged_run_started`. S0 golden pins, S11 "parent definition
+  hash" and the S13/S15 resume checks need a rewrite by architect/backend-lead.
+
 ## Implementation steps (one commit each; `make check` green; HT stays disabled in the TOML until S13)
 - [x] **S0 (safety part only; pins dropped) Golden pins + safety rules.** Test pins the literal definition hashes of `all`,
   `excl_conditional`, `excl_bybit`, `excl_gateio` from the committed `config/nexus.toml`. `test_safety`:
@@ -113,7 +125,7 @@ sweep unaffected). S0 reduced to the `test_safety` additions.
   FundingPayment, LeverageTier; Decimal, validation), `interfaces/perp.py` `IPerpMarketData`,
   `adapters/perp/registry.py`. AC: validation unit tests (contract size > 0, sane fees/MMR, funding sign
   kept); mypy strict.
-- [ ] **S2 ccxt perp base + OKX swap adapter.** No credentials, `install_read_only_guard`,
+- [x] **S2 ccxt perp base + OKX swap adapter.** No credentials, `install_read_only_guard`,
   `fetchCurrencies: False`, `fetchMarkets` swap only; contracts -> base units; kline paging (100 rows);
   per-instrument funding. AC: recorded public fixtures (markets, tickers, funding, book, klines, tiers);
   falsy `apiKey`; POST/DELETE via `request()` and an implicit method raise `ReadOnlyViolationError`; 429

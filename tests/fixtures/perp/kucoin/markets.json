@@ -1,0 +1,1841 @@
+{
+ "10000CAT/USDT:USDT": {
+  "active": true,
+  "base": "10000CAT",
+  "baseId": "10000CAT",
+  "contract": true,
+  "contractSize": 10.0,
+  "created": 1724392800000,
+  "expiry": null,
+  "expiryDatetime": null,
+  "future": false,
+  "id": "10000CATUSDTM",
+  "index": null,
+  "info": {
+   "adjustActiveTime": null,
+   "adjustK": null,
+   "adjustM": null,
+   "adjustMmrLevConstant": null,
+   "assetClass": "CRYPTO",
+   "baseCurrency": "10000CAT",
+   "buyLimit": 0.01873,
+   "crossRiskLimit": 1000000.0,
+   "currentFundingRateGranularity": 14400000,
+   "dailyInterestRate": 0.0003,
+   "displayBaseCurrency": "10000CAT",
+   "displaySymbol": "10000CATUSDTM",
+   "effectiveFundingRateCycleStartTime": 1762848000000,
+   "expireDate": null,
+   "f": 1.3,
+   "fairMethod": "FundingRate",
+   "firstOpenDate": 1724392800000,
+   "fundingBaseSymbol": ".10000CATINT8H",
+   "fundingBaseSymbol1M": ".10000CATINT",
+   "fundingFeeRate": 5e-05,
+   "fundingQuoteSymbol": ".USDTINT8H",
+   "fundingQuoteSymbol1M": ".USDTINT",
+   "fundingRateCap": 0.02,
+   "fundingRateFloor": -0.02,
+   "fundingRateGranularity": 14400000,
+   "fundingRateSymbol": ".10000CATUSDTMFPI8H",
+   "highPrice": 0.01746,
+   "indexPrice": 0.01704,
+   "indexPriceTickSize": 1e-05,
+   "indexSymbol": ".K10000CATUSDT",
+   "initialMargin": 0.05,
+   "isDeleverage": true,
+   "isInverse": false,
+   "isQuanto": false,
+   "k": 7732317.0,
+   "lastTimeFundingRate": 5e-05,
+   "lastTradePrice": 0.01704,
+   "lotSize": 1,
+   "lowPrice": 0.01673,
+   "m": 4842000.0,
+   "maintainMargin": 0.03,
+   "makerFeeRate": 0.0002,
+   "makerFixFee": 0.0,
+   "markMethod": "FairPrice",
+   "markPrice": 0.01704,
+   "marketMaxOrderQty": 1000000,
+   "marketStage": "NORMAL",
+   "marketType": "CRYPTO",
+   "maxLeverage": 20,
+   "maxOrderQty": 1000000,
+   "maxPrice": 1000000.0,
+   "maxRiskLimit": 3000,
+   "minRiskLimit": 3000,
+   "mmrLevConstant": 30.0,
+   "mmrLimit": 0.3,
+   "multiplier": 10.0,
+   "nextFundingRateDateTime": 1792944000000,
+   "nextFundingRateTime": 8775704,
+   "openInterest": "663226",
+   "orderPriceRange": 0.1,
+   "period": 1,
+   "preMarketToPerpDate": null,
+   "predictedFundingFeeRate": null,
+   "premiumsSymbol1M": ".10000CATUSDTMPI",
+   "premiumsSymbol8H": ".10000CATUSDTMPI8H",
+   "priceChg": -0.00031,
+   "priceChgPct": -0.0178,
+   "quoteCurrency": "USDT",
+   "riskStep": 1500,
+   "rootSymbol": "USDT",
+   "sellLimit": 0.01533,
+   "settleCurrency": "USDT",
+   "settleDate": null,
+   "settlementFee": null,
+   "settlementSymbol": "",
+   "sourceExchanges": [
+    "kucoin",
+    "mexc",
+    "okex",
+    "binance"
+   ],
+   "status": "Open",
+   "subMarketType": null,
+   "supportCross": true,
+   "symbol": "10000CATUSDTM",
+   "takerFeeRate": 0.0006,
+   "takerFixFee": 0.0,
+   "tickSize": 1e-05,
+   "turnoverOf24h": 19781.022,
+   "type": "FFWCSX",
+   "volumeOf24h": 1155280.0
+  },
+  "inverse": false,
+  "limits": {
+   "amount": {
+    "max": 1000000.0,
+    "min": 1.0
+   },
+   "cost": {
+    "max": null,
+    "min": null
+   },
+   "leverage": {
+    "max": 20.0,
+    "min": 1.0
+   },
+   "price": {
+    "max": 1000000.0,
+    "min": 1e-05
+   }
+  },
+  "linear": true,
+  "lowercaseId": null,
+  "maker": 0.0002,
+  "margin": false,
+  "marginModes": {
+   "cross": null,
+   "isolated": null
+  },
+  "option": false,
+  "optionType": null,
+  "percentage": true,
+  "precision": {
+   "amount": 1.0,
+   "price": 1e-05
+  },
+  "quote": "USDT",
+  "quoteId": "USDT",
+  "settle": "USDT",
+  "settleId": "USDT",
+  "spot": false,
+  "strike": null,
+  "subType": "linear",
+  "swap": true,
+  "symbol": "10000CAT/USDT:USDT",
+  "taker": 0.0006,
+  "tierBased": true,
+  "tiers": {
+   "maker": [
+    [
+     0.0,
+     0.001
+    ],
+    [
+     50.0,
+     0.0009
+    ],
+    [
+     200.0,
+     0.0007
+    ],
+    [
+     500.0,
+     0.0005
+    ],
+    [
+     1000.0,
+     0.0003
+    ],
+    [
+     2000.0,
+     0.0
+    ],
+    [
+     4000.0,
+     0.0
+    ],
+    [
+     8000.0,
+     0.0
+    ],
+    [
+     15000.0,
+     -5e-05
+    ],
+    [
+     25000.0,
+     -5e-05
+    ],
+    [
+     40000.0,
+     -5e-05
+    ],
+    [
+     60000.0,
+     -5e-05
+    ],
+    [
+     80000.0,
+     -5e-05
+    ]
+   ],
+   "taker": [
+    [
+     0.0,
+     0.001
+    ],
+    [
+     50.0,
+     0.001
+    ],
+    [
+     200.0,
+     0.0009
+    ],
+    [
+     500.0,
+     0.0008
+    ],
+    [
+     1000.0,
+     0.0007
+    ],
+    [
+     2000.0,
+     0.0007
+    ],
+    [
+     4000.0,
+     0.0006
+    ],
+    [
+     8000.0,
+     0.0005
+    ],
+    [
+     15000.0,
+     0.00045
+    ],
+    [
+     25000.0,
+     0.0004
+    ],
+    [
+     40000.0,
+     0.00035
+    ],
+    [
+     60000.0,
+     0.0003
+    ],
+    [
+     80000.0,
+     0.00025
+    ]
+   ]
+  },
+  "type": "swap"
+ },
+ "10000REKT/USDT:USDT": {
+  "active": true,
+  "base": "10000REKT",
+  "baseId": "10000REKT",
+  "contract": true,
+  "contractSize": 1000.0,
+  "created": 1783328400000,
+  "expiry": null,
+  "expiryDatetime": null,
+  "future": false,
+  "id": "10000REKTUSDTM",
+  "index": null,
+  "info": {
+   "adjustActiveTime": null,
+   "adjustK": null,
+   "adjustM": null,
+   "adjustMmrLevConstant": null,
+   "assetClass": "CRYPTO",
+   "baseCurrency": "10000REKT",
+   "buyLimit": 0.0007565,
+   "crossRiskLimit": 100000.0,
+   "currentFundingRateGranularity": 14400000,
+   "dailyInterestRate": 0.0003,
+   "displayBaseCurrency": "10000REKT",
+   "displaySymbol": "10000REKTUSDTM",
+   "effectiveFundingRateCycleStartTime": 1783310400000,
+   "expireDate": null,
+   "f": 1.3,
+   "fairMethod": "FundingRate",
+   "firstOpenDate": 1783328400000,
+   "fundingBaseSymbol": ".10000REKTINT8H",
+   "fundingBaseSymbol1M": ".10000REKTINT",
+   "fundingFeeRate": 5e-05,
+   "fundingQuoteSymbol": ".USDTINT8H",
+   "fundingQuoteSymbol1M": ".USDTINT",
+   "fundingRateCap": 0.02,
+   "fundingRateFloor": -0.02,
+   "fundingRateGranularity": 14400000,
+   "fundingRateSymbol": ".10000REKTUSDTMFPI8H",
+   "highPrice": 0.0007067,
+   "indexPrice": 0.0006901,
+   "indexPriceTickSize": 1e-07,
+   "indexSymbol": ".K10000REKTUSDT",
+   "initialMargin": 0.125,
+   "isDeleverage": true,
+   "isInverse": false,
+   "isQuanto": false,
+   "k": 85123396.0,
+   "lastTimeFundingRate": 5e-05,
+   "lastTradePrice": 0.0006885,
+   "lotSize": 1,
+   "lowPrice": 0.00068,
+   "m": 53290000.0,
+   "maintainMargin": 0.095,
+   "makerFeeRate": 0.0002,
+   "makerFixFee": 0.0,
+   "markMethod": "FairPrice",
+   "markPrice": 0.0006885,
+   "marketMaxOrderQty": 100000,
+   "marketStage": "NORMAL",
+   "marketType": "CRYPTO",
+   "maxLeverage": 8,
+   "maxOrderQty": 100000,
+   "maxPrice": 1000000.0,
+   "maxRiskLimit": 2500,
+   "minRiskLimit": 2500,
+   "mmrLevConstant": 8.0,
+   "mmrLimit": 0.3,
+   "multiplier": 1000.0,
+   "nextFundingRateDateTime": 1792944000000,
+   "nextFundingRateTime": 8775704,
+   "openInterest": "19204",
+   "orderPriceRange": 0.1,
+   "period": 1,
+   "preMarketToPerpDate": null,
+   "predictedFundingFeeRate": null,
+   "premiumsSymbol1M": ".10000REKTUSDTMPI",
+   "premiumsSymbol8H": ".10000REKTUSDTMPI8H",
+   "priceChg": -1.49e-05,
+   "priceChgPct": -0.0211,
+   "quoteCurrency": "USDT",
+   "riskStep": 1250,
+   "rootSymbol": "USDT",
+   "sellLimit": 0.0006189,
+   "settleCurrency": "USDT",
+   "settleDate": null,
+   "settlementFee": null,
+   "settlementSymbol": "",
+   "sourceExchanges": [
+    "kucoin",
+    "binance_alpha",
+    "gateio"
+   ],
+   "status": "Open",
+   "subMarketType": null,
+   "supportCross": true,
+   "symbol": "10000REKTUSDTM",
+   "takerFeeRate": 0.0006,
+   "takerFixFee": 0.0,
+   "tickSize": 1e-07,
+   "turnoverOf24h": 1329827.1324,
+   "type": "FFWCSX",
+   "volumeOf24h": 1922606000.0
+  },
+  "inverse": false,
+  "limits": {
+   "amount": {
+    "max": 100000.0,
+    "min": 1.0
+   },
+   "cost": {
+    "max": null,
+    "min": null
+   },
+   "leverage": {
+    "max": 8.0,
+    "min": 1.0
+   },
+   "price": {
+    "max": 1000000.0,
+    "min": 1e-07
+   }
+  },
+  "linear": true,
+  "lowercaseId": null,
+  "maker": 0.0002,
+  "margin": false,
+  "marginModes": {
+   "cross": null,
+   "isolated": null
+  },
+  "option": false,
+  "optionType": null,
+  "percentage": true,
+  "precision": {
+   "amount": 1.0,
+   "price": 1e-07
+  },
+  "quote": "USDT",
+  "quoteId": "USDT",
+  "settle": "USDT",
+  "settleId": "USDT",
+  "spot": false,
+  "strike": null,
+  "subType": "linear",
+  "swap": true,
+  "symbol": "10000REKT/USDT:USDT",
+  "taker": 0.0006,
+  "tierBased": true,
+  "tiers": {
+   "maker": [
+    [
+     0.0,
+     0.001
+    ],
+    [
+     50.0,
+     0.0009
+    ],
+    [
+     200.0,
+     0.0007
+    ],
+    [
+     500.0,
+     0.0005
+    ],
+    [
+     1000.0,
+     0.0003
+    ],
+    [
+     2000.0,
+     0.0
+    ],
+    [
+     4000.0,
+     0.0
+    ],
+    [
+     8000.0,
+     0.0
+    ],
+    [
+     15000.0,
+     -5e-05
+    ],
+    [
+     25000.0,
+     -5e-05
+    ],
+    [
+     40000.0,
+     -5e-05
+    ],
+    [
+     60000.0,
+     -5e-05
+    ],
+    [
+     80000.0,
+     -5e-05
+    ]
+   ],
+   "taker": [
+    [
+     0.0,
+     0.001
+    ],
+    [
+     50.0,
+     0.001
+    ],
+    [
+     200.0,
+     0.0009
+    ],
+    [
+     500.0,
+     0.0008
+    ],
+    [
+     1000.0,
+     0.0007
+    ],
+    [
+     2000.0,
+     0.0007
+    ],
+    [
+     4000.0,
+     0.0006
+    ],
+    [
+     8000.0,
+     0.0005
+    ],
+    [
+     15000.0,
+     0.00045
+    ],
+    [
+     25000.0,
+     0.0004
+    ],
+    [
+     40000.0,
+     0.00035
+    ],
+    [
+     60000.0,
+     0.0003
+    ],
+    [
+     80000.0,
+     0.00025
+    ]
+   ]
+  },
+  "type": "swap"
+ },
+ "BTC/USDT:USDT": {
+  "active": true,
+  "base": "BTC",
+  "baseId": "XBT",
+  "contract": true,
+  "contractSize": 0.001,
+  "created": 1585555200000,
+  "expiry": null,
+  "expiryDatetime": null,
+  "future": false,
+  "id": "XBTUSDTM",
+  "index": null,
+  "info": {
+   "adjustActiveTime": null,
+   "adjustK": null,
+   "adjustM": null,
+   "adjustMmrLevConstant": null,
+   "assetClass": "CRYPTO",
+   "baseCurrency": "XBT",
+   "buyLimit": 84235,
+   "crossRiskLimit": 1500000000.0,
+   "currentFundingRateGranularity": 28800000,
+   "dailyInterestRate": 0.0003,
+   "displayBaseCurrency": "XBT",
+   "displaySymbol": "XBTUSDTM",
+   "effectiveFundingRateCycleStartTime": 1750147200000,
+   "expireDate": null,
+   "f": 1.3,
+   "fairMethod": "FundingRate",
+   "firstOpenDate": 1585555200000,
+   "fundingBaseSymbol": ".XBTINT8H",
+   "fundingBaseSymbol1M": ".XBTINT",
+   "fundingFeeRate": 0.0001,
+   "fundingQuoteSymbol": ".USDTINT8H",
+   "fundingQuoteSymbol1M": ".USDTINT",
+   "fundingRateCap": 0.003,
+   "fundingRateFloor": -0.003,
+   "fundingRateGranularity": 28800000,
+   "fundingRateSymbol": ".XBTUSDTMFPI8H",
+   "highPrice": 80996.3,
+   "indexPrice": 80252.74,
+   "indexPriceTickSize": 0.01,
+   "indexSymbol": ".KXBTUSDT",
+   "initialMargin": 0.008,
+   "isDeleverage": true,
+   "isInverse": false,
+   "isQuanto": true,
+   "k": 490.0,
+   "lastTimeFundingRate": 3.4e-05,
+   "lastTradePrice": 80223.8,
+   "lotSize": 1,
+   "lowPrice": 79190.1,
+   "m": 300.0,
+   "maintainMargin": 0.004,
+   "makerFeeRate": 0.0002,
+   "makerFixFee": 0.0,
+   "markMethod": "FairPrice",
+   "markPrice": 80223.8,
+   "marketMaxOrderQty": 1000000,
+   "marketStage": "NORMAL",
+   "marketType": "CRYPTO",
+   "maxLeverage": 125,
+   "maxOrderQty": 1000000,
+   "maxPrice": 1000000.0,
+   "maxRiskLimit": 250000,
+   "minRiskLimit": 250000,
+   "mmrLevConstant": 125.0,
+   "mmrLimit": 0.3,
+   "multiplier": 0.001,
+   "nextFundingRateDateTime": 1792944000000,
+   "nextFundingRateTime": 8775704,
+   "openInterest": "10227207",
+   "orderPriceRange": 0.05,
+   "period": 1,
+   "preMarketToPerpDate": null,
+   "predictedFundingFeeRate": null,
+   "premiumsSymbol1M": ".XBTUSDTMPI",
+   "premiumsSymbol8H": ".XBTUSDTMPI8H",
+   "priceChg": -412.5,
+   "priceChgPct": -0.0051,
+   "quoteCurrency": "USDT",
+   "riskStep": 125000,
+   "rootSymbol": "USDT",
+   "sellLimit": 76212.6,
+   "settleCurrency": "USDT",
+   "settleDate": null,
+   "settlementFee": null,
+   "settlementSymbol": "",
+   "sourceExchanges": [
+    "okex",
+    "binance",
+    "kucoin",
+    "bybit",
+    "gateio"
+   ],
+   "status": "Open",
+   "subMarketType": null,
+   "supportCross": true,
+   "symbol": "XBTUSDTM",
+   "takerFeeRate": 0.0006,
+   "takerFixFee": 0.0,
+   "tickSize": 0.1,
+   "turnoverOf24h": 268536076.3412,
+   "type": "FFWCSX",
+   "volumeOf24h": 3348.828
+  },
+  "inverse": false,
+  "limits": {
+   "amount": {
+    "max": 1000000.0,
+    "min": 1.0
+   },
+   "cost": {
+    "max": null,
+    "min": null
+   },
+   "leverage": {
+    "max": 125.0,
+    "min": 1.0
+   },
+   "price": {
+    "max": 1000000.0,
+    "min": 0.1
+   }
+  },
+  "linear": true,
+  "lowercaseId": null,
+  "maker": 0.0002,
+  "margin": false,
+  "marginModes": {
+   "cross": null,
+   "isolated": null
+  },
+  "option": false,
+  "optionType": null,
+  "percentage": true,
+  "precision": {
+   "amount": 1.0,
+   "price": 0.1
+  },
+  "quote": "USDT",
+  "quoteId": "USDT",
+  "settle": "USDT",
+  "settleId": "USDT",
+  "spot": false,
+  "strike": null,
+  "subType": "linear",
+  "swap": true,
+  "symbol": "BTC/USDT:USDT",
+  "taker": 0.0006,
+  "tierBased": true,
+  "tiers": {
+   "maker": [
+    [
+     0.0,
+     0.001
+    ],
+    [
+     50.0,
+     0.0009
+    ],
+    [
+     200.0,
+     0.0007
+    ],
+    [
+     500.0,
+     0.0005
+    ],
+    [
+     1000.0,
+     0.0003
+    ],
+    [
+     2000.0,
+     0.0
+    ],
+    [
+     4000.0,
+     0.0
+    ],
+    [
+     8000.0,
+     0.0
+    ],
+    [
+     15000.0,
+     -5e-05
+    ],
+    [
+     25000.0,
+     -5e-05
+    ],
+    [
+     40000.0,
+     -5e-05
+    ],
+    [
+     60000.0,
+     -5e-05
+    ],
+    [
+     80000.0,
+     -5e-05
+    ]
+   ],
+   "taker": [
+    [
+     0.0,
+     0.001
+    ],
+    [
+     50.0,
+     0.001
+    ],
+    [
+     200.0,
+     0.0009
+    ],
+    [
+     500.0,
+     0.0008
+    ],
+    [
+     1000.0,
+     0.0007
+    ],
+    [
+     2000.0,
+     0.0007
+    ],
+    [
+     4000.0,
+     0.0006
+    ],
+    [
+     8000.0,
+     0.0005
+    ],
+    [
+     15000.0,
+     0.00045
+    ],
+    [
+     25000.0,
+     0.0004
+    ],
+    [
+     40000.0,
+     0.00035
+    ],
+    [
+     60000.0,
+     0.0003
+    ],
+    [
+     80000.0,
+     0.00025
+    ]
+   ]
+  },
+  "type": "swap"
+ },
+ "DOGE/USDT:USDT": {
+  "active": true,
+  "base": "DOGE",
+  "baseId": "DOGE",
+  "contract": true,
+  "contractSize": 100.0,
+  "created": 1611910200000,
+  "expiry": null,
+  "expiryDatetime": null,
+  "future": false,
+  "id": "DOGEUSDTM",
+  "index": null,
+  "info": {
+   "adjustActiveTime": null,
+   "adjustK": null,
+   "adjustM": null,
+   "adjustMmrLevConstant": null,
+   "assetClass": "CRYPTO",
+   "baseCurrency": "DOGE",
+   "buyLimit": 0.08433,
+   "crossRiskLimit": 150000000.0,
+   "currentFundingRateGranularity": null,
+   "dailyInterestRate": 0.0003,
+   "displayBaseCurrency": "DOGE",
+   "displaySymbol": "DOGEUSDTM",
+   "effectiveFundingRateCycleStartTime": null,
+   "expireDate": null,
+   "f": 1.3,
+   "fairMethod": "FundingRate",
+   "firstOpenDate": 1611910200000,
+   "fundingBaseSymbol": ".DOGEINT8H",
+   "fundingBaseSymbol1M": ".DOGEINT",
+   "fundingFeeRate": 4.1e-05,
+   "fundingQuoteSymbol": ".USDTINT8H",
+   "fundingQuoteSymbol1M": ".USDTINT",
+   "fundingRateCap": 0.00525,
+   "fundingRateFloor": -0.00525,
+   "fundingRateGranularity": 28800000,
+   "fundingRateSymbol": ".DOGEUSDTMFPI8H",
+   "highPrice": 0.07802,
+   "indexPrice": 0.07668,
+   "indexPriceTickSize": 1e-05,
+   "indexSymbol": ".KDOGEUSDT",
+   "initialMargin": 0.014,
+   "isDeleverage": true,
+   "isInverse": false,
+   "isQuanto": false,
+   "k": 19200000.0,
+   "lastTimeFundingRate": 6.8e-05,
+   "lastTradePrice": 0.07666,
+   "lotSize": 1,
+   "lowPrice": 0.07474,
+   "m": 12400000.0,
+   "maintainMargin": 0.007,
+   "makerFeeRate": 0.0002,
+   "makerFixFee": 0.0,
+   "markMethod": "FairPrice",
+   "markPrice": 0.07664,
+   "marketMaxOrderQty": 1000000,
+   "marketStage": "NORMAL",
+   "marketType": "CRYPTO",
+   "maxLeverage": 75,
+   "maxOrderQty": 1000000,
+   "maxPrice": 1000000.0,
+   "maxRiskLimit": 60000,
+   "minRiskLimit": 60000,
+   "mmrLevConstant": 75.0,
+   "mmrLimit": 0.3,
+   "multiplier": 100.0,
+   "nextFundingRateDateTime": 1792944000000,
+   "nextFundingRateTime": 8775704,
+   "openInterest": "7112343",
+   "orderPriceRange": 0.1,
+   "period": 1,
+   "preMarketToPerpDate": null,
+   "predictedFundingFeeRate": null,
+   "premiumsSymbol1M": ".DOGEUSDTMPI",
+   "premiumsSymbol8H": ".DOGEUSDTMPI8H",
+   "priceChg": -0.00074,
+   "priceChgPct": -0.0095,
+   "quoteCurrency": "USDT",
+   "riskStep": 30000,
+   "rootSymbol": "USDT",
+   "sellLimit": 0.06899,
+   "settleCurrency": "USDT",
+   "settleDate": null,
+   "settlementFee": null,
+   "settlementSymbol": "",
+   "sourceExchanges": [
+    "binance",
+    "okex",
+    "gateio",
+    "kucoin",
+    "bybit",
+    "bitget"
+   ],
+   "status": "Open",
+   "subMarketType": null,
+   "supportCross": true,
+   "symbol": "DOGEUSDTM",
+   "takerFeeRate": 0.0006,
+   "takerFixFee": 0.0,
+   "tickSize": 1e-05,
+   "turnoverOf24h": 13902905.182,
+   "type": "FFWCSX",
+   "volumeOf24h": 182112200.0
+  },
+  "inverse": false,
+  "limits": {
+   "amount": {
+    "max": 1000000.0,
+    "min": 1.0
+   },
+   "cost": {
+    "max": null,
+    "min": null
+   },
+   "leverage": {
+    "max": 75.0,
+    "min": 1.0
+   },
+   "price": {
+    "max": 1000000.0,
+    "min": 1e-05
+   }
+  },
+  "linear": true,
+  "lowercaseId": null,
+  "maker": 0.0002,
+  "margin": false,
+  "marginModes": {
+   "cross": null,
+   "isolated": null
+  },
+  "option": false,
+  "optionType": null,
+  "percentage": true,
+  "precision": {
+   "amount": 1.0,
+   "price": 1e-05
+  },
+  "quote": "USDT",
+  "quoteId": "USDT",
+  "settle": "USDT",
+  "settleId": "USDT",
+  "spot": false,
+  "strike": null,
+  "subType": "linear",
+  "swap": true,
+  "symbol": "DOGE/USDT:USDT",
+  "taker": 0.0006,
+  "tierBased": true,
+  "tiers": {
+   "maker": [
+    [
+     0.0,
+     0.001
+    ],
+    [
+     50.0,
+     0.0009
+    ],
+    [
+     200.0,
+     0.0007
+    ],
+    [
+     500.0,
+     0.0005
+    ],
+    [
+     1000.0,
+     0.0003
+    ],
+    [
+     2000.0,
+     0.0
+    ],
+    [
+     4000.0,
+     0.0
+    ],
+    [
+     8000.0,
+     0.0
+    ],
+    [
+     15000.0,
+     -5e-05
+    ],
+    [
+     25000.0,
+     -5e-05
+    ],
+    [
+     40000.0,
+     -5e-05
+    ],
+    [
+     60000.0,
+     -5e-05
+    ],
+    [
+     80000.0,
+     -5e-05
+    ]
+   ],
+   "taker": [
+    [
+     0.0,
+     0.001
+    ],
+    [
+     50.0,
+     0.001
+    ],
+    [
+     200.0,
+     0.0009
+    ],
+    [
+     500.0,
+     0.0008
+    ],
+    [
+     1000.0,
+     0.0007
+    ],
+    [
+     2000.0,
+     0.0007
+    ],
+    [
+     4000.0,
+     0.0006
+    ],
+    [
+     8000.0,
+     0.0005
+    ],
+    [
+     15000.0,
+     0.00045
+    ],
+    [
+     25000.0,
+     0.0004
+    ],
+    [
+     40000.0,
+     0.00035
+    ],
+    [
+     60000.0,
+     0.0003
+    ],
+    [
+     80000.0,
+     0.00025
+    ]
+   ]
+  },
+  "type": "swap"
+ },
+ "ETH/USD:ETH": {
+  "active": true,
+  "base": "ETH",
+  "baseId": "ETH",
+  "contract": true,
+  "contractSize": 1.0,
+  "created": 1606737600000,
+  "expiry": null,
+  "expiryDatetime": null,
+  "future": false,
+  "id": "ETHUSDM",
+  "index": null,
+  "info": {
+   "adjustActiveTime": null,
+   "adjustK": null,
+   "adjustM": null,
+   "adjustMmrLevConstant": null,
+   "assetClass": "CRYPTO",
+   "baseCurrency": "ETH",
+   "buyLimit": 2440.53,
+   "crossRiskLimit": 6000.0,
+   "currentFundingRateGranularity": 28800000,
+   "dailyInterestRate": 0.0003,
+   "displayBaseCurrency": "ETH",
+   "displaySymbol": "ETHUSDM",
+   "effectiveFundingRateCycleStartTime": 1750147200000,
+   "expireDate": null,
+   "f": 1.3,
+   "fairMethod": "FundingRate",
+   "firstOpenDate": 1606737600000,
+   "fundingBaseSymbol": ".ETHINT8H",
+   "fundingBaseSymbol1M": ".ETHINT",
+   "fundingFeeRate": 0.0001,
+   "fundingQuoteSymbol": ".USDINT8H",
+   "fundingQuoteSymbol1M": ".USDINT",
+   "fundingRateCap": 0.0075,
+   "fundingRateFloor": -0.0075,
+   "fundingRateGranularity": 28800000,
+   "fundingRateSymbol": ".ETHUSDMFPI8H",
+   "highPrice": 2366.48,
+   "indexPrice": 2324.28,
+   "indexPriceTickSize": 0.01,
+   "indexSymbol": ".KETHUSD",
+   "initialMargin": 0.02,
+   "isDeleverage": true,
+   "isInverse": true,
+   "isQuanto": false,
+   "k": 2570000.0,
+   "lastTimeFundingRate": 0.0001,
+   "lastTradePrice": 2324.8,
+   "lotSize": 1,
+   "lowPrice": 2278.46,
+   "m": 1600000.0,
+   "maintainMargin": 0.01,
+   "makerFeeRate": 0.0002,
+   "makerFixFee": 0.0,
+   "markMethod": "FairPrice",
+   "markPrice": 2324.35,
+   "marketMaxOrderQty": 1000000,
+   "marketStage": "NORMAL",
+   "marketType": "CRYPTO",
+   "maxLeverage": 50,
+   "maxOrderQty": 1000000,
+   "maxPrice": 1000000.0,
+   "maxRiskLimit": 30,
+   "minRiskLimit": 30,
+   "mmrLevConstant": 50.0,
+   "mmrLimit": 0.3,
+   "multiplier": -1.0,
+   "nextFundingRateDateTime": 1792944000000,
+   "nextFundingRateTime": 8775704,
+   "openInterest": "24470861",
+   "orderPriceRange": 0.05,
+   "period": 1,
+   "preMarketToPerpDate": null,
+   "predictedFundingFeeRate": null,
+   "premiumsSymbol1M": ".ETHUSDMPI",
+   "premiumsSymbol8H": ".ETHUSDMPI8H",
+   "priceChg": -36.86,
+   "priceChgPct": -0.0156,
+   "quoteCurrency": "USD",
+   "riskStep": 15,
+   "rootSymbol": "ETH",
+   "sellLimit": 2208.09,
+   "settleCurrency": "ETH",
+   "settleDate": null,
+   "settlementFee": null,
+   "settlementSymbol": "",
+   "sourceExchanges": [
+    "coinbase",
+    "bitstamp",
+    "kraken",
+    "binance",
+    "bybit"
+   ],
+   "status": "Open",
+   "subMarketType": null,
+   "supportCross": true,
+   "symbol": "ETHUSDM",
+   "takerFeeRate": 0.0006,
+   "takerFixFee": 0.0,
+   "tickSize": 0.01,
+   "turnoverOf24h": 194.92841066,
+   "type": "FFWCSX",
+   "volumeOf24h": 453618.0
+  },
+  "inverse": true,
+  "limits": {
+   "amount": {
+    "max": 1000000.0,
+    "min": 1.0
+   },
+   "cost": {
+    "max": null,
+    "min": null
+   },
+   "leverage": {
+    "max": 50.0,
+    "min": 1.0
+   },
+   "price": {
+    "max": 1000000.0,
+    "min": 0.01
+   }
+  },
+  "linear": false,
+  "lowercaseId": null,
+  "maker": 0.0002,
+  "margin": false,
+  "marginModes": {
+   "cross": null,
+   "isolated": null
+  },
+  "option": false,
+  "optionType": null,
+  "percentage": true,
+  "precision": {
+   "amount": 1.0,
+   "price": 0.01
+  },
+  "quote": "USD",
+  "quoteId": "USD",
+  "settle": "ETH",
+  "settleId": "ETH",
+  "spot": false,
+  "strike": null,
+  "subType": "inverse",
+  "swap": true,
+  "symbol": "ETH/USD:ETH",
+  "taker": 0.0006,
+  "tierBased": true,
+  "tiers": {
+   "maker": [
+    [
+     0.0,
+     0.001
+    ],
+    [
+     50.0,
+     0.0009
+    ],
+    [
+     200.0,
+     0.0007
+    ],
+    [
+     500.0,
+     0.0005
+    ],
+    [
+     1000.0,
+     0.0003
+    ],
+    [
+     2000.0,
+     0.0
+    ],
+    [
+     4000.0,
+     0.0
+    ],
+    [
+     8000.0,
+     0.0
+    ],
+    [
+     15000.0,
+     -5e-05
+    ],
+    [
+     25000.0,
+     -5e-05
+    ],
+    [
+     40000.0,
+     -5e-05
+    ],
+    [
+     60000.0,
+     -5e-05
+    ],
+    [
+     80000.0,
+     -5e-05
+    ]
+   ],
+   "taker": [
+    [
+     0.0,
+     0.001
+    ],
+    [
+     50.0,
+     0.001
+    ],
+    [
+     200.0,
+     0.0009
+    ],
+    [
+     500.0,
+     0.0008
+    ],
+    [
+     1000.0,
+     0.0007
+    ],
+    [
+     2000.0,
+     0.0007
+    ],
+    [
+     4000.0,
+     0.0006
+    ],
+    [
+     8000.0,
+     0.0005
+    ],
+    [
+     15000.0,
+     0.00045
+    ],
+    [
+     25000.0,
+     0.0004
+    ],
+    [
+     40000.0,
+     0.00035
+    ],
+    [
+     60000.0,
+     0.0003
+    ],
+    [
+     80000.0,
+     0.00025
+    ]
+   ]
+  },
+  "type": "swap"
+ },
+ "ETH/USDC:USDC": {
+  "active": true,
+  "base": "ETH",
+  "baseId": "ETH",
+  "contract": true,
+  "contractSize": 0.001,
+  "created": 1678284000000,
+  "expiry": null,
+  "expiryDatetime": null,
+  "future": false,
+  "id": "ETHUSDCM",
+  "index": null,
+  "info": {
+   "adjustActiveTime": null,
+   "adjustK": null,
+   "adjustM": null,
+   "adjustMmrLevConstant": null,
+   "assetClass": "CRYPTO",
+   "baseCurrency": "ETH",
+   "buyLimit": 2442.94,
+   "crossRiskLimit": 2000000.0,
+   "currentFundingRateGranularity": 28800000,
+   "dailyInterestRate": 0.0003,
+   "displayBaseCurrency": "ETH",
+   "displaySymbol": "ETHUSDCM",
+   "effectiveFundingRateCycleStartTime": 1750147200000,
+   "expireDate": null,
+   "f": 1.3,
+   "fairMethod": "FundingRate",
+   "firstOpenDate": 1678284000000,
+   "fundingBaseSymbol": ".ETHINT8H",
+   "fundingBaseSymbol1M": ".ETHINT",
+   "fundingFeeRate": 0.0001,
+   "fundingQuoteSymbol": ".USDCINT8H",
+   "fundingQuoteSymbol1M": ".USDCINT",
+   "fundingRateCap": 0.01275,
+   "fundingRateFloor": -0.01275,
+   "fundingRateGranularity": 28800000,
+   "fundingRateSymbol": ".ETHUSDCMFPI8H",
+   "highPrice": 2369.55,
+   "indexPrice": 2325.6,
+   "indexPriceTickSize": 0.01,
+   "indexSymbol": ".KETHUSDC",
+   "initialMargin": 0.034,
+   "isDeleverage": true,
+   "isInverse": false,
+   "isQuanto": false,
+   "k": 28617.0,
+   "lastTimeFundingRate": 0.0001,
+   "lastTradePrice": 2338.77,
+   "lotSize": 1,
+   "lowPrice": 2283.21,
+   "m": 18021.0,
+   "maintainMargin": 0.017,
+   "makerFeeRate": 0.0002,
+   "makerFixFee": 0.0,
+   "markMethod": "FairPrice",
+   "markPrice": 2326.61,
+   "marketMaxOrderQty": 1000000,
+   "marketStage": "NORMAL",
+   "marketType": "CRYPTO",
+   "maxLeverage": 30,
+   "maxOrderQty": 1000000,
+   "maxPrice": 1000000.0,
+   "maxRiskLimit": 10000,
+   "minRiskLimit": 10000,
+   "mmrLevConstant": 30.0,
+   "mmrLimit": 0.3,
+   "multiplier": 0.001,
+   "nextFundingRateDateTime": 1792944000000,
+   "nextFundingRateTime": 8775704,
+   "openInterest": "2260244",
+   "orderPriceRange": 0.05,
+   "period": 1,
+   "preMarketToPerpDate": null,
+   "predictedFundingFeeRate": null,
+   "premiumsSymbol1M": ".ETHUSDCMPI",
+   "premiumsSymbol8H": ".ETHUSDCMPI8H",
+   "priceChg": -26.78,
+   "priceChgPct": -0.0113,
+   "quoteCurrency": "USDC",
+   "riskStep": 5000,
+   "rootSymbol": "USDC",
+   "sellLimit": 2210.28,
+   "settleCurrency": "USDC",
+   "settleDate": null,
+   "settlementFee": null,
+   "settlementSymbol": "",
+   "sourceExchanges": [
+    "kraken",
+    "okex",
+    "binance",
+    "kucoin"
+   ],
+   "status": "Open",
+   "subMarketType": null,
+   "supportCross": true,
+   "symbol": "ETHUSDCM",
+   "takerFeeRate": 0.0006,
+   "takerFixFee": 0.0,
+   "tickSize": 0.01,
+   "turnoverOf24h": 227211.03076,
+   "type": "FFWCSX",
+   "volumeOf24h": 97.774
+  },
+  "inverse": false,
+  "limits": {
+   "amount": {
+    "max": 1000000.0,
+    "min": 1.0
+   },
+   "cost": {
+    "max": null,
+    "min": null
+   },
+   "leverage": {
+    "max": 30.0,
+    "min": 1.0
+   },
+   "price": {
+    "max": 1000000.0,
+    "min": 0.01
+   }
+  },
+  "linear": true,
+  "lowercaseId": null,
+  "maker": 0.0002,
+  "margin": false,
+  "marginModes": {
+   "cross": null,
+   "isolated": null
+  },
+  "option": false,
+  "optionType": null,
+  "percentage": true,
+  "precision": {
+   "amount": 1.0,
+   "price": 0.01
+  },
+  "quote": "USDC",
+  "quoteId": "USDC",
+  "settle": "USDC",
+  "settleId": "USDC",
+  "spot": false,
+  "strike": null,
+  "subType": "linear",
+  "swap": true,
+  "symbol": "ETH/USDC:USDC",
+  "taker": 0.0006,
+  "tierBased": true,
+  "tiers": {
+   "maker": [
+    [
+     0.0,
+     0.001
+    ],
+    [
+     50.0,
+     0.0009
+    ],
+    [
+     200.0,
+     0.0007
+    ],
+    [
+     500.0,
+     0.0005
+    ],
+    [
+     1000.0,
+     0.0003
+    ],
+    [
+     2000.0,
+     0.0
+    ],
+    [
+     4000.0,
+     0.0
+    ],
+    [
+     8000.0,
+     0.0
+    ],
+    [
+     15000.0,
+     -5e-05
+    ],
+    [
+     25000.0,
+     -5e-05
+    ],
+    [
+     40000.0,
+     -5e-05
+    ],
+    [
+     60000.0,
+     -5e-05
+    ],
+    [
+     80000.0,
+     -5e-05
+    ]
+   ],
+   "taker": [
+    [
+     0.0,
+     0.001
+    ],
+    [
+     50.0,
+     0.001
+    ],
+    [
+     200.0,
+     0.0009
+    ],
+    [
+     500.0,
+     0.0008
+    ],
+    [
+     1000.0,
+     0.0007
+    ],
+    [
+     2000.0,
+     0.0007
+    ],
+    [
+     4000.0,
+     0.0006
+    ],
+    [
+     8000.0,
+     0.0005
+    ],
+    [
+     15000.0,
+     0.00045
+    ],
+    [
+     25000.0,
+     0.0004
+    ],
+    [
+     40000.0,
+     0.00035
+    ],
+    [
+     60000.0,
+     0.0003
+    ],
+    [
+     80000.0,
+     0.00025
+    ]
+   ]
+  },
+  "type": "swap"
+ },
+ "ETH/USDT:USDT": {
+  "active": true,
+  "base": "ETH",
+  "baseId": "ETH",
+  "contract": true,
+  "contractSize": 0.01,
+  "created": 1591086000000,
+  "expiry": null,
+  "expiryDatetime": null,
+  "future": false,
+  "id": "ETHUSDTM",
+  "index": null,
+  "info": {
+   "adjustActiveTime": null,
+   "adjustK": null,
+   "adjustM": null,
+   "adjustMmrLevConstant": null,
+   "assetClass": "CRYPTO",
+   "baseCurrency": "ETH",
+   "buyLimit": 2442.69,
+   "crossRiskLimit": 900000000.0,
+   "currentFundingRateGranularity": 28800000,
+   "dailyInterestRate": 0.0003,
+   "displayBaseCurrency": "ETH",
+   "displaySymbol": "ETHUSDTM",
+   "effectiveFundingRateCycleStartTime": 1750147200000,
+   "expireDate": null,
+   "f": 1.3,
+   "fairMethod": "FundingRate",
+   "firstOpenDate": 1591086000000,
+   "fundingBaseSymbol": ".ETHINT8H",
+   "fundingBaseSymbol1M": ".ETHINT",
+   "fundingFeeRate": 6.8e-05,
+   "fundingQuoteSymbol": ".USDTINT8H",
+   "fundingQuoteSymbol1M": ".USDTINT",
+   "fundingRateCap": 0.00375,
+   "fundingRateFloor": -0.00375,
+   "fundingRateGranularity": 28800000,
+   "fundingRateSymbol": ".ETHUSDTMFPI8H",
+   "highPrice": 2370.99,
+   "indexPrice": 2327.22,
+   "indexPriceTickSize": 0.01,
+   "indexSymbol": ".KETHUSDT",
+   "initialMargin": 0.01,
+   "isDeleverage": true,
+   "isInverse": false,
+   "isQuanto": true,
+   "k": 6610.0,
+   "lastTimeFundingRate": 7.2e-05,
+   "lastTradePrice": 2326.37,
+   "lotSize": 1,
+   "lowPrice": 2280.79,
+   "m": 4110.0,
+   "maintainMargin": 0.005,
+   "makerFeeRate": 0.0002,
+   "makerFixFee": 0.0,
+   "markMethod": "FairPrice",
+   "markPrice": 2326.37,
+   "marketMaxOrderQty": 1000000,
+   "marketStage": "NORMAL",
+   "marketType": "CRYPTO",
+   "maxLeverage": 100,
+   "maxOrderQty": 1000000,
+   "maxPrice": 1000000.0,
+   "maxRiskLimit": 500000,
+   "minRiskLimit": 500000,
+   "mmrLevConstant": 100.0,
+   "mmrLimit": 0.3,
+   "multiplier": 0.01,
+   "nextFundingRateDateTime": 1792944000000,
+   "nextFundingRateTime": 8775704,
+   "openInterest": "17756045",
+   "orderPriceRange": 0.05,
+   "period": 1,
+   "preMarketToPerpDate": null,
+   "predictedFundingFeeRate": null,
+   "premiumsSymbol1M": ".ETHUSDTMPI",
+   "premiumsSymbol8H": ".ETHUSDTMPI8H",
+   "priceChg": -40.17,
+   "priceChgPct": -0.0169,
+   "quoteCurrency": "USDT",
+   "riskStep": 250000,
+   "rootSymbol": "USDT",
+   "sellLimit": 2210.05,
+   "settleCurrency": "USDT",
+   "settleDate": null,
+   "settlementFee": null,
+   "settlementSymbol": "",
+   "sourceExchanges": [
+    "okex",
+    "binance",
+    "kucoin",
+    "gateio",
+    "bybit",
+    "bitget"
+   ],
+   "status": "Open",
+   "subMarketType": null,
+   "supportCross": true,
+   "symbol": "ETHUSDTM",
+   "takerFeeRate": 0.0006,
+   "takerFixFee": 0.0,
+   "tickSize": 0.01,
+   "turnoverOf24h": 198753037.7772,
+   "type": "FFWCSX",
+   "volumeOf24h": 85356.16
+  },
+  "inverse": false,
+  "limits": {
+   "amount": {
+    "max": 1000000.0,
+    "min": 1.0
+   },
+   "cost": {
+    "max": null,
+    "min": null
+   },
+   "leverage": {
+    "max": 100.0,
+    "min": 1.0
+   },
+   "price": {
+    "max": 1000000.0,
+    "min": 0.01
+   }
+  },
+  "linear": true,
+  "lowercaseId": null,
+  "maker": 0.0002,
+  "margin": false,
+  "marginModes": {
+   "cross": null,
+   "isolated": null
+  },
+  "option": false,
+  "optionType": null,
+  "percentage": true,
+  "precision": {
+   "amount": 1.0,
+   "price": 0.01
+  },
+  "quote": "USDT",
+  "quoteId": "USDT",
+  "settle": "USDT",
+  "settleId": "USDT",
+  "spot": false,
+  "strike": null,
+  "subType": "linear",
+  "swap": true,
+  "symbol": "ETH/USDT:USDT",
+  "taker": 0.0006,
+  "tierBased": true,
+  "tiers": {
+   "maker": [
+    [
+     0.0,
+     0.001
+    ],
+    [
+     50.0,
+     0.0009
+    ],
+    [
+     200.0,
+     0.0007
+    ],
+    [
+     500.0,
+     0.0005
+    ],
+    [
+     1000.0,
+     0.0003
+    ],
+    [
+     2000.0,
+     0.0
+    ],
+    [
+     4000.0,
+     0.0
+    ],
+    [
+     8000.0,
+     0.0
+    ],
+    [
+     15000.0,
+     -5e-05
+    ],
+    [
+     25000.0,
+     -5e-05
+    ],
+    [
+     40000.0,
+     -5e-05
+    ],
+    [
+     60000.0,
+     -5e-05
+    ],
+    [
+     80000.0,
+     -5e-05
+    ]
+   ],
+   "taker": [
+    [
+     0.0,
+     0.001
+    ],
+    [
+     50.0,
+     0.001
+    ],
+    [
+     200.0,
+     0.0009
+    ],
+    [
+     500.0,
+     0.0008
+    ],
+    [
+     1000.0,
+     0.0007
+    ],
+    [
+     2000.0,
+     0.0007
+    ],
+    [
+     4000.0,
+     0.0006
+    ],
+    [
+     8000.0,
+     0.0005
+    ],
+    [
+     15000.0,
+     0.00045
+    ],
+    [
+     25000.0,
+     0.0004
+    ],
+    [
+     40000.0,
+     0.00035
+    ],
+    [
+     60000.0,
+     0.0003
+    ],
+    [
+     80000.0,
+     0.00025
+    ]
+   ]
+  },
+  "type": "swap"
+ }
+}
