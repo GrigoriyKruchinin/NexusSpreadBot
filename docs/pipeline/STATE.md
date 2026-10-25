@@ -1,6 +1,9 @@
 # STATE (updated 2026-10-24)
 
 ## Where we are
+- **User OK 2026-10-25 (U4): wipe all old DB data**, start HT from zero. Orchestrator plan: do it at HT deploy (S15) in
+  one go via a fresh DB volume per `docs/guides/soak-fresh-stack.md` (no `down -v`), so the old spot paper code does not
+  write new data in between; quick archive dump first as a safety net.
 - **User decision 2026-10-25 (tax): GO/HT verdict is judged PRE-TAX** (supersedes "2 %/month after 35 % tax" for HT);
   after-tax shown as reference only. Bonferroni: PRELIMINARY-GO uses the 2.5th-percentile lower bound (option b).
 - **User decision 2026-10-25 (option a): finish HT and test it on paper.** Test length MAX ~1 week (not 3), with gaps
