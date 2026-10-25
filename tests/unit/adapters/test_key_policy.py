@@ -30,6 +30,8 @@ from nexus.domain.errors import (
     ConfigurationError,
     ExchangeAuthError,
     ExchangeError,
+    ExchangeRateLimitError,
+    ExchangeUnavailableError,
     KeyPolicyViolationError,
     ReadOnlyViolationError,
 )
@@ -459,6 +461,54 @@ async def test_runner_any_exception_is_request_failed_and_others_continue(
         e["event"] == "key_policy_request_failed" and e["error"] == type(error).__name__
         for e in logs
     )
+
+
+class FlakyAdapter:
+    """Fails with ``error`` for the first ``failures`` calls, then returns ``payload``."""
+
+    def __init__(self, payload: Any, error: BaseException, failures: int) -> None:
+        self.payload, self.error, self.failures, self.calls = payload, error, failures, 0
+
+    async def fetch_key_info(self) -> Any:
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise self.error
+        return self.payload
+
+
+@pytest.fixture
+def no_sleep(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    delays: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr("nexus.adapters.key_policy.asyncio.sleep", fake_sleep)
+    return delays
+
+
+async def test_transient_network_error_is_retried_before_judging_the_key(
+    no_sleep: list[float],
+) -> None:
+    adapter = FlakyAdapter(OKX_OK, ExchangeUnavailableError("okx", "timed out"), failures=2)
+    report = await verify_key_policies({"okx": adapter}, {"okx": creds()}, DEFAULT)
+    assert adapter.calls == 3
+    assert not report.rejected
+    assert len(no_sleep) == 2
+
+
+async def test_persistent_network_error_falls_back_after_three_tries(no_sleep: list[float]) -> None:
+    adapter = FlakyAdapter(OKX_OK, ExchangeRateLimitError("okx", "429"), failures=99)
+    report = await verify_key_policies({"okx": adapter}, {"okx": creds()}, DEFAULT)
+    assert adapter.calls == 3
+    assert report.rejected == {"okx": (REQUEST_FAILED,)}
+
+
+async def test_auth_error_is_not_retried(no_sleep: list[float]) -> None:
+    adapter = FlakyAdapter(OKX_OK, ExchangeAuthError("okx", "bad key"), failures=99)
+    await verify_key_policies({"okx": adapter}, {"okx": creds()}, DEFAULT)
+    assert adapter.calls == 1
+    assert no_sleep == []
 
 
 async def test_runner_rejects_key_on_venue_without_policy() -> None:

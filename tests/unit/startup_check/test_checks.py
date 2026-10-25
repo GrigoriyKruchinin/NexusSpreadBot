@@ -94,6 +94,7 @@ async def test_telegram_channel_ok() -> None:
         (None, "-1", "tg_token_missing"),
         ("", "-1", "tg_token_missing"),
         ("123456789:AAFakeFakeFakeFakeFakeFakeFake", "-1", "tg_token_placeholder"),
+        ("your_bot_token_here", "-1", "tg_token_placeholder"),
         ("not-a-token", "-1", "tg_token_format"),
         (TOKEN, None, "tg_chat_missing"),
         (TOKEN, "my channel", "tg_chat_format"),
@@ -325,3 +326,10 @@ async def test_strict_mode_fails_the_check() -> None:
     assert (await check_venue("binance", FakeAdapter(unbound), creds(), strict)).status == "fail"
     relaxed = await check_venue("binance", FakeAdapter(unbound), creds(), POLICY)
     assert (relaxed.status, relaxed.code) == ("warn", "venue_keyed_warn")
+
+
+def test_a_real_token_containing_placeholder_letters_is_not_a_placeholder() -> None:
+    from nexus.startup_check.checks import _PLACEHOLDER_RE
+
+    assert _PLACEHOLDER_RE.fullmatch("123456789:AAHxxxxyourExampleRandomTokenValue99") is None
+    assert _PLACEHOLDER_RE.fullmatch("your_bot_token_here")

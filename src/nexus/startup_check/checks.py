@@ -28,7 +28,12 @@ EXIT_FATAL_CONFIG: Final = 3
 """Same code as a key-policy refusal: a restart cannot fix it (D-01)."""
 
 _TOKEN_RE = re.compile(r"\d+:[A-Za-z0-9_-]{20,}")
-_PLACEHOLDER_RE = re.compile(r"fake|your|example|changeme|xxxx", re.IGNORECASE)
+# The WHOLE value must be made of placeholder words (``your_bot_token``, ``1234:AAFakeFake``);
+# a real random token that merely contains such letters is never mistaken for one.
+_PLACEHOLDER_RE = re.compile(
+    r"(?:\d*:)?[a-z]{0,3}(?:fake|your|example|changeme|x{4,}|token|bot|here|[_-])+",
+    re.IGNORECASE,
+)
 _CHAT_RE = re.compile(r"-?\d+")
 _CHANNEL_RIGHTS: Final = ("can_post_messages", "can_edit_messages")
 _SAFE = re.compile(r"[^A-Za-z0-9_:., -]")
@@ -87,7 +92,7 @@ async def check_telegram(
     items: list[Item] = []
     if not token:
         items.append(Item("fail", "tg_token_missing"))
-    elif _PLACEHOLDER_RE.search(token):
+    elif _PLACEHOLDER_RE.fullmatch(token):
         items.append(Item("fail", "tg_token_placeholder"))
     elif not _TOKEN_RE.fullmatch(token):
         items.append(Item("fail", "tg_token_format"))

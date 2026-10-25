@@ -21,16 +21,21 @@ after the U3 run on real read-only keys.
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
 import structlog
 
 from nexus.config.groups import ExchangeCredentials, KeyPolicySettings
-from nexus.domain.errors import KeyPolicyViolationError
+from nexus.domain.errors import (
+    ExchangeRateLimitError,
+    ExchangeUnavailableError,
+    KeyPolicyViolationError,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -40,6 +45,9 @@ UNPARSEABLE = "unparseable_response"
 IP_UNBOUND = "ip_not_restricted"
 NO_POLICY = "no_key_policy_for_venue"
 REQUEST_FAILED = "request_failed"
+KEY_INFO_ATTEMPTS = 3
+"""Tries for the key-introspection call on transient errors (network, timeout, rate limit)."""
+KEY_INFO_BACKOFF_S = 1.0
 UNVERIFIABLE_KUCOIN_IP = "unverifiable:ip_binding"
 UNVERIFIABLE_GATEIO_PERMS = "unverifiable:permissions_read_only"
 #: Pre-T9 attestation variables; ignored (a deprecation notice is shown).
@@ -316,6 +324,23 @@ class KeyPolicyReport:
         return tuple(sorted(self.rejected))
 
 
+async def _read_with_retry(venue: str, read_key_info: Callable[[], Awaitable[Any]]) -> Any:
+    """Call the key-introspection endpoint; retry transient errors with a short backoff.
+
+    A network blip at startup must not demote a venue to public mode for the whole run.
+    Auth and other permanent errors are not retried.
+    """
+    for attempt in range(1, KEY_INFO_ATTEMPTS + 1):
+        try:
+            return await read_key_info()
+        except (ExchangeUnavailableError, ExchangeRateLimitError, TimeoutError) as exc:
+            if attempt >= KEY_INFO_ATTEMPTS:
+                raise
+            log.info("key_policy_retry", exchange=venue, attempt=attempt, error=type(exc).__name__)
+            await asyncio.sleep(KEY_INFO_BACKOFF_S * attempt)
+    raise AssertionError  # pragma: no cover - the loop always returns or raises
+
+
 async def assess_venue_key(
     venue: str,
     adapter: object,
@@ -334,7 +359,7 @@ async def assess_venue_key(
     if policy is None or read_key_info is None:
         return KeyAssessment(violations=(NO_POLICY,))
     try:
-        payload = await read_key_info()
+        payload = await _read_with_retry(venue, read_key_info)
     except Exception as exc:
         # Any failure (exchange, read-only guard, configuration, ...) rejects this key. Only the
         # class name is logged: messages of auth errors may embed request details.
