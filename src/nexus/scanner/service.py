@@ -683,12 +683,11 @@ class Scanner:
         dedup_key = f"alert:episode:{episode_id}:{realert}"
         if not await self._cooldowns.acquire(dedup_key, EPISODE_ALERT_KEY_TTL_S):
             return False
-        context = AlertContext(
-            episode_id=episode_id,
+        context = AlertContext.build(
+            evaluation,
+            episode,
             realert=realert,
-            previous_net_usd=decimal_str(episode.alerted_net_usd)
-            if kind is AlertKind.REALERT and episode.alerted_net_usd is not None
-            else None,
+            previous_net_usd=episode.alerted_net_usd if kind is AlertKind.REALERT else None,
         )
         try:
             await self._dispatcher.dispatch_opportunity(evaluation_id, context)

@@ -99,6 +99,15 @@ class OpportunityEpisode:
         """First to last qualifying evaluation."""
         return self.last_seen_at_ms - self.opened_at_ms
 
+    def lifetime_ms(self, now_ms: int | None = None) -> int:
+        """How long the spread lived: to the close if closed, else to ``now_ms`` (or to the last
+        qualifying evaluation when ``now_ms`` is not given)."""
+        if self.closed_at_ms is not None:
+            end = self.closed_at_ms
+        else:
+            end = self.last_seen_at_ms if now_ms is None else max(now_ms, self.last_seen_at_ms)
+        return max(0, end - self.opened_at_ms)
+
     def extend(self, evaluation: SpreadEvaluation) -> OpportunityEpisode:
         """Account for another qualifying evaluation of the same route."""
         if evaluation.route_key != self.route_key:

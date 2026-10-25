@@ -14,7 +14,6 @@ from nexus.domain.errors import (
     ExchangeUnavailableError,
 )
 from nexus.domain.events import (
-    AlertContext,
     EpisodeClosed,
     ExchangeDown,
     ExchangeRecovered,
@@ -697,7 +696,13 @@ async def test_one_alert_per_episode_realert_on_growth_and_close_message() -> No
     await h.scanner.refresh_metadata()
     first = await h.scanner.sweep()
     assert first.alerts == 1
-    assert h.dispatcher.contexts[-1] == AlertContext(episode_id=1, realert=0)
+    first_context = h.dispatcher.contexts[-1]
+    assert first_context is not None
+    assert (first_context.episode_id, first_context.realert) == (1, 0)
+    assert first_context.volume is not None
+    assert first_context.transfer is not None
+    assert first_context.lifetime is not None
+    assert first_context.lifetime.closed_at_ms is None
 
     h.cooldowns.active.discard("alert:ABC/USDT|a>b")  # even without the floor:
     h.clock.now += 10_000
@@ -742,7 +747,9 @@ async def test_floor_blocks_first_alert_of_a_quickly_reopened_episode() -> None:
     h.cooldowns.active.discard("alert:ABC/USDT|a>b")  # floor expired
     h.clock.now += 10_000
     assert (await h.scanner.sweep()).alerts == 1
-    assert h.dispatcher.contexts[-1] == AlertContext(episode_id=2, realert=0)
+    second = h.dispatcher.contexts[-1]
+    assert second is not None
+    assert (second.episode_id, second.realert) == (2, 0)
 
 
 async def test_unalerted_episode_closes_silently() -> None:

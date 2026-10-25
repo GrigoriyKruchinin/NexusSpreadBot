@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from decimal import Decimal
 from typing import Final
 
 from nexus.domain.models import AssetTransferInfo, NetworkInfo
-from nexus.domain.spread import TransferQuote, TransferStatus
+from nexus.domain.spread import LegState, TransferQuote, TransferStatus
+from nexus.engine.network_times import estimated_arrival_min
 
 NETWORK_ALIASES: Final[dict[str, str]] = {
     # Only synonyms of the SAME chain: each pair was observed on different exchanges with
@@ -88,7 +90,84 @@ def _index_networks(info: AssetTransferInfo) -> tuple[dict[str, NetworkInfo], se
     return indexed, ambiguous
 
 
+def _leg_state(
+    info: AssetTransferInfo | None,
+    indexed: dict[str, NetworkInfo],
+    network: str | None,
+    *,
+    withdraw: bool,
+) -> LegState:
+    """Withdraw (source) or deposit (destination) state; ``UNKNOWN`` unless reported."""
+    if info is None:
+        return LegState.UNKNOWN
+
+    def flag_of(item: NetworkInfo) -> bool | None:
+        return item.withdraw_enabled if withdraw else item.deposit_enabled
+
+    asset_flag = info.withdraw_enabled if withdraw else info.deposit_enabled
+    if asset_flag is False:
+        return LegState.CLOSED
+    if network is not None and network in indexed:
+        flag = flag_of(indexed[network])
+        if flag is None:
+            return LegState.OPEN if asset_flag else LegState.UNKNOWN
+        return LegState.OPEN if flag else LegState.CLOSED
+    flags = [flag_of(item) for item in info.networks]
+    if flags and all(flag is False for flag in flags):
+        return LegState.CLOSED
+    if any(flag is True for flag in flags):
+        return LegState.OPEN
+    return LegState.OPEN if asset_flag else LegState.UNKNOWN
+
+
+def _with_details(
+    quote: TransferQuote,
+    source: AssetTransferInfo | None,
+    destination: AssetTransferInfo | None,
+) -> TransferQuote:
+    """Attach withdraw/deposit states, minimums and approximate time to a route quote."""
+    src = _index_networks(source)[0] if source is not None else {}
+    dst = _index_networks(destination)[0] if destination is not None else {}
+    code = quote.network
+    out = src.get(code) if code else None
+    into = dst.get(code) if code else None
+    published = [
+        value
+        for value in (
+            out.est_arrival_min if out else None,
+            into.est_arrival_min if into else None,
+        )
+        if value is not None
+    ]
+    arrival: Decimal | None
+    arrival_source: str | None
+    if published:
+        arrival, arrival_source = max(published), "exchange"
+    else:
+        arrival = estimated_arrival_min(code)
+        arrival_source = "table" if arrival is not None else None
+    busy_flags = [x.busy for x in (out, into) if x is not None and x.busy is not None]
+    return replace(
+        quote,
+        withdraw_state=_leg_state(source, src, code, withdraw=True),
+        deposit_state=_leg_state(destination, dst, code, withdraw=False),
+        withdraw_min=out.withdraw_min if out else None,
+        deposit_min=into.deposit_min if into else None,
+        deposit_confirmations=into.deposit_confirmations if into else None,
+        est_arrival_min=arrival,
+        arrival_source=arrival_source,
+        busy=any(busy_flags) if busy_flags else None,
+    )
+
+
 def select_transfer_route(
+    source: AssetTransferInfo | None, destination: AssetTransferInfo | None
+) -> TransferQuote:
+    """Cheapest route (see :func:`_select_route`) with withdraw/deposit states and timing."""
+    return _with_details(_select_route(source, destination), source, destination)
+
+
+def _select_route(
     source: AssetTransferInfo | None, destination: AssetTransferInfo | None
 ) -> TransferQuote:
     """Pick the cheapest network to move an asset from ``source`` to ``destination``.

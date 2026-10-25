@@ -38,6 +38,15 @@ class TransferStatus(StrEnum):
     """Withdrawals on the source or deposits on the destination are disabled on all networks."""
 
 
+class LegState(StrEnum):
+    """Withdraw (source) or deposit (destination) availability. Never faked: ``UNKNOWN`` when
+    the venue does not report it (public-mode venues publish no wallet status)."""
+
+    OPEN = "open"
+    CLOSED = "closed"
+    UNKNOWN = "unknown"
+
+
 @dataclass(frozen=True, slots=True)
 class TransferQuote:
     """Cheapest known transfer route for the base asset."""
@@ -48,6 +57,35 @@ class TransferQuote:
     note: str = ""
     contract_verified: bool = False
     """True only when both venues publish the same token contract on the chosen network."""
+    withdraw_state: LegState = LegState.UNKNOWN
+    """Withdrawals from the buy venue (source), for ``network`` when chosen."""
+    deposit_state: LegState = LegState.UNKNOWN
+    """Deposits to the sell venue (destination), for ``network`` when chosen."""
+    withdraw_min: Decimal | None = None
+    deposit_min: Decimal | None = None
+    deposit_confirmations: int | None = None
+    est_arrival_min: Decimal | None = None
+    """Approximate transfer time in minutes (``None`` = unknown); always an estimate."""
+    arrival_source: str | None = None
+    """``exchange`` (venue estimate) or ``table`` (static per-network table)."""
+    busy: bool | None = None
+    """Either venue flags the network as congested."""
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutableVolume:
+    """Volume the visible order books support for a profitable route.
+
+    ``scanned_*`` is the volume the estimator priced (the reference notional); ``max_*`` is the
+    largest volume at which the net profit is still positive (never below the scanned one).
+    """
+
+    scanned_base: Decimal
+    scanned_quote: Decimal
+    max_base: Decimal
+    max_quote: Decimal
+    max_net_usd: Decimal
+    """Net profit at ``max_base`` (the route is net-positive up to here)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +138,8 @@ class SpreadEvaluation:
     reason: str = ""
     fees_estimated: bool = False
     """True when a taker fee is a library/fallback estimate rather than exchange data."""
+    volume: ExecutableVolume | None = None
+    """Computed for ``PROFITABLE`` evaluations only; in memory, not persisted."""
 
     @property
     def is_alertable(self) -> bool:

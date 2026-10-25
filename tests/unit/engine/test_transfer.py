@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 
 from nexus.domain.models import AssetTransferInfo, NetworkInfo
-from nexus.domain.spread import TransferStatus
+from nexus.domain.spread import LegState, TransferStatus
+from nexus.engine.network_times import NETWORK_ARRIVAL_MIN, estimated_arrival_min
 from nexus.engine.transfer import NETWORK_ALIASES, normalize_network, select_transfer_route
 
 
@@ -259,3 +260,80 @@ def test_partial_contract_suffix_is_compared_as_suffix() -> None:
             _info("b", _with_contract("ERC20", full)),
         )
         assert quote.status is TransferStatus.UNAVAILABLE, placeholder
+
+
+# ---- withdraw / deposit states, minimums and approximate time (T3) -------------------
+
+
+def test_open_route_reports_open_states_and_table_time() -> None:
+    quote = select_transfer_route(_info("a", _net("TRC20")), _info("b", _net("TRC20")))
+    assert quote.status is TransferStatus.VERIFIED
+    assert (quote.withdraw_state, quote.deposit_state) == (LegState.OPEN, LegState.OPEN)
+    assert quote.est_arrival_min == NETWORK_ARRIVAL_MIN["TRC20"]
+    assert quote.arrival_source == "table"
+
+
+def test_exchange_estimate_beats_table_and_takes_the_slower_side() -> None:
+    src = NetworkInfo("ERC20", True, True, D(1), est_arrival_min=D(3), withdraw_min=D("0.5"))
+    dst = NetworkInfo(
+        "ETH",
+        True,
+        True,
+        None,
+        est_arrival_min=D(7),
+        deposit_min=D("0.2"),
+        deposit_confirmations=12,
+        busy=True,
+    )
+    quote = select_transfer_route(_info("a", src), _info("b", dst))
+    assert quote.network == "ERC20"
+    assert (quote.est_arrival_min, quote.arrival_source) == (D(7), "exchange")
+    assert (quote.withdraw_min, quote.deposit_min) == (D("0.5"), D("0.2"))
+    assert quote.deposit_confirmations == 12
+    assert quote.busy is True
+
+
+def test_unlisted_network_has_unknown_time() -> None:
+    quote = select_transfer_route(_info("a", _net("XYZNET")), _info("b", _net("XYZNET")))
+    assert quote.status is TransferStatus.VERIFIED
+    assert quote.est_arrival_min is None
+    assert quote.arrival_source is None
+    assert quote.busy is None
+
+
+def test_public_mode_venue_is_unknown_never_open() -> None:
+    quote = select_transfer_route(None, None)
+    assert quote.status is TransferStatus.UNKNOWN
+    assert (quote.withdraw_state, quote.deposit_state) == (LegState.UNKNOWN, LegState.UNKNOWN)
+    only_dest = select_transfer_route(None, _info("b", _net("TRC20")))
+    assert only_dest.withdraw_state is LegState.UNKNOWN
+    assert only_dest.deposit_state is LegState.OPEN  # no common network: any open one counts
+
+
+def test_closed_deposit_and_withdraw_states() -> None:
+    quote = select_transfer_route(_info("a", _net("TRC20")), _info("b", _net("TRC20", d=False)))
+    assert quote.status is TransferStatus.UNAVAILABLE
+    assert (quote.withdraw_state, quote.deposit_state) == (LegState.OPEN, LegState.CLOSED)
+    closed_src = select_transfer_route(
+        _info("a", _net("TRC20", w=False)), _info("b", _net("TRC20"))
+    )
+    assert closed_src.withdraw_state is LegState.CLOSED
+
+
+def test_asset_level_flags_and_unreported_network_flags() -> None:
+    src = AssetTransferInfo("a", "ABC", (_net("TRC20"),), withdraw_enabled=False)
+    assert select_transfer_route(src, _info("b", _net("TRC20"))).withdraw_state is LegState.CLOSED
+    unreported = NetworkInfo("TRC20", None, None, D(1))
+    quote = select_transfer_route(_info("a", unreported), _info("b", unreported))
+    assert quote.status is TransferStatus.UNKNOWN
+    assert (quote.withdraw_state, quote.deposit_state) == (LegState.UNKNOWN, LegState.UNKNOWN)
+    enabled = AssetTransferInfo("a", "ABC", (unreported,), withdraw_enabled=True)
+    assert select_transfer_route(enabled, _info("b", unreported)).withdraw_state is LegState.OPEN
+
+
+def test_network_table_keys_are_normalized_codes() -> None:
+    for code in NETWORK_ARRIVAL_MIN:
+        assert normalize_network(code) == code
+        assert NETWORK_ARRIVAL_MIN[code] > 0
+    assert estimated_arrival_min(None) is None
+    assert estimated_arrival_min("NOPE") is None

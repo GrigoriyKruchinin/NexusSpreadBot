@@ -50,11 +50,12 @@ async def test_dispatcher_publishes_by_name() -> None:
     await dispatcher.dispatch_opportunity(42)
     await dispatcher.dispatch_event(ScannerStopped(reason="test"))
     await dispatcher.dispatch_opportunity(43, AlertContext(7, 1, "8.5"))
-    no_context = {"episode_id": None, "realert": 0, "previous_net_usd": None}
+    empty = {"volume": None, "transfer": None, "lifetime": None, "v": 2}
+    no_context = {"episode_id": None, "realert": 0, "previous_net_usd": None, **empty}
     assert app.sent[0] == (TASK_SEND_OPPORTUNITY, [42, no_context], ALERTS_QUEUE)
     assert app.sent[2] == (
         TASK_SEND_OPPORTUNITY,
-        [43, {"episode_id": 7, "realert": 1, "previous_net_usd": "8.5"}],
+        [43, {"episode_id": 7, "realert": 1, "previous_net_usd": "8.5", **empty}],
         ALERTS_QUEUE,
     )
     assert app.sent[1] == (
@@ -99,7 +100,7 @@ def test_send_opportunity_task_passes_context(monkeypatch: pytest.MonkeyPatch) -
     payload = {"episode_id": 3, "realert": 2, "previous_net_usd": "9"}
     assert tasks.send_opportunity.apply(args=(1, payload)).get() == "sent"
     assert tasks.send_opportunity.apply(args=(1,)).get() == "sent"  # tasks queued pre-1.5.5
-    assert _Service.contexts == [AlertContext(3, 2, "9"), AlertContext()]
+    assert _Service.contexts == [AlertContext(3, 2, "9", v=1), AlertContext()]
 
 
 def test_send_opportunity_task_rejected(monkeypatch: pytest.MonkeyPatch) -> None:

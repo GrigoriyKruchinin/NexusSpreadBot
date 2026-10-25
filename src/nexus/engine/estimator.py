@@ -26,12 +26,14 @@ from nexus.domain.clock import Clock
 from nexus.domain.models import ZERO, MarketInfo, OrderBook
 from nexus.domain.spread import (
     EvaluationStatus,
+    ExecutableVolume,
     SpreadBreakdown,
     SpreadEvaluation,
     TransferQuote,
     TransferStatus,
 )
 from nexus.engine.depth import buy_base, floor_to_step, max_base_for_quote, sell_base
+from nexus.engine.volume import VolumeModel
 
 HUNDRED = Decimal(100)
 ONE = Decimal(1)
@@ -106,6 +108,7 @@ class NetSpreadEstimator:
             *,
             gross: Decimal | None = None,
             breakdown: SpreadBreakdown | None = None,
+            volume: ExecutableVolume | None = None,
         ) -> SpreadEvaluation:
             return SpreadEvaluation(
                 symbol=buy_market.symbol,
@@ -123,6 +126,7 @@ class NetSpreadEstimator:
                 breakdown=breakdown,
                 reason=reason,
                 fees_estimated=buy_market.taker_fee_is_default or sell_market.taker_fee_is_default,
+                volume=volume,
             )
 
         # ---- data quality guards ------------------------------------------------------
@@ -256,7 +260,19 @@ class NetSpreadEstimator:
                 gross=gross,
                 breakdown=breakdown,
             )
-        return result(EvaluationStatus.PROFITABLE, gross=gross, breakdown=breakdown)
+        volume = VolumeModel(
+            buy_book=buy_book,
+            sell_book=sell_book,
+            buy_market=buy_market,
+            sell_market=sell_market,
+            transfer_fee_base=transfer.fee_base
+            if cfg.include_transfer_cost and transfer.status is TransferStatus.VERIFIED
+            else ZERO,
+            transfer_tax_pct=cfg.transfer_tax_pct.get(buy_market.base, ZERO)
+            if cfg.include_transfer_cost
+            else ZERO,
+        ).max_volume(base_bought)
+        return result(EvaluationStatus.PROFITABLE, gross=gross, breakdown=breakdown, volume=volume)
 
 
 def _meets_minimums(market: MarketInfo, amount: Decimal, cost: Decimal | None) -> bool:

@@ -6,7 +6,7 @@
 - complexity: high (touches engine/domain contracts used by alerts and persistence; money math)
 - size: L
 - depends_on: T1a
-- status: todo
+- status: done (crypto-specialist review of the network time table pending)
 
 ## Goal
 Make every field of the approved alert available as typed data on the evaluation/alert payload, with honest 'unknown' states.
@@ -33,3 +33,10 @@ Rendering (T4); delivery behaviour (T5).
 src/nexus/engine/, src/nexus/domain/, src/nexus/services/alerts.py, tests/
 
 DoD: `make check` green and not worse than baseline, new tests, no secrets in diff, todo.md + card updated, committed (Conventional Commits).
+
+## Progress (backend-lead, 2026-10-25)
+- Volume: `engine/volume.py` (`VolumeModel`) bisects the largest net-positive base amount on the visible books with the estimator's own cost model; `SpreadEvaluation.volume` (`ExecutableVolume`: scanned vs max base/quote, net at max) is set for PROFITABLE evaluations only, in memory (no schema change).
+- Transfer: `TransferQuote` gained `withdraw_state`/`deposit_state` (`LegState` open|closed|unknown), `withdraw_min`, `deposit_min`, `deposit_confirmations`, `est_arrival_min` + `arrival_source` (`exchange` beats `table`), `busy`; filled by `select_transfer_route`. Static table `engine/network_times.py` (source comments; **values need crypto-specialist review**).
+- Payload: `AlertContext` v2 (`v`, `volume`, `transfer`, `lifetime`) built by `AlertContext.build(evaluation, episode, ...)`; v1 in-flight rows decode (new blocks `None`, `v=1`), unknown keys and malformed blocks are ignored. Fee/USD strings are rounded half-up (base 8 dp, USD 2 dp, fee USD 4 dp). Unknown transfer -> fee `None`, flags `unknown`. Episode `lifetime_ms(now)` accessor added.
+- R-03 unchanged (unknown transfer + `require_verified_transfer` stays TRANSFER_UNVERIFIED, test added).
+- Not done here: telegram message_id per episode (T5), rendering (T4).
