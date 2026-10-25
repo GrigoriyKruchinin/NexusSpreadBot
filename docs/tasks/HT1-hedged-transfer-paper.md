@@ -145,7 +145,7 @@ sweep unaffected). S0 reduced to the `test_safety` additions.
 - [x] **S7 Basis buffer + vol stats** (`simulation/basis.py`, pure): fixed-point `array('q')` ring
   buffer, median/std at lag, z-score, warm-up; sigma_1m and max rise from klines. AC: hand-computed
   stats; memory bound test (keys x 720 x 8 B); missing samples are not imputed.
-- [ ] **S8 Hedged portfolio I: pre-checks + entry** (`simulation/hedged.py`, pure Decimal): pools,
+- [x] **S8 Hedged portfolio I: pre-checks + entry** (`simulation/hedged.py`, pure Decimal): pools,
   pre-checks a-f with their exact skip reasons (first failure wins), sizing, lot/contract rounding, margin,
   P_liq, leg reserve. AC = card AC2 + entry parts of AC1.
 - [ ] **S9 Hedged portfolio II: hold + exit + capital.** Funding accrual (idempotent per funding time),
