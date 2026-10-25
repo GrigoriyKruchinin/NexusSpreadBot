@@ -21,6 +21,13 @@ docker compose version >/dev/null 2>&1 || fail "'docker compose' (v2) is require
 
 [ -f "$ENV_FILE" ] || fail ".env not found / файл .env не найден. Run: cp .env.example .env  and fill it in (see comments inside)"
 
+# .env holds secrets: warn (never print values) when other local users can read it.
+perm="$(stat -c '%a' "$ENV_FILE" 2>/dev/null || stat -f '%Lp' "$ENV_FILE" 2>/dev/null || true)"
+case "$perm" in
+  ""|?00|?0|0) ;;
+  *) echo "WARNING: .env is readable by other users (mode $perm). Run: chmod 600 .env / файл .env доступен другим пользователям: chmod 600 .env" >&2 ;;
+esac
+
 # Presence checks by NAME only (the value is matched, never stored or printed).
 is_empty() { grep -Eq "^[[:space:]]*$1[[:space:]]*=[[:space:]]*(\"\"|'')?[[:space:]]*(#.*)?\$" "$ENV_FILE"; }
 is_set() { grep -Eq "^[[:space:]]*$1[[:space:]]*=" "$ENV_FILE"; }
