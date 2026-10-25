@@ -105,6 +105,25 @@ def test_alert_kind_first_then_growth_based_realerts() -> None:
     assert realerted.close(T0 + 3, EpisodeCloseReason.GAP).alert_kind(D(99), D(50)) is None
 
 
+def test_alert_kind_updates_on_a_fall_and_respects_the_min_interval() -> None:
+    alerted = OpportunityEpisode.open(make_evaluation(net_usd=D(8))).mark_alerted(
+        T0, D(8), AlertKind.FIRST
+    )
+    assert alerted.alert_kind(D(6), D(25)) is AlertKind.REALERT  # exactly -25 %
+    assert alerted.alert_kind(D("6.01"), D(25)) is None
+    assert alerted.alert_kind(D(10), D(25)) is AlertKind.REALERT  # exactly +25 %
+    # The interval gate: a big change inside the interval waits, at the boundary it passes.
+    assert alerted.alert_kind(D(20), D(25), now_ms=T0 + 59_999, min_interval_ms=60_000) is None
+    assert (
+        alerted.alert_kind(D(20), D(25), now_ms=T0 + 60_000, min_interval_ms=60_000)
+        is AlertKind.REALERT
+    )
+    # A zero baseline cannot divide: any change counts.
+    zero = replace(alerted, alerted_net_usd=D(0))
+    assert zero.alert_kind(D("0.01"), D(25)) is AlertKind.REALERT
+    assert zero.alert_kind(D(0), D(25)) is None
+
+
 def test_unverified_since_tracks_the_current_unverified_run() -> None:
     unknown = TransferQuote(TransferStatus.UNKNOWN)
     episode = OpportunityEpisode.open(make_evaluation())

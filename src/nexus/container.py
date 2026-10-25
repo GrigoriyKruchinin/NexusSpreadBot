@@ -154,7 +154,8 @@ async def scanner_scope(settings: ScannerRoleSettings) -> AsyncIterator[Scanner]
                 # Books older than the freshness limit are rejected anyway.
                 book_deadline_s=max(2.0, spread.max_orderbook_age_ms / 1000),
                 latency_check_ms=scan.latency_check_ms,
-                realert_growth_pct=settings.alerts.realert_growth_pct,
+                update_min_change_pct=settings.alerts.update_min_change_pct,
+                update_min_interval_s=settings.alerts.update_min_interval_s,
             ),
             clock=clock,
             streams=streams,

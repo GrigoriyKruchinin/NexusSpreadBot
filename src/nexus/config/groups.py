@@ -344,9 +344,19 @@ class AlertPolicySettings(NexusBaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="ALERT_")
 
-    realert_growth_pct: Decimal = Field(default=Decimal(50), gt=0, le=1_000)
-    """Re-alert an open episode only when its net profit grew by at least this percentage
-    over the last alerted value (one alert per episode otherwise)."""
+    update_min_change_pct: Decimal = Field(default=Decimal(25), gt=0, le=1_000)
+    """UPDATE (edit of the episode's message) only when the net profit changed, up or down, by at
+    least this relative percentage since the last alert of the episode."""
+    update_min_interval_s: int = Field(default=60, ge=0, le=3_600)
+    """...and at least this long since the last alert/edit of the episode."""
+    max_per_hour: int = Field(default=30, ge=1, le=1_000)
+    """Cap of NEW messages per clock hour; the overflow is collapsed into one summary message."""
+    send_min_interval_s: float = Field(default=1.0, ge=0, le=60)
+    """Telegram: minimum gap between two calls to the chat (<= 1 message/s per chat)."""
+    send_max_per_minute: int = Field(default=20, ge=1, le=1_000)
+    """Telegram: calls per minute to the chat (a channel allows ~20 messages/min)."""
+    sending_stale_s: int = Field(default=600, ge=60, le=86_400)
+    """An alert_log row stuck in ``sending`` this long (worker died mid-send) is reaped."""
     language: Literal["en", "ru"] = "en"
     """Language of the opportunity alert texts (``ALERT_LANGUAGE``)."""
 

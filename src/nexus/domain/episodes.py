@@ -142,15 +142,37 @@ class OpportunityEpisode:
         """True once the episode produced an alert."""
         return self.alerted_at_ms is not None
 
-    def alert_kind(self, net_usd: Decimal, realert_growth_pct: Decimal) -> AlertKind | None:
-        """One alert per episode, plus a re-alert when the net profit grew by at least
-        ``realert_growth_pct`` over the last alerted value."""
+    def alert_kind(
+        self,
+        net_usd: Decimal,
+        min_change_pct: Decimal,
+        *,
+        now_ms: int | None = None,
+        min_interval_ms: int = 0,
+    ) -> AlertKind | None:
+        """One alert per episode (the dedupe key is the episode), then updates (the delivery edits
+        the first message in place) when the net profit moved, up or down, by at least
+        ``min_change_pct`` relative to the last alerted value and ``min_interval_ms`` passed since
+        the last alert (``now_ms`` omitted = no interval check)."""
         if not self.is_open:
             return None
         if self.alerted_net_usd is None:
             return AlertKind.FIRST
-        threshold = self.alerted_net_usd * (1 + realert_growth_pct / HUNDRED)
-        return AlertKind.REALERT if net_usd >= threshold else None
+        base = self.alerted_net_usd
+        moved = (
+            net_usd != base
+            if base == 0
+            else abs(net_usd - base) / abs(base) * HUNDRED >= min_change_pct
+        )
+        if not moved:
+            return None
+        if (
+            now_ms is not None
+            and self.alerted_at_ms is not None
+            and now_ms - self.alerted_at_ms < min_interval_ms
+        ):
+            return None
+        return AlertKind.REALERT
 
     def mark_alerted(self, at_ms: int, net_usd: Decimal, kind: AlertKind) -> OpportunityEpisode:
         """Record a delivered (queued) alert."""

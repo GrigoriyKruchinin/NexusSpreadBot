@@ -92,8 +92,18 @@ require_verified_transfer = true
 alert_cooldown_s = 600
 
 [alert]
-# Re-alert an open episode only when its net profit grew by at least this percentage
-realert_growth_pct = 50
+# One episode = one Telegram message, edited in place (UPDATE) while the spread lives.
+# UPDATE only if the net profit changed by at least this relative percentage (up or down) ...
+update_min_change_pct = 25
+# ... and at least this many seconds passed since the last alert/edit of the episode
+update_min_interval_s = 60
+# Cap of NEW messages per clock hour; the overflow becomes one "N more suppressed" message
+max_per_hour = 30
+# Telegram limits: seconds between calls to the chat, and calls per minute (channel ~20/min)
+send_min_interval_s = 1.0
+send_max_per_minute = 20
+# A delivery record stuck in "sending" this long (worker died mid-send) is marked failed
+sending_stale_s = 600
 # Language of the alert texts: "en" or "ru"
 language = "en"
 

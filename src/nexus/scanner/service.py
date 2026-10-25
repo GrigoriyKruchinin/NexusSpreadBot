@@ -144,8 +144,10 @@ class ScannerConfig:
     books are not ready in time are skipped (they would be stale anyway)."""
     latency_check_ms: int = 2_000
     """A newly opened episode is re-checked on REST books this long after detection."""
-    realert_growth_pct: Decimal = Decimal(50)
-    """Re-alert an episode when its net profit grew by this % since the last alert."""
+    update_min_change_pct: Decimal = Decimal(25)
+    """UPDATE an episode's alert when its net profit changed by this relative % since the last."""
+    update_min_interval_s: int = 60
+    """...and this long since the episode's last alert."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -656,8 +658,22 @@ class Scanner:
                     evaluations=episode.evaluations,
                     realerts=episode.realerts,
                     survived_latency=episode.survived_latency,
+                    episode_id=episode.id,
+                    opened_at_ms=episode.opened_at_ms,
+                    last_seen_at_ms=episode.last_seen_at_ms,
+                    closed_at_ms=episode.closed_at_ms,
                 )
             )
+            await self._restart_cooldown(episode)
+
+    async def _restart_cooldown(self, episode: OpportunityEpisode) -> None:
+        """The route cooldown counts from the CLOSE of an alerted episode (flapping routes)."""
+        key = f"alert:{episode.route_key}"
+        try:
+            await self._cooldowns.release(key)
+            await self._cooldowns.acquire(key, self._config.alert_cooldown_s)
+        except Exception:
+            log.exception("cooldown_restart_failed", route=episode.route_key)
 
     async def _alert_episode(
         self, evaluation_id: int, evaluation: SpreadEvaluation, episode_id: int
@@ -669,7 +685,12 @@ class Scanner:
         if episode is None or episode.id != episode_id:
             return False  # closed or replaced meanwhile
         net = evaluation.breakdown.net_profit_usd
-        kind = episode.alert_kind(net, self._config.realert_growth_pct)
+        kind = episode.alert_kind(
+            net,
+            self._config.update_min_change_pct,
+            now_ms=self._clock.now_ms(),
+            min_interval_ms=self._config.update_min_interval_s * 1000,
+        )
         if kind is None:
             return False
         floor_key = f"alert:{evaluation.route_key}"

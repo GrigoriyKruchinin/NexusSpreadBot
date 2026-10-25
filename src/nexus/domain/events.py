@@ -93,6 +93,11 @@ class EpisodeClosed:
     evaluations: int
     realerts: int
     survived_latency: bool | None
+    episode_id: int | None = None
+    """Lets the alerts worker find the episode's Telegram message and edit it to CLOSED."""
+    opened_at_ms: int | None = None
+    last_seen_at_ms: int | None = None
+    closed_at_ms: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

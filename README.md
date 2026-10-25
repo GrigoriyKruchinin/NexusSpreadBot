@@ -99,7 +99,8 @@ unless both the transfer path and the token contract are verified (ticker collis
   venue, deposit on the sell venue, known fee, no contract conflict). Without a key, Binance
   status comes from its public capital config; Gate.io, KuCoin and Bitget are public.
 - **Opportunity episodes:** one alert per continuous run of a route, a re-alert only when the
-  net profit grows by `ALERT_REALERT_GROWTH_PCT`, and an "opportunity closed" summary.
+  net profit changes by `[alert] update_min_change_pct` (the Telegram message is edited in place, not
+  re-sent), and the same message is edited to a "closed" summary with the lifetime.
   Each new episode is re-checked on REST books after `PAPER_LATENCY_MS` ("survived latency").
 - **Automatic quarantine:** a route whose spread persists without a verified transfer path
   (the classic "withdrawals suspended" spread) or whose transfer is unavailable is excluded

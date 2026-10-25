@@ -160,6 +160,7 @@ class Harness:
                 alert_cooldown_s=600,
                 book_deadline_s=2.0,
                 latency_check_ms=0,
+                update_min_interval_s=0,
             ),
             clock=self.clock,
             streams=self.streams,
@@ -731,6 +732,13 @@ async def test_one_alert_per_episode_realert_on_growth_and_close_message() -> No
         4,
     )
     assert closed.duration_s == 30
+    assert closed.episode_id == 1
+    assert closed.opened_at_ms is not None
+    assert closed.last_seen_at_ms is not None
+    assert closed.closed_at_ms is not None
+    assert closed.closed_at_ms > closed.last_seen_at_ms > closed.opened_at_ms
+    # The route cooldown restarted at the close, not at the first alert.
+    assert "alert:ABC/USDT|a>b" in h.cooldowns.active
 
 
 async def test_floor_blocks_first_alert_of_a_quickly_reopened_episode() -> None:
