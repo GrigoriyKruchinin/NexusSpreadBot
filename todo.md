@@ -6,8 +6,8 @@ Ticks only after verification and commit.
 ## S1-tool — Self-hosted spread-alert tool (after NO-GO; user decisions 2026-10-25)
 Product: clone, `cp .env.example .env`, fill own Telegram bot token + chat/channel id and optional read-only exchange keys
 (no key = public mode), one command, alerts in own Telegram, data in PostgreSQL. No trading, no paper portfolios.
-Cards in `docs/tasks/tool/`; order = list order (T1a/T3/T6 can run in parallel after their dependencies).
-- [ ] T0 ADR 0010 product pivot (architect; S) — `docs/tasks/tool/T0-product-pivot-adr.md`
+Authority: ADR 0010 (`docs/decisions/0010-self-hosted-alert-tool.md`). Cards in `docs/tasks/tool/`; order = list order (T1a/T3/T6 can run in parallel after their dependencies).
+- [x] T0 ADR 0010 product pivot (architect; S) — `docs/tasks/tool/T0-product-pivot-adr.md`
 - [ ] T13 lawyer: ToS / distribution / LICENSE input (lawyer; S; parallel) — `docs/tasks/tool/T13-lawyer-tool-distribution.md`
 - [ ] T1a remove paper portfolios + GO report: code, config, make target (backend-lead; L) — `docs/tasks/tool/T1a-remove-paper-core.md`
 - [ ] T1b remove paper parts of digest / watchdog D-08 / maintenance (backend-lead; M) — `docs/tasks/tool/T1b-remove-paper-digest-watchdog.md`

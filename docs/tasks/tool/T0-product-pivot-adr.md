@@ -6,7 +6,7 @@
 - complexity: low (one short document)
 - size: S
 - depends_on: none (first)
-- status: todo
+- status: done (2026-10-25, architect)
 
 ## Goal
 Record the post-NO-GO product decision so later cards and hygiene have one authority.
@@ -30,3 +30,8 @@ Rewriting vision.md (T12 does a minimal banner only).
 docs/decisions/, docs/product/vision.md (banner)
 
 DoD: `make check` green and not worse than baseline, new tests, no secrets in diff, todo.md + card updated, committed (Conventional Commits).
+
+## Result (2026-10-25)
+- ADR [0010](../../decisions/0010-self-hosted-alert-tool.md) accepted (records user decisions 2026-10-25); superseded-docs table = T12 input.
+- Status lines added to ADR 0001 (revised), 0006 (amended), 0007/0008/0009 (superseded); index updated.
+- vision.md banner left to T12 (out of scope here). No code touched; `make check` not applicable (docs only).

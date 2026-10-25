@@ -1,6 +1,7 @@
 # 0001 — No withdrawal/transfer in code
 
 Date: 2026-10-23. Status: accepted (revisit in Stage 2-3 by `creative-ceo`).
+Revised 2026-10-25 ([ADR 0010](0010-self-hosted-alert-tool.md)): stays in force; the "revisit in Stage 2-3 by creative-ceo" clause is void (no Stage 2-3, creative-ceo retired).
 
 **Context.** API keys are issued without withdrawal permission, so funds cannot leave via API.
 Trading through API is allowed after GO and explicit user confirmation.

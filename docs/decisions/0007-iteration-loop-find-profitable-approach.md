@@ -1,6 +1,7 @@
 # 0007 — Up to 5 iterations to find a profitable spread approach
 
 Date: 2026-10-23. Status: accepted (user decision).
+Superseded 2026-10-25 by [ADR 0010](0010-self-hosted-alert-tool.md): iteration loop cancelled after NO-GO.
 
 **Context.** The project goal is to earn on spreads, not to validate one hypothesis. The first
 vision draft allowed one Rework iteration only.

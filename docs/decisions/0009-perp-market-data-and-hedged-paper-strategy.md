@@ -2,6 +2,7 @@
 
 Date: 2026-10-25. Status: proposed (architect; accepted when tech-lead and security sign off the HT1
 design review `docs/architecture/HT1-design-review.md`).
+Superseded 2026-10-25 by [ADR 0010](0010-self-hosted-alert-tool.md): never accepted; HT1 removed after NO-GO (f603178).
 
 ## Context
 The user chose a hedged-transfer strategy (HT): buy spot on A, short a perp on H, move the coin A->B in a
