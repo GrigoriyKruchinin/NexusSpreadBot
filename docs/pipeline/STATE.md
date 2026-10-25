@@ -1,6 +1,11 @@
 # STATE (updated 2026-10-24)
 
 ## Where we are
+- **2026-10-25 12:50Z preview (go_report, read-only):** soak gap from a full disk (user fixed; 894G free); 13 of 33 h
+  without a sweep; stack up again ~12:40Z. All 4 sets: hedged P&L (realized - rebalance) +58..+72 USD in 1.4 d, but MTM on
+  coin inventory -471..-669 USD -> total -405..-597 USD. Loss = price drop of held small-cap inventory (T, ORDER, ANIME), not
+  the spread trades. Sample far too short; paper fill realism unverified. User asked about hedging (short perp) - candidate
+  task for quant-analyst (paper hedge-cost model: funding, perp fees, margin), no real trading (ADR 0001).
 - **User decision 2026-10-24 ~15:45Z: WAIT MODE.** No more work on reboot auto-recovery for now. User keeps the PC on and
   restarts containers himself (or asks the orchestrator: `docker compose start`, no recreate) if they are down. Gaps in
   soak data are acceptable; analysis uses whatever data exists. D-01 re-check and the auto-recovery guide steps are
