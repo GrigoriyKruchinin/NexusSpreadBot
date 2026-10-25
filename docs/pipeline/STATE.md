@@ -1,6 +1,10 @@
 # STATE (updated 2026-10-24)
 
 ## Where we are
+- **Stage S1-tool planned** (b018cdb; cards `docs/tasks/tool/`, T0..T14). User answers 2026-10-25: T2 squash migrations into
+  one initial schema; alerts `[alert] language = en|ru` (default en, user ru); retire quant-analyst, risk-manager,
+  creative-ceo, observability-engineer (T12); T9 drop human KEY_POLICY attestations for third parties, optional
+  KEY_POLICY_STRICT; LICENSE after T13 lawyer input. Started: T0 (architect), T13 (lawyer), T1a (backend-lead).
 - **2026-10-25 after NO-GO (user answers):** stack STOPPED (`docker compose stop`). User OK to delete ALL data: backups
   (~/nexus-backups, C:\nexus-backups), old + soak1 volumes. Agent deletion was denied by permission settings -> commands
   given to the user to run himself. HT1 code removal: backend-lead running. Product direction: tool that posts spreads on
