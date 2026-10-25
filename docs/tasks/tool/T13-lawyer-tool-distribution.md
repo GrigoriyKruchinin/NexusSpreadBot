@@ -6,7 +6,7 @@
 - complexity: medium (legal reading, no code)
 - size: S
 - depends_on: T0
-- status: todo
+- status: done (2026-10-25; LICENSE choice pending user)
 
 ## Goal
 Know whether publishing the tool and posting exchange-derived prices to a (possibly public) Telegram channel violates exchange ToS or needs disclaimers; also LICENSE choice input.
@@ -21,7 +21,17 @@ Know whether publishing the tool and posting exchange-derived prices to a (possi
 - Third-party keys: nothing leaves the user's machine; statement for README
 
 ## Acceptance criteria
-- `docs/legal/tool-distribution.md` with sources and verdict per venue; input for T4 (footer), T10, LICENSE
+- [x] `docs/legal/tool-distribution.md` with sources and verdict per venue; input for T4 (footer), T10, LICENSE
+
+## Result (2026-10-25)
+- Output: `docs/legal/tool-distribution.md` (verdict table s. 1, inputs for T4/T9/T10 s. 2, texts s. 3, LICENSE s. 4,
+  Russian summary at the end).
+- Verdict: publishing the code OK; private channel OK on all five; public channel breaches OKX (API Agreement s. 9.4)
+  and KuCoin (Art. 89), high risk Binance, grey Bybit/Gate; any monetisation breaches all five.
+- LICENSE recommendation: Apache-2.0 (alternatives MIT, AGPL-3.0, source-available) -> user decision (todo item).
+- Follow-ups: T9/security must confirm the "keys stay with you" statement before T10 publishes it; T4 ships the pinned
+  text (s. 3.2), no public-broadcast/ads features; Bybit API PDF and Binance live ToS need a human re-read before any
+  shared/public channel.
 
 ## Out of scope
 Legal advice to end users.
@@ -30,3 +40,4 @@ Legal advice to end users.
 docs/legal/
 
 DoD: `make check` green and not worse than baseline, new tests, no secrets in diff, todo.md + card updated, committed (Conventional Commits).
+(Docs-only task: no code, no tests.)

@@ -8,7 +8,7 @@ Product: clone, `cp .env.example .env`, fill own Telegram bot token + chat/chann
 (no key = public mode), one command, alerts in own Telegram, data in PostgreSQL. No trading, no paper portfolios.
 Authority: ADR 0010 (`docs/decisions/0010-self-hosted-alert-tool.md`). Cards in `docs/tasks/tool/`; order = list order (T1a/T3/T6 can run in parallel after their dependencies).
 - [x] T0 ADR 0010 product pivot (architect; S) — `docs/tasks/tool/T0-product-pivot-adr.md`
-- [ ] T13 lawyer: ToS / distribution / LICENSE input (lawyer; S; parallel) — `docs/tasks/tool/T13-lawyer-tool-distribution.md`
+- [x] T13 lawyer: ToS / distribution / LICENSE input (lawyer; S; parallel) — `docs/tasks/tool/T13-lawyer-tool-distribution.md`
 - [x] T1a remove paper portfolios + GO report: code, config, make target (backend-lead; L) — `docs/tasks/tool/T1a-remove-paper-core.md`
 - [x] T1b remove paper parts of digest / watchdog D-08 / maintenance (backend-lead; M) — `docs/tasks/tool/T1b-remove-paper-digest-watchdog.md`
 - [ ] T2 migrations: squash (recommended) or drop-migration (backend-lead; M; U4 confirm) — `docs/tasks/tool/T2-migrations-reset.md`
