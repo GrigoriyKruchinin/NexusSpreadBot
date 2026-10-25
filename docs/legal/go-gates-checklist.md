@@ -103,6 +103,22 @@ GO is after income tax (F4), so G3.1-G3.3 feed directly into the quant model.
 | G4.3 | No MEXC/Bitget access via relatives', friends' or purchased KYC, and no misstatement of citizenship; wait for DNI and re-check those venues' rules then | User statement, dated; re-check note after DNI | user; lawyer re-checks ToS after DNI | **at risk** (F2) |
 | G4.4 | No account is shared with or operated for another person (no custody of others' money; vision scope "Out") | User statement, dated | user | open |
 
+## G5 — Derivatives access (only if the hedged-transfer strategy is used at GO)
+
+Source and details: `docs/legal/futures-access.md` (2026-10-25). Verdicts: okx/kucoin conditional, binance conditional
+(after G1.1a), bybit/gateio blocked.
+
+| ID | Item (exact user action) | Evidence | Who | Status |
+|---|---|---|---|---|
+| G5.1 | For okx, kucoin (and binance after G1.1a): open the USDT-M futures page in the account. Write down only: available yes/no, any "not available in your region" text, any quiz or suitability step asked for. Do **not** activate trading or create trade-permission keys (ADR 0001) | Note: date, venue, yes/no, message wording | user | open |
+| G5.2 | Note the contracting entity shown in the futures terms you accept in the account (global vs EU/local). Stop if it is an EU/EEA entity | Note: entity name | user; lawyer reads it | open |
+| G5.3 | binance: no futures on the Russia-resident profile. After G1.1a, re-check G5.1 and any balance-limit banner (EUR 10,000 regime) | Note | user | open |
+| G5.4 | Write to support (okx, kucoin, binance): "I am a Russian citizen, verified with a Russian passport, residing in Argentina. Am I eligible for USDT-margined perpetual futures, and are there limits on balance, leverage or products?" Keep the answer category only | Note: date, answer yes/no/limits | user | open |
+| G5.5 | Answers from the accountant on section 3 tax items 1-6, above all netting of the spot and short legs | Written answer | accountant | open |
+| G5.6 | Quizzes are answered by the user honestly, with no third-party help; no VPN or proxy to reach a derivatives product blocked by region (also G2.4) | User statement | user | open |
+| G5.7 | Before any real hedge: risk-manager limits for margin buffer, per-venue exposure and the stranded-short case; quant includes funding and perp fees | Link to `docs/risk/` and quant report | risk-manager, quant | open |
+| G5.8 | Re-check G5.1-G5.4 when the DNI is issued and at UF | Note | user + lawyer | open |
+
 ## User actions (from 2026-10-23 facts)
 
 Ordered by impact. Record results as evidence notes (no identifiers, no screenshots).
@@ -161,3 +177,4 @@ Sources 1-17 are in the review. Additional:
 - 2026-10-23: user facts F5-F10 added; F1 revised (hold, not ban). G1.2 gateio -> blocked pending
   verification (Argentina + Russia in Gate Restricted Locations). G1.1/G1.6 -> at risk (binance
   residence likely Russia). Added G1.1a/b, G1.9, user actions, Q4a-c, sources L1-L12.
+- 2026-10-25: added G5 (derivatives access, hedged-transfer strategy) from `docs/legal/futures-access.md`.
