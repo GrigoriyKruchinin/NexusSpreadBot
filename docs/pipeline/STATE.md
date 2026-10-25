@@ -1,6 +1,10 @@
 # STATE (updated 2026-10-24)
 
 ## Where we are
+- **2026-10-25 hedge-method comparison** (`docs/quant/hedge-method-comparison.md`, 40 episodes): PERP okx+kucoin passes 0 after
+  basis check (sell venue B falls back ~1.1 % during transfer); MARGIN short on B locks the spread but okx/kucoin lend 0 of
+  the alerted coins, only binance (7/40, +$47.6) and gate; UNHEDGED -$848 on 40. No method passes in the GO set today.
+  HT1 S13 ON HOLD pending user answer: margin on binance and/or gate (needs legal + G1.1a) or NO-GO -> analytical tool.
 - **User OK 2026-10-25 (U4): wipe all old DB data**, start HT from zero. Orchestrator plan: do it at HT deploy (S15) in
   one go via a fresh DB volume per `docs/guides/soak-fresh-stack.md` (no `down -v`), so the old spot paper code does not
   write new data in between; quick archive dump first as a safety net.
