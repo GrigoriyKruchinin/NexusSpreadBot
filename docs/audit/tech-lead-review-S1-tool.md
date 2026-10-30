@@ -153,3 +153,30 @@ N-3. `make pin-text` starts a container but is not in the `ask` list; harmless (
 
 ## Next
 Backend-lead fixes R2-1 (test-only change). Round 3 (last) checks only R2-1 plus `make check`.
+
+---
+
+# Round 3 (2026-10-30, final)
+
+- Range: `0c6a255..80af9b8` (80af9b8 only). Reviewer: tech-lead (no code edited).
+
+## Verdict: **ACCEPT**. R2-1 closed, N-1 closed, no regression.
+
+## Checks (run by reviewer)
+| Check | Result |
+|---|---|
+| `make check` | ruff format + ruff 0, mypy --strict 0, **1085 passed**, 19 deselected |
+| `make test-cov` | **92.08 %** (5506 stmts / 1182 branches); floor 89 % |
+| Ratchet | not worse than round 2 (1084 / 92.08 %) or CLAUDE.md (1028 / 91.5 %) |
+| Hermeticity probe | temporary `config/local.toml` with `[alert] language = "ru"` and `[postgres] db = "other"`: **1085 passed**; file removed, tree clean |
+
+## Points
+| # | Status | Evidence |
+|---|---|---|
+| R2-1 | closed | `_hermetic_repo_toml` copies `config/nexus.toml` into an empty `tmp_path` dir; used by `test_repo_toml_equals_code_defaults` and `test_merged_db_name_is_what_the_integration_guard_checks`. Regression test `test_owner_local_toml_next_to_the_repo_file_does_not_leak_into_repo_tests` proves the overlay is live beside the file and absent via the helper. No other test points the loader at the repo file (grep). |
+| N-1 | closed | `_deliver` docstring: dropped UPDATE is not replayed; growth announced at next threshold |
+| N-2 | carried | tester: real `docker build` with and without `config/local.toml` |
+| N-3 | carried | `make pin-text` not in `ask` list; informational |
+
+## Next
+Tester (T14 scope 2), incl. N-2. Then security, delta audit.
