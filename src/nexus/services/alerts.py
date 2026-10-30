@@ -131,6 +131,7 @@ class AlertService:
         a NEW that finds a stored message (late retry) edits it instead of sending a duplicate;
         an UPDATE without a stored message (its NEW was suppressed by the cap or is still being
         retried) is dropped, because sending it would orphan the message the NEW will create.
+        Such a dropped UPDATE is not replayed: growth is announced at the next threshold.
         """
         if self._messages is None or context.episode_id is None:
             return await self._send_new(text)

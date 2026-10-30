@@ -1,5 +1,6 @@
 """config/nexus.toml: loader, priority, fail-closed guard, provenance, hash (A7)."""
 
+import sys
 import tomllib
 from decimal import Decimal
 from pathlib import Path
@@ -40,6 +41,19 @@ def _write(tmp_path: Path, body: str, monkeypatch: pytest.MonkeyPatch) -> Path:
     path.write_text(body)
     monkeypatch.setenv("NEXUS_CONFIG_FILE", str(path))
     return path
+
+
+def _hermetic_repo_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point NEXUS_CONFIG_FILE at a copy of the repo file in an empty dir.
+
+    The loader also merges ``local.toml`` next to the file; a copy keeps an owner's
+    ``config/local.toml`` out of these tests.
+    """
+    copy = tmp_path / "hermetic" / "nexus.toml"
+    copy.parent.mkdir()
+    copy.write_text(REPO_TOML.read_text())
+    monkeypatch.setenv("NEXUS_CONFIG_FILE", str(copy))
+    return copy
 
 
 def _groups() -> list[type[NexusBaseSettings]]:
@@ -100,7 +114,7 @@ def test_empty_file_gives_code_defaults() -> None:
     assert SpreadSettings().min_net_profit_pct == Decimal("0.3")
 
 
-def test_repo_toml_equals_code_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_repo_toml_equals_code_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """No default value changes: the committed file must reproduce every code default."""
     monkeypatch.setenv("POSTGRES_PASSWORD", PW)
     skipped = {"TelegramSettings", "ExchangeCredentials", "KeyPolicySettings"}
@@ -110,7 +124,7 @@ def test_repo_toml_equals_code_defaults(monkeypatch: pytest.MonkeyPatch) -> None
         telegram = TelegramSettings(bot_token=SecretStr("0:" + "a" * 20), chat_id="0")
         return [telegram.model_dump(), *(cls().model_dump() for cls in classes)]
 
-    monkeypatch.setenv("NEXUS_CONFIG_FILE", str(REPO_TOML))
+    _hermetic_repo_toml(tmp_path, monkeypatch)
     with_file = dump()
     monkeypatch.delenv("NEXUS_CONFIG_FILE")  # default path in the empty tmp cwd: absent
     without_file = dump()
@@ -345,10 +359,11 @@ def test_hash_is_stable_across_role_contexts() -> None:
 
 # ------------------------------------------------------------------ R2: merged test-DB check
 def test_merged_db_name_is_what_the_integration_guard_checks(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The repo file says db = "nexus": without POSTGRES_DB=nexus_test the guard must refuse."""
-    monkeypatch.setenv("NEXUS_CONFIG_FILE", str(REPO_TOML))
+    _hermetic_repo_toml(tmp_path, monkeypatch)
     monkeypatch.setenv("POSTGRES_PASSWORD", PW)
     monkeypatch.delenv("POSTGRES_DB", raising=False)
     merged = DatabaseSettings()
@@ -384,3 +399,24 @@ def test_env_still_beats_the_local_overlay(tmp_path: Path, monkeypatch: pytest.M
     (tmp_path / "local.toml").write_text('[alert]\nlanguage = "ru"\n')
     monkeypatch.setenv("ALERT_LANGUAGE", "en")
     assert AlertPolicySettings().language == "en"
+
+
+def test_owner_local_toml_next_to_the_repo_file_does_not_leak_into_repo_tests(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R2-1: a local.toml beside the repo file must not affect tests using the repo file."""
+    fake = tmp_path / "config"
+    fake.mkdir()
+    (fake / "nexus.toml").write_text(REPO_TOML.read_text())
+    (fake / "local.toml").write_text('[alert]\nlanguage = "ru"\n[postgres]\ndb = "other"\n')
+    monkeypatch.setattr(sys.modules[__name__], "REPO_TOML", fake / "nexus.toml")
+    monkeypatch.setenv("POSTGRES_PASSWORD", PW)
+    monkeypatch.delenv("POSTGRES_DB", raising=False)
+    monkeypatch.delenv("ALERT_LANGUAGE", raising=False)
+    # Sanity: the overlay is live when the loader is pointed at the fake folder directly.
+    monkeypatch.setenv("NEXUS_CONFIG_FILE", str(fake / "nexus.toml"))
+    assert AlertPolicySettings().language == "ru"
+    # The helper used by the repo-file tests sidesteps it.
+    _hermetic_repo_toml(tmp_path, monkeypatch)
+    assert AlertPolicySettings().language == "en"
+    assert DatabaseSettings().db == "nexus"

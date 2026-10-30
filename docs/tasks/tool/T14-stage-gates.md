@@ -39,3 +39,7 @@ Tech-lead review points handled (see `docs/audit/tech-lead-review-S1-tool.md`):
 - 8, 13, R2: `nexus pin-text [--lang en|ru]` prints the pinned disclaimer (devops: reference it in README); `nexus check` calls `configure_logging` (WARNING, redaction on); DB probe covered by unit tests with a fake engine; `fmt_time` removed.
 - 16 (owner language ru): optional untracked `config/local.toml` next to `config/nexus.toml`, merged per key over it (same guard as the main file, settings only, secrets stay in `.env`), gitignored, copied into the image by `COPY config/nexus.toml config/local.tom[l] ./config/`. Owner setup: create `config/local.toml` with `[alert]` / `language = "ru"`, then `make up` (rebuild). The Dockerfile glob is verified by test only, not by a real `docker build`: tester should confirm the build with and without the file.
 - Not mine: 4, 5, 6, 14, 15 (docs/compose/guard rails).
+
+## Progress note: fix round 2 (backend-lead, 2026-10-30)
+- R2-1: `tests/unit/config/test_config_file.py` repo-file tests (`test_repo_toml_equals_code_defaults`, `test_merged_db_name_is_what_the_integration_guard_checks`) now load a copy of `config/nexus.toml` from an empty tmp dir (`_hermetic_repo_toml`), so an owner's `config/local.toml` cannot change them. Regression test `test_owner_local_toml_next_to_the_repo_file_does_not_leak_into_repo_tests` (fake config dir in tmp_path; the real `config/` is never written). Runtime loader unchanged.
+- N-1: docstring line in `services/alerts.py::_deliver` (dropped UPDATE is not replayed; growth announced at next threshold).
