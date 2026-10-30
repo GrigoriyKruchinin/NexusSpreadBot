@@ -1,6 +1,6 @@
 # 0004 — Source plug-in contract: core venue list, composition-time capabilities, DEX seam on paper
 
-Date: 2026-10-23. Status: accepted (architect, delegated by the user at U2, ADR 0006).
+Date: 2026-10-23. Status: accepted (architect, delegated by the user).
 Revised 2026-10-23: registry tiers replaced by a config list; string capability flags replaced
 by typed optional ports; DEX seam documented only (U2 option A).
 
@@ -8,8 +8,8 @@ by typed optional ports; DEX seam documented only (U2 option A).
 Adapters are added through `adapters/registry.py` (open/closed holds, B6). Optional capabilities
 (WS books, account fees) are discovered with `isinstance` on Protocols inside the scanner
 (`scanner/service.py`, `scanner/streams.py`; I2). ADR 0002 makes bitget/mexc extension-only, yet
-the default `EXCHANGES_ENABLED` (`config/groups.py`) still includes them. U2 chose DEX option A:
-seam only, no DEX code before GO/NO-GO (ADR 0006). `interfaces/dex.py` is an unused stub (TD-09).
+the default `EXCHANGES_ENABLED` (`config/groups.py`) still includes them. The user chose DEX option A:
+seam only, no DEX code. `interfaces/dex.py` is an unused stub (TD-09).
 
 ## Decision drivers
 - GO/NO-GO numbers must cover exactly the five core CEX (ADR 0002).
@@ -35,7 +35,7 @@ seam only, no DEX code before GO/NO-GO (ADR 0006). `interfaces/dex.py` is an unu
    frozen `VenueHandle` with typed fields — `books` (required), `ws_books`, `account_fees`,
    `transfer_status`, `server_time` (each `Port | None`). The scanner checks `is not None`,
    never `isinstance`, never venue names.
-3. **DEX seam on paper only.** target.md §6 documents `LegQuote` (priced leg incl. fees and
+3. **DEX seam on paper only.** This ADR documents `LegQuote` (priced leg incl. fees and
    gas/network cost, with timestamp) and the asset-identity registry prerequisite.
    `interfaces/dex.py` stays as a placeholder. Nothing is built (steps E1-E3 unscheduled).
 
@@ -44,10 +44,9 @@ seam only, no DEX code before GO/NO-GO (ADR 0006). `interfaces/dex.py` is an unu
 - Good: after Argentine DNI/KYC, enabling bitget/mexc for analysis = config change.
 - Good: mypy checks every optional-capability call.
 - Bad: one more small type (`VenueHandle`) and container code.
-- DEX: revisited after the GO result (ADR 0006). If DEX is chosen then, E1-E3 get scheduled
-  and a new ADR fixes the `LegQuote` shape against real aggregator data.
-- E1 (asset-identity registry) may be pulled forward without DEX if crypto-specialist finds
-  network/contract mismatches in CEX transfer routing (evidence-triggered, not scheduled).
+- DEX: not planned. If it is ever opened, a new ADR fixes the `LegQuote` shape against real
+  aggregator data.
+- E1 (asset-identity registry) may be pulled forward without DEX if network/contract mismatches in CEX transfer routing (evidence-triggered, not scheduled).
 
 ## Confirmation
 Steps B1 and C9: default-settings test lists exactly the five core venues; no `isinstance` on

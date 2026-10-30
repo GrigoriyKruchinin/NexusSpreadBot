@@ -7,8 +7,8 @@ without the key (the credential-less client is built by the composition root); w
 ``KEY_POLICY_STRICT=true`` (owner's own setup) a rejected key is fatal, and an unrestricted IP
 binding or a property the API does not expose is a violation too.
 
-Per core venue one signed GET reads the key's own permissions (endpoints and refuse rules:
-``docs/reports/exchange-key-permissions.md``). Every parser is a pure function from the
+Per core venue one signed GET reads the key's own permissions (the refuse rules live in the
+parsers below). Every parser is a pure function from the
 raw payload to a tuple of violated *rule names*; it fails closed (unparseable payload or a
 missing/mistyped required field is a violation). The raw payload contains the api key, uid
 and label: it is never logged, stored or put into an exception. Only rule names and booleans

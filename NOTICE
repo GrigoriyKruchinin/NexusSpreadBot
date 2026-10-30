@@ -5,4 +5,4 @@ Licensed under the Apache License, Version 2.0 (see LICENSE).
 
 This software reads public and read-only exchange market data. It does not place orders or move funds.
 Exchange data remains subject to each exchange's own terms of use; this license grants no rights to that
-data. See docs/legal/tool-distribution.md. Provided "AS IS", without warranties; not financial advice.
+data. See the README (Disclaimer, Exchange data terms). Provided "AS IS", without warranties; not financial advice.

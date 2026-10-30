@@ -1,7 +1,7 @@
 # 0005 — Clock domains for staleness, skew and durations
 
-Date: 2026-10-23. Status: accepted (architect, delegated by the user at U2, ADR 0006).
-Thresholds are proposed defaults; quant-analyst and crypto-specialist tune them in B14.
+Date: 2026-10-23. Status: accepted (architect, delegated by the user).
+Thresholds are proposed defaults; tune them against real venue data.
 Revised 2026-10-23: host-clock probe no longer gates evaluations; REST age made conservative;
 offset estimate specified.
 

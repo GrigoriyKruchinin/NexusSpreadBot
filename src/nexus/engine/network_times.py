@@ -10,8 +10,7 @@ manual venue reviews can make real transfers slower.
 Sources: Binance and KuCoin public currency metadata (credit confirmations, accessed
 2026-10-25) plus chain block times. OKX, Bybit and Gate figures are NOT verified (they need a
 read-only key or the logged-in deposit page); LINEA, CRO, KAIA and XMR rely on block time only.
-Keys are codes after :func:`nexus.engine.transfer.normalize_network`. Review:
-docs/reports/network-times-review.md.
+Keys are codes after :func:`nexus.engine.transfer.normalize_network`..
 
 TODO: model exchange withdrawal processing (typically 1-5 min, risk review 30 min to hours) as a
 separate term instead of the allowance above; the report gives no measured default (no keys).

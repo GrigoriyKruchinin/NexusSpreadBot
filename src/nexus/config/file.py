@@ -3,7 +3,7 @@
 Priority: init kwargs > environment > ``.env`` (local only) > ``config/local.toml`` (optional,
 untracked) > TOML file > code default.
 
-The file holds SETTING-class values only (see ``docs/audit/security-config-split-A7.md``).
+The file holds SETTING-class values only.
 Secrets and ENV-ONLY values (tokens, passwords, key-policy attestations, the Telegram API host,
 runtime plumbing) must come from the environment. The guard therefore refuses to start when the
 file contains anything outside :data:`TOML_ALLOWED`, any denylisted name, or a credential-shaped

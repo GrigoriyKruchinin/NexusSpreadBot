@@ -1,8 +1,7 @@
-# Бесплатный хостинг для сканера (paper-режим)
+# Бесплатный хостинг для сканера
 
 Цель: чтобы сканер работал 24/7 и не зависел от ноутбука (сон, WSL, перезагрузки Windows).
-Это относится к Stage 1.5 (чтение рынка + бумажная торговля): бот **ничего не покупает и не
-выводит**, ключи у вас только на чтение.
+Бот **ничего не покупает и не выводит**, ключи у вас только на чтение.
 
 > ⚠️ Условия бесплатных тарифов часто меняются. Перед регистрацией проверьте актуальные
 > лимиты на сайте провайдера. Ниже — то, что известно на момент написания.
@@ -33,7 +32,7 @@
 
 **Рекомендация.** Пробуйте Oracle Always Free. Если регистрация не прошла (это бывает) —
 берите VPS за ~4–6 € в месяц: для проекта, который должен собирать данные неделями,
-это дешевле потерянного времени. Stage 2 (реальная торговля) в любом случае потребует VPS.
+это дешевле потерянного времени.
 
 ---
 
@@ -106,14 +105,14 @@ ssh ubuntu@<публичный-IP> 'chmod 600 ~/NexusSpreadBot/.env'
 Файл `config/nexus.toml` (все остальные настройки) приходит вместе с репозиторием через git, его копировать не нужно.
 
 ### 1.5 Запуск
-**Сначала остановите локальный стек** (`make down-local` на ноутбуке) и убедитесь, что в Docker
-Desktop на Windows нет старых контейнеров `nexus-local-*`. Два сканера с одним
+**Сначала остановите локальный стек** (`make down` на ноутбуке) и убедитесь, что в Docker
+Desktop на Windows нет старых контейнеров `nexus-*`. Два сканера с одним
 `TELEGRAM_BOT_TOKEN` дублируют алерты и сообщения «остановлен».
 
 ```bash
 cd ~/NexusSpreadBot
-make up-local          # на сервере используется тот же compose-файл: это paper-режим
-make ps-local          # через ~1 минуту все сервисы healthy
+make up          # на сервере тот же compose-файл и та же команда
+make ps          # через ~1 минуту все сервисы healthy
 make logs s=scanner
 ```
 В Telegram придёт **🚀 Nexus Spread Scanner запущен**.
@@ -122,19 +121,19 @@ make logs s=scanner
 после перезагрузки сервера стек поднимется сам.
 
 ### 1.6 Перенос накопленных данных (по желанию)
-Если нужна история эпизодов и paper P&L с ноутбука:
+Если нужна история эпизодов с ноутбука:
 ```bash
 # на ноутбуке
-docker compose -f docker-compose.local.yml exec -T postgres sh -c \
+docker compose -f docker-compose.yml exec -T postgres sh -c \
   'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' | gzip > nexus-backup.sql.gz
 scp nexus-backup.sql.gz ubuntu@<публичный-IP>:~/
 
 # на сервере (стек уже запущен, миграции применены)
 cd ~/NexusSpreadBot
-docker compose -f docker-compose.local.yml stop scanner
-gunzip -c ~/nexus-backup.sql.gz | docker compose -f docker-compose.local.yml exec -T postgres sh -c \
+docker compose -f docker-compose.yml stop scanner
+gunzip -c ~/nexus-backup.sql.gz | docker compose -f docker-compose.yml exec -T postgres sh -c \
   'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
-docker compose -f docker-compose.local.yml start scanner
+docker compose -f docker-compose.yml start scanner
 ```
 Если сомневаетесь — проще начать с чистой БД: за неделю данных накопится достаточно.
 
@@ -173,15 +172,13 @@ Fly.io и Railway: постоянного бесплатного тарифа д
 ## Вариант 4. Недорогой VPS (самый надёжный)
 
 Hetzner (CX22, ~4 €/мес, 2 vCPU / 4 ГБ, Германия или Финляндия), Contabo, DigitalOcean и т.п.
-Шаги те же, что в 1.3–1.5 (Ubuntu 22.04, Docker, swap, ufw, scp `.env`). Это же станет
-основой для Stage 2: там добавятся IP-whitelist на ключах (IP сервера статичен) и
-торговые ключи с **выключенным выводом**.
+Шаги те же, что в 1.3–1.5 (Ubuntu 22.04, Docker, swap, ufw, scp `.env`). На сервере/VPS включите IP-whitelist на ключах (IP сервера статичен).
 
 ---
 
 ## Контроль после переезда
 
-- `make ps-local` — все сервисы `healthy`.
+- `make ps` — все сервисы `healthy`.
 - `make logs s=scanner` — нет повторяющихся ошибок (`INVALID_KEY`, `451`, `429`).
 - В Telegram один запуск, без серии «остановлен».
 - Каждое утро (по `DIGEST_TZ`) приходит **📊 Ежедневный дайджест**.
@@ -190,9 +187,9 @@ Hetzner (CX22, ~4 €/мес, 2 vCPU / 4 ГБ, Германия или Финл�
 
 ## Безопасность
 
-- Ключи бирж — только чтение, вывод отключён. Для paper-режима этого достаточно.
+- Ключи бирж — только чтение, вывод отключён.
 - `.env` на сервере: `chmod 600`, вход по SSH только по ключу, пароли отключены.
-- Порт PostgreSQL и Redis наружу не открывать (в `docker-compose.local.yml` БД слушает
+- Порт PostgreSQL и Redis наружу не открывать (в `docker-compose.yml` БД слушает
   только `127.0.0.1`).
 - Если ключ или токен бота когда-либо оказался в чате/логах — перевыпустите его на бирже
   и через `/revoke` в @BotFather.

@@ -17,7 +17,7 @@ regexes = [
 ]
 
 # A7: committed settings files must never carry secret-like keys or credential URLs. Scoped by
-# path. There is deliberately NO allowlist for config/ (docs/audit/security-config-split-A7.md).
+# path. There is deliberately NO allowlist for config/.
 [[rules]]
 id = "nexus-config-toml-secret-key"
 description = "Secret-like key with a value in committed config TOML"

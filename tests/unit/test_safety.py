@@ -1,4 +1,4 @@
-"""Hard safety rule: the bot never withdraws, transfers or trades (V1). See CLAUDE.md.
+"""Hard safety rule: the bot never withdraws, transfers or trades (V1). See ADR 0001.
 
 Two layers are tested:
 

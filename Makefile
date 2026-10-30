@@ -32,7 +32,7 @@ test: ## Run unit tests
 test-cov: ## Run unit tests with coverage
 	uv run pytest -q -m "not integration" --cov --cov-report=term-missing
 
-test-integration: ## Run integration tests (requires a test DB, see CLAUDE.md)
+test-integration: ## Run integration tests (requires a test DB, see README)
 	uv run pytest -q -m integration
 
 check: lint typecheck test ## Lint + typecheck + unit tests
