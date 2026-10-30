@@ -43,3 +43,9 @@ Tech-lead review points handled (see `docs/audit/tech-lead-review-S1-tool.md`):
 ## Progress note: fix round 2 (backend-lead, 2026-10-30)
 - R2-1: `tests/unit/config/test_config_file.py` repo-file tests (`test_repo_toml_equals_code_defaults`, `test_merged_db_name_is_what_the_integration_guard_checks`) now load a copy of `config/nexus.toml` from an empty tmp dir (`_hermetic_repo_toml`), so an owner's `config/local.toml` cannot change them. Regression test `test_owner_local_toml_next_to_the_repo_file_does_not_leak_into_repo_tests` (fake config dir in tmp_path; the real `config/` is never written). Runtime loader unchanged.
 - N-1: docstring line in `services/alerts.py::_deliver` (dropped UPDATE is not replayed; growth announced at next threshold).
+
+## Progress note: scope 4 delta audit (analyzer, 2026-10-30)
+- `docs/audit/delta-03-S1-tool.md` written; evidence `docs/audit/evidence/delta-S1-tool-make-{check,test-cov}.txt`.
+- New ratchet: 1085 unit tests, branch coverage 92.08 % (floor 89 %), ruff 0, mypy --strict 0. No regression.
+- Tag proposal: `s1-tool-rc1` now, `v0.1.0` after user N-2/N-3 (not created). Drift list for T12 in the audit §5.
+- Remaining for this card: user E2E (N-2, N-3), STATE/todo/CLAUDE.md ratchet update, summary to the user.
