@@ -237,9 +237,11 @@ nexus-backups/
 # Personal settings overlay on top of config/nexus.toml (settings only, never secrets)
 config/local.toml
 
-# Internal agent pipeline (local only, not published)
-CLAUDE.md
-.claude/
+# Claude Code: personal overrides only (CLAUDE.md, .claude/agents, .claude/skills, settings.json are tracked)
+.claude/settings.local.json
+CLAUDE.local.md
+
+# Internal working docs of the agent pipeline (local only, not published)
 todo.md
 docs/pipeline/
 docs/tasks/

@@ -1,0 +1,138 @@
+{
+  "agent": "orchestrator",
+  "permissions": {
+    "allow": [
+      "Bash(uv sync:*)",
+      "Bash(uv add:*)",
+      "Bash(uv lock:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(uv run mypy:*)",
+      "Bash(uv run pytest -m \"not integration\":*)",
+      "Bash(make lint)",
+      "Bash(make format)",
+      "Bash(make typecheck)",
+      "Bash(make test)",
+      "Bash(make test-cov)",
+      "Bash(make check)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push origin chore/*)",
+      "Bash(git push origin feat/*)",
+      "Bash(git push origin fix/*)",
+      "Bash(docker compose ps:*)",
+      "Bash(docker compose logs:*)"
+    ],
+    "ask": [
+      "Bash(make test-integration)",
+      "Bash(uv run pytest -m integration:*)",
+      "Bash(make migrate)",
+      "Bash(make backup)",
+      "Bash(make backup-archive)",
+      "Bash(make backup:*)",
+      "Bash(make restore-drill)",
+      "Bash(make restore-drill:*)",
+      "Bash(make bootstrap-roles)",
+      "Bash(make bootstrap-roles:*)",
+      "Bash(make up)",
+      "Bash(make down)",
+      "Bash(make doctor:*)",
+      "Bash(scripts/start.sh:*)",
+      "Bash(./scripts/start.sh:*)",
+      "Bash(bash scripts/start.sh:*)"
+    ],
+    "deny": [
+      "Bash(git push origin main)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push --force-with-lease:*)",
+      "Bash(git commit --no-verify:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(docker system prune:*)",
+      "Read(./.env)",
+      "Read(./.env.*.local)",
+      "Read(./secrets/**)",
+      "Bash(docker compose config:*)",
+      "Bash(docker-compose config:*)",
+      "Bash(docker inspect:*)",
+      "Bash(docker container inspect:*)",
+      "Bash(cat .env:*)",
+      "Bash(cat ./.env:*)",
+      "Bash(source .env:*)",
+      "Bash(. .env:*)",
+      "Read(**/.env)",
+      "Bash(docker exec:*)",
+      "Bash(docker compose exec:*)",
+      "Bash(printenv:*)",
+      "Bash(docker compose --file:*)",
+      "Bash(docker compose -p:*)",
+      "Bash(docker compose --project-name:*)",
+      "Bash(docker compose --env-file:*)",
+      "Bash(docker compose run:*)",
+      "Bash(docker run:*)",
+      "Bash(docker --context:*)",
+      "Bash(docker -c:*)",
+      "Bash(docker-compose:*)",
+      "Bash(env)",
+      "Bash(set)",
+      "Bash(export)",
+      "Bash(export -p)",
+      "Bash(declare -x)",
+      "Bash(declare -p:*)",
+      "Bash(compgen -e:*)",
+      "Bash(less .env:*)",
+      "Bash(head .env:*)",
+      "Bash(tail .env:*)",
+      "Bash(more .env:*)",
+      "Bash(sed:* .env)",
+      "Bash(awk:* .env)",
+      "Bash(grep:* .env)",
+      "Bash(docker compose down -v:*)",
+      "Bash(docker compose down --volumes:*)",
+      "Bash(docker volume rm:*)",
+      "Bash(docker volume prune:*)",
+      "Bash(git push origin HEAD:main)",
+      "Bash(git push origin HEAD:main:*)",
+      "Bash(git push origin main:*)",
+      "Bash(git push origin *:main)",
+      "Bash(docker compose -f:*)",
+      "Bash(docker compose --profile:*)",
+      "Bash(docker compose --project-directory:*)",
+      "Bash(docker compose --ansi:*)",
+      "Bash(docker compose --progress:*)",
+      "Bash(docker compose --parallel:*)",
+      "Bash(docker compose --dry-run:*)",
+      "Bash(docker compose convert:*)",
+      "Bash(docker compose cp:*)",
+      "Bash(docker cp:*)",
+      "Bash(docker container exec:*)",
+      "Bash(docker container run:*)",
+      "Bash(docker container cp:*)",
+      "Bash(make reset-data:*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat docs/pipeline/STATE.md 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Before compaction: update docs/pipeline/STATE.md and commit.' >&2"
+          }
+        ]
+      }
+    ]
+  }
+}
