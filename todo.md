@@ -24,6 +24,8 @@ Authority: ADR 0010 (`docs/decisions/0010-self-hosted-alert-tool.md`). Cards in 
 - [ ] T12 repo hygiene + CLAUDE.md proposal (project-manager; M) — `docs/tasks/tool/T12-hygiene-docs-agents.md`; handoff `docs/handoffs/project-manager-to-user-claude-md-2026-10-25.md`
 - [ ] T14 stage gates: tech-lead, tester, security, delta audit, close (orchestrator; M) — `docs/tasks/tool/T14-stage-gates.md`
 - [ ] LICENSE decision (user; input from T13) — needed before the repo is advertised
+- [ ] S1-tool manual checks (user; guide `docs/guides/s1-tool-e2e-check.md`): image build with/without `config/local.toml` (N-2), live-bot E2E — PENDING USER
+- [ ] S2 backlog from security follow-up (`docs/audit/security-review-S1-tool.md`): R5b `no-new-privileges` for postgres/redis (low); I1 redact `ExchangeDown` Telegram text (raw `str(ExchangeError)` may carry a signed URL; send class + HTTP status only)
 
 ## Adoption (Phases 0-6)
 - [x] U0 intake (`docs/pipeline/intake.md`)
