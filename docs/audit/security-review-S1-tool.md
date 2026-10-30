@@ -173,3 +173,57 @@ generic rules (`docker compose config:*`, `exec:*`, `run:*`, `down -v:*`, `down 
 | R4 | low | Postgres loopback port opt-in for third parties |
 | R5 | low | Digest-pin postgres/redis images, add `no-new-privileges` |
 | R6 | info | Old file name `docker-compose.local.yml` remains in historic audit docs/handoff - fine as history; repo-hygiene may annotate |
+
+---
+
+## Follow-up 2026-10-30 - fix round (3897f27..5be3081)
+
+Scope: R1-R5 closure and the new changes (start.sh `.env` permission warning, opt-in Postgres port,
+digest-pinned images, redacting logging in `nexus check`, key-check retries, `nexus pin-text`,
+`config/local.toml` overlay baked into the image, hermetic config tests, E2E guide). Read-only review;
+`.env` not read, no docker commands run.
+
+### Verdict: **ACCEPT**
+
+No blocking finding. One partial (R5b) and one informational item carried to the S2 backlog.
+
+### R1-R5 closure
+| # | Status | Evidence |
+|---|---|---|
+| R1 | CLOSED | README + quickstart: KuCoin perms checked / IP not visible; Gate.io perms not visible, write-capable key still used in default mode, `KEY_POLICY_STRICT=true` refuses it. L1 statement kept verbatim next to the residual-risk bullet. |
+| R2 | CLOSED | `cli.main` `check` branch calls `configure_logging(LoggingSettings(level="WARNING", json_format=False))` before `run`; runner tests added. |
+| R3 | CLOSED | `scripts/start.sh` warns (mode only, never values) when group/other bits are set; `600`/`400`/`700` silent. |
+| R4 | CLOSED | No `ports:` in `docker-compose.yml` at all; `docker-compose.postgres-port.yml` is opt-in and binds `127.0.0.1` only. |
+| R5 | PARTIAL | postgres/redis digest-pinned (tag+digest). `no-new-privileges` is on every app service (`x-image`) but not on `postgres`/`redis` (R5b, low: internal network, no published port). |
+
+### New changes
+- **config/local.toml**: gitignored (`.gitignore:238`, `git check-ignore` confirms, not tracked). Deliberately
+  NOT in `.dockerignore`: it is baked into the image via `COPY config/nexus.toml config/local.tom[l]`. The
+  overlay goes through the same `validate_config` guard (denied names, allow-list `TOML_ALLOWED`,
+  credential-value heuristic); test `test_local_overlay_is_guarded_like_the_main_file` covers a
+  `[telegram] bot_token` refusal. Env still wins over the overlay. A secret therefore cannot load from it,
+  and the file is not committed. Residual (info): the image carries the owner's personal settings; do not
+  push `nexus-spread-bot:local` to a public registry (it is a local tag, no push target exists).
+- **Startup / Telegram messages**: `ScannerStarted` renders venue names, market counts, auth icon,
+  IP-unbound / public-fallback venue names only. `pin-text` prints a static catalog text. No token, chat id,
+  key or password in any new template.
+- **Key-check retries**: only class names logged (`error=type(exc).__name__`); auth errors not retried.
+- **Placeholder check**: now `fullmatch`; the token value is never echoed in the result item.
+- **Telegram token scope**: unchanged; token only in the `x-telegram-env` services. `check` profile service
+  receives it by design (it validates it).
+- **Default passwords**: none. `POSTGRES_PASSWORD` is `:?` required; Redis has no password but no
+  published port (internal network only).
+- **`.claude/settings.json`**: old `-f docker-compose.local.yml` rules replaced by generic denies
+  (`docker compose -f:*`, `--profile:*`, `--project-directory:*`, `cp`, `convert`, `container exec/run/cp`,
+  `make reset-data:*`); all earlier generic guards kept. Matches U1.
+- **E2E guide `docs/guides/s1-tool-e2e-check.md`**: tells the user not to show the token or `.env`, to mask
+  token and chat id on screenshots, to edit `.env` himself, and forbids `down -v` / `reset-data`. The
+  suggested `docker compose --profile tools run --rm check ls /app/config` lists file names only. PASS.
+- **Secrets scan** (grep over the 3897f27..HEAD diff for key/secret/password/token literals): 0 hits.
+  gitleaks not installed.
+
+### Carried to S2 backlog (non-blocking)
+| # | Sev | Item |
+|---|---|---|
+| R5b | low | Add `security_opt: ["no-new-privileges:true"]` to `postgres` and `redis` (compatible with their gosu/su-exec entrypoints). |
+| I1 | info | Pre-existing: `ExchangeDown` puts `str(ExchangeError)[:500]` into Telegram. With keys, a ccxt error text may embed a request URL (signed query, never the secret). Consider passing it through the same redaction as logs, or class name + HTTP status only. |
