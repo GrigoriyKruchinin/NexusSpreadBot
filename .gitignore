@@ -236,3 +236,26 @@ nexus-backups/
 
 # Personal settings overlay on top of config/nexus.toml (settings only, never secrets)
 config/local.toml
+
+# Internal agent pipeline (local only, not published)
+CLAUDE.md
+.claude/
+todo.md
+docs/pipeline/
+docs/tasks/
+docs/audit/
+docs/handoffs/
+docs/conventions.md
+docs/legal/
+docs/product/
+docs/quant/
+docs/reports/
+docs/architecture/
+scripts/run-pipeline.sh
+docs/guides/s1-tool-e2e-check.md
+docs/guides/ci-branch-protection.md
+docs/guides/stage-1-local-setup.md
+docs/decisions/0006-u2-dex-seam-only-risk-manager.md
+docs/decisions/0007-iteration-loop-find-profitable-approach.md
+docs/decisions/0008-go-hold-dex-during-hold.md
+docs/decisions/0009-perp-market-data-and-hedged-paper-strategy.md

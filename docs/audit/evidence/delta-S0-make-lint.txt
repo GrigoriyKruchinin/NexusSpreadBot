@@ -1,4 +1,0 @@
-uv run ruff format --check src tests
-156 files already formatted
-uv run ruff check src tests
-All checks passed!

@@ -1,2 +1,0 @@
-uv run mypy src tests
-Success: no issues found in 126 source files
