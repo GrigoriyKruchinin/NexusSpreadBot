@@ -50,7 +50,7 @@ Good:
 - No money-touching code at all; legal exposure limited to running a read-only tool.
 
 Bad:
-- Historical soak/paper data and GO-report tooling are gone; old evidence lives only in reports.
+- Historical soak/paper data and GO-report tooling are gone.
 - Squashed migrations break upgrades of any existing DB (acceptable: only the user's, wipe approved).
 - Quality-ratchet numbers will drop in test count as paper tests are removed; the floor is coverage
   (89 %), ruff 0, mypy 0, not the raw test count (tech-lead to restate the baseline at S1-tool end).
