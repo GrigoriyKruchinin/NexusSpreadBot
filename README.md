@@ -1,10 +1,16 @@
+<p align="center"><img src="docs/assets/nexus-logo.jpg" alt="Nexus Spread Scanner" width="160"></p>
+
 # Nexus Spread Scanner
+
+[![CI](https://github.com/GrigoriyKruchinin/NexusSpreadBot/actions/workflows/ci.yml/badge.svg)](https://github.com/GrigoriyKruchinin/NexusSpreadBot/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 A self-hosted tool that watches crypto spot prices on several centralized exchanges, estimates the
 **net** spread after fees, order-book slippage and transfer cost, and sends the opportunities to
 **your own Telegram channel**. Every evaluation is stored in your own PostgreSQL database.
 
-It is read-only: it never trades, never withdraws and never transfers funds.
+It is read-only: it never trades, never withdraws and never transfers funds. The code has no order,
+withdrawal or transfer calls at all (a test enforces this).
 
 Russian guide (step by step, with Telegram and exchange screenshots in words): [docs/guides/quickstart.md](docs/guides/quickstart.md).
 
@@ -146,7 +152,7 @@ Full guide with more cases: [docs/guides/quickstart.md](docs/guides/quickstart.m
 ## Update, stop, reset
 
 - **Update:** `git pull` then `make up`. Schema changes are applied automatically by migrations on every
-  `make up`, your data is kept. Only a database created before 2026-10-25 (the S1-tool schema squash)
+  `make up`, your data is kept. Only a database created before 2026-10-25
   cannot be upgraded: back it up if you need it, then reset it once with `make reset-data` (this
   deletes data).
 - **Stop:** `make down` (data kept).
@@ -160,8 +166,9 @@ make check              # lint + mypy --strict + unit tests
 make test-integration   # only against the nexus_test database (CI runs it)
 ```
 
-Architecture, decisions and project status: [docs/decisions/0010-self-hosted-alert-tool.md](docs/decisions/0010-self-hosted-alert-tool.md),
-[docs/pipeline/STATE.md](docs/pipeline/STATE.md), [CLAUDE.md](CLAUDE.md), [docs/conventions.md](docs/conventions.md).
+Design decisions: [docs/decisions/](docs/decisions/README.md). Backups: [docs/guides/backups.md](docs/guides/backups.md)
+(Russian). Running on a server: [docs/guides/free-hosting.md](docs/guides/free-hosting.md) (Russian); use an IP whitelist
+on your API keys there.
 Adding an exchange: a `CcxtExchangeAdapter` subclass in `src/nexus/adapters/cex/`.
 
 ## License

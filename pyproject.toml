@@ -23,6 +23,10 @@ dependencies = [
 [project.scripts]
 nexus = "nexus.cli:main"
 
+[project.urls]
+Homepage = "https://github.com/GrigoriyKruchinin/NexusSpreadBot"
+Repository = "https://github.com/GrigoriyKruchinin/NexusSpreadBot"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
