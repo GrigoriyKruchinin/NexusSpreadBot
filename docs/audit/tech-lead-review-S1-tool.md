@@ -94,3 +94,62 @@ Ratchet vs baseline: not worse (baseline file is current; CLAUDE.md line still s
 ## Next
 Backend-lead fixes 1-2 (+ tests), 3 (code or decision), 4/5/14/15 docs+compose (scribe/devops), 7-11 optional.
 Orchestrator raises 6 with the user. Round 2 review on the fix commits only.
+
+---
+
+# Round 2 (2026-10-30)
+
+- Range: `13dc219..0c6a255` (a98e936, 57e34a3, 5804947, 2b132d2, b76f3f4, e5f1e9b, 8609cce, 029d2fd, e8b691f, bc3b8ae, 0c6a255).
+- Reviewer: tech-lead (no code edited).
+
+## Verdict: **RETURN** (1 blocking, 0 should-fix, 3 nits). All 16 round-1 points are closed.
+
+## Checks (run by reviewer)
+| Check | Result |
+|---|---|
+| `make check` | ruff format + ruff 0, mypy --strict 0 (162 files), **1084 passed**, 19 deselected |
+| `make test-cov` | **92.08 %** (5506 stmts / 1182 branches); floor 89 % |
+| Ratchet | not worse than round 1 (1059 / 92 %) or CLAUDE.md (1028 / 91.5 %) |
+| Hermeticity probe | with an untracked `config/local.toml` (`[alert] language = "ru"`): **1 failed**, 1083 passed (see R2-1); file removed afterwards |
+
+## Round-1 points
+| # | Status | Evidence |
+|---|---|---|
+| 1 | closed | `alerts.py` `send_event`: with a messages repo a close goes only through `_close_message`; no stored message -> `SUPPRESSED`, gone/no evaluation -> `MISSING`, never a standalone message. Tests `test_close_without_a_message_is_silent`, `test_suppressed_new_then_close_adds_no_extra_send`, `test_close_of_a_deleted_message_sends_no_standalone_message` |
+| 2 | closed | `_deliver`: UPDATE without stored message dropped (`alert_update_no_message`); NEW with stored message edits (no budget used). Tests for both orders |
+| 3 | closed | `SystemEventFormatter(language)` / `DigestFormatter(language)` from `alert_catalog`, wired in `container.py`; en/ru key parity test |
+| 4 | closed | README "Update" and quickstart reworded (migrations in place; only pre-2026-10-25 DBs reset) |
+| 5 | closed | Postgres port not published by default; opt-in `docker-compose.postgres-port.yml` (`127.0.0.1:${POSTGRES_HOST_PORT:-5432}`); troubleshooting row incl. old `nexus-local` stack |
+| 6 | closed | `.claude/settings.json` updated (b76f3f4, user OK): `make up/down/doctor`, `scripts/start.sh` in ask; `make reset-data`, `docker compose -f/--profile/...` denied. CLAUDE.md "Commands" `up-local` line remains for T12 (user-owned) |
+| 7 | closed | `_PLACEHOLDER_RE.fullmatch`; probed: real-format token not matched, `your_bot_token` / `1234:AAFakeFake` matched |
+| 8 | closed | `nexus pin-text` + `make pin-text`, documented; `fmt_time` removed |
+| 9 | closed | `DeliveryReceipt.message_id: str | None`; `_remember` / summary skip `None` |
+| 10 | closed | `truncate` drops a cut tag/entity and closes open tags (64-char reserve) |
+| 11 | closed | docstring moved |
+| 12 | closed | `_read_with_retry`: 3 tries, 1 s / 2 s backoff, only `ExchangeUnavailableError`/`ExchangeRateLimitError`/`TimeoutError`; auth not retried (tests) |
+| 13 | closed | `startup_check/test_runner.py` covers the DB probe with a fake engine |
+| 14 | closed | README example now matches the template (Buy/Sell lines, `+0.80 % net`) |
+| 15 | closed | README residual-risk text matches the code (KuCoin: IP only; Gate.io: permissions) |
+| 16 | closed, but see R2-1 | `config/local.toml` overlay (same guard, per-key merge, gitignored, `COPY config/nexus.toml config/local.tom[l] ./config/`) |
+
+## Blocking
+
+R2-1. **The recommended owner overlay breaks `make check` on the owner's machine** —
+`tests/unit/config/test_config_file.py::test_repo_toml_equals_code_defaults` points `NEXUS_CONFIG_FILE`
+at the real `config/nexus.toml`, and the loader now also merges `config/local.toml` next to it. Once the owner follows
+README/quickstart (`[alert] language = "ru"`), the test fails (reproduced: 1 failed). Agents run `make check` in the same
+working copy, so every later commit gate goes red; same exposure for `test_merged_db_name_is_what_the_integration_guard_checks`
+if the overlay ever sets `[postgres]`. Fix: in tests that use `REPO_TOML` through the loader, copy it into `tmp_path` and
+point `NEXUS_CONFIG_FILE` there (or add a loader switch that tests use to disable the overlay). Add a regression test:
+a `local.toml` beside the repo file does not change these tests' result.
+
+## Nits (no action required for ACCEPT)
+
+N-1. Dropped UPDATE while its NEW is still being retried: the scanner has already advanced the re-alert baseline, so that
+growth step is not re-announced until the next threshold. Acceptable trade-off; worth one line in the `_deliver` docstring.
+N-2. The Dockerfile optional glob is verified only by a text test. Tester (T14 scope 2) must run a real `docker build`
+with and without `config/local.toml`.
+N-3. `make pin-text` starts a container but is not in the `ask` list; harmless (prints text), noted for completeness.
+
+## Next
+Backend-lead fixes R2-1 (test-only change). Round 3 (last) checks only R2-1 plus `make check`.
