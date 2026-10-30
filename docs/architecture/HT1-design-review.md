@@ -1,3 +1,5 @@
+> OBSOLETE (NO-GO 2026-10-25, ADR 0010): HT1 cancelled; kept as history. Linked spec/card/handoff were removed in T12 (see git history).
+
 # HT1 design review: hedged-transfer paper strategy
 
 - Author: architect, 2026-10-25. Inputs: `docs/quant/hedged-transfer-spec.md` (spec), card

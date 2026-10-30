@@ -1,6 +1,6 @@
 # 0008 — GO-HOLD state; DEX development allowed during HOLD
 
-Date: 2026-10-23. Status: accepted (user decision 2026-10-23). Amends ADR 0006 (DEX timing).
+Date: 2026-10-23. Status: SUPERSEDED by ADR 0010 (NO-GO 2026-10-25); was accepted (user decision 2026-10-23). Amends ADR 0006 (DEX timing).
 Superseded 2026-10-25 by [ADR 0010](0010-self-hosted-alert-tool.md): no GO/GO-HOLD states after NO-GO.
 
 **Context.** The GO criterion (`docs/product/vision.md` section 3) needs money, out-of-sample and

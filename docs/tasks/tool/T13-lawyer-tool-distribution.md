@@ -6,7 +6,7 @@
 - complexity: medium (legal reading, no code)
 - size: S
 - depends_on: T0
-- status: done (2026-10-25; LICENSE choice pending user)
+- status: done (2026-10-25; Apache-2.0 chosen by user and committed, fe5737f)
 
 ## Goal
 Know whether publishing the tool and posting exchange-derived prices to a (possibly public) Telegram channel violates exchange ToS or needs disclaimers; also LICENSE choice input.

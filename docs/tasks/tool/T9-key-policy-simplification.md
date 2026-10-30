@@ -6,7 +6,7 @@
 - complexity: medium (security semantics must not weaken; mostly deletion and defaults)
 - size: M
 - depends_on: T7
-- status: done (security review ACCEPT pending at stage end)
+- status: done (security review ACCEPT: `docs/audit/security-review-S1-tool.md`)
 
 ## Goal
 Third-party users face no attestation flags; read-only is verified by the API where possible and otherwise documented.

@@ -1,6 +1,6 @@
 # 0006 — U2: DEX as seam only; risk-manager added
 
-Date: 2026-10-23. Status: accepted (user decision at U2).
+Date: 2026-10-23. Status: SUPERSEDED by ADR 0010 (NO-GO 2026-10-25); was accepted (user decision at U2).
 Amended 2026-10-23 by [ADR 0008](0008-go-hold-dex-during-hold.md): DEX timing is "until analytical GO (GO or GO-HOLD)".
 Amended 2026-10-25 by [ADR 0010](0010-self-hosted-alert-tool.md): DEX timing "after GO" void (NO-GO); seam stays documented; risk-manager retired.
 

@@ -7,7 +7,7 @@ analytics). No trading code, no trading-permission keys (ADR 0001 stays in force
 | strategy | source | result |
 |---|---|---|
 | Spot inventory on every venue (soak 2026-10-24..25, 4 venue sets, $10k each) | `make go-report` preview | spread legs +$58..72 in 1.4 d, but MTM on held small caps -$471..-669; total -$405..-597. Directional exposure, rejected by the user |
-| Hedged transfer, perp short on okx/kucoin | `docs/quant/hedged-transfer-spec.md` s.14, `docs/quant/hedge-method-comparison.md` | 13/40 executable, 0 pass the basis check; -$51 |
+| Hedged transfer, perp short on okx/kucoin | hedged-transfer spec s.14 (removed in T12, see git history), `docs/quant/hedge-method-comparison.md` | 13/40 executable, 0 pass the basis check; -$51 |
 | Same with binance perps (context) | same | 39/40 executable, -$545 |
 | Margin short on the sell venue (locks the spread) | `docs/quant/hedge-method-comparison.md` | okx/kucoin lend 0 of the alerted coins; only binance (7/40, +$47.6, coins T and XEC only, fails ex-top-2) and gate.io |
 | Unhedged transfer | same | -$848 on 40, 27 losers |

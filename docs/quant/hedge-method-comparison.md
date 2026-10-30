@@ -2,7 +2,7 @@
 
 - Author: quant-analyst, 2026-10-25. Status: analysis for the orchestrator/user (no code change, not committed).
 - Verdict basis: **PRE-TAX** (user decision 2026-10-25). Paper/public data only (ADR 0001).
-- Inputs: `docs/quant/hedged-transfer-spec.md` (sections 2, 5, 7, 14, 16), scanner `docker logs`
+- Inputs: hedged-transfer spec (removed in T12 hygiene, see git history; sections 2, 5, 7, 14, 16), scanner `docker logs`
   (`opportunity_alerted`, kind `first`), public REST endpoints (no keys), committed transit model
   `src/nexus/simulation/transit.py` (read only). Throwaway scripts and raw data live in the session scratchpad
   (`.../scratchpad/hm/`: `probe_margin.py`, `parse_margin.py`, `nets.py`, `klines.py`, `compare.py`, `compare2.py`,

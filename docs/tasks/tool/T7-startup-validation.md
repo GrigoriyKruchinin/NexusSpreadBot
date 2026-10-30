@@ -6,7 +6,7 @@
 - complexity: high (external API calls at boot, error taxonomy, secret hygiene)
 - size: L
 - depends_on: T6
-- status: done (check + watchdog follow-up); scanner-side public fallback deferred, see Progress
+- status: done (check + watchdog follow-up; scanner-side public fallback implemented by T9 in `adapters/key_policy.py`)
 
 ## Goal
 Fail early and clearly on misconfiguration; degrade gracefully (public mode) for bad exchange keys; never print secrets.
@@ -42,4 +42,4 @@ DoD: `make check` green and not worse than baseline, new tests, no secrets in di
 - DB: reachable and `alembic_version` equals the script head.
 - Runs INSIDE the image: compose service `check` (profile `tools`, scanner+telegram+db env). `scripts/start.sh` runs `--no-db` pre-flight before `up`; `make doctor` runs the full check (DB too).
 - Watchdog: `[watchdog] backup_check_enabled = false` (default OFF); no `backup_missing` for users without the backup mount.
-- NOT done: the scanner itself still refuses (exit 3, parked) on a violating key instead of falling back to public for that venue; it changes key-policy semantics and overlaps T9 (security), so it needs a decision. The check already reports the intended "PUBLIC mode" outcome.
+- (Resolved by T9: scanner now falls back to public per venue.) Was: the scanner itself still refuses (exit 3, parked) on a violating key instead of falling back to public for that venue; it changes key-policy semantics and overlaps T9 (security), so it needs a decision. The check already reports the intended "PUBLIC mode" outcome.

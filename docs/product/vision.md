@@ -1,3 +1,5 @@
+> SUPERSEDED (NO-GO 2026-10-25): trading/GO vision is historical. Current product = self-hosted alert tool, ADR 0010 (`docs/decisions/0010-self-hosted-alert-tool.md`).
+
 # Nexus — Product vision
 
 Date: 2026-10-23. Author: creative-ceo. Status: accepted by the user 2026-10-23 (three proposals confirmed; Rework rule extended, see section 5 and ADR 0007).

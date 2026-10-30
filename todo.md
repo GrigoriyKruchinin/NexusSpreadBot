@@ -16,14 +16,14 @@ Authority: ADR 0010 (`docs/decisions/0010-self-hosted-alert-tool.md`). Cards in 
 - [x] T4 alert templates NEW/UPDATE/CLOSED, ru/en (backend-lead; M) — `docs/tasks/tool/T4-alert-templates.md`
 - [x] T5 anti-spam: dedupe, cooldown, caps, edit-in-place, close (backend-lead; L) — `docs/tasks/tool/T5-alert-antispam-edit-in-place.md`
 - [x] T6 commented `.env.example` + consistency check (devops; M) — `docs/tasks/tool/T6-env-example-config.md`
-- [x] T7 startup validation, bilingual errors, public-mode fallback (backend-lead; L; scanner-side fallback open, see card) — `docs/tasks/tool/T7-startup-validation.md`
+- [x] T7 startup validation, bilingual errors, public-mode fallback (backend-lead; L; scanner-side fallback done in T9) — `docs/tasks/tool/T7-startup-validation.md`
 - [x] T8 one-command start `make up`, auto migrations (devops; M) — `docs/tasks/tool/T8-one-command-start.md`
 - [x] T9 KEY_POLICY simplification for third parties (security; M) — `docs/tasks/tool/T9-key-policy-simplification.md`
 - [x] T10 README quickstart (EN) + `docs/guides/quickstart.md` (RU) (scribe; M) — `docs/tasks/tool/T10-readme-quickstart.md`
 - [x] T11 tests isolation + CI update (tester; M) — `docs/tasks/tool/T11-tests-ci-update.md`
-- [ ] T12 repo hygiene + CLAUDE.md proposal (project-manager; M) — `docs/tasks/tool/T12-hygiene-docs-agents.md`; handoff `docs/handoffs/project-manager-to-user-claude-md-2026-10-25.md`
+- [x] T12 repo hygiene + CLAUDE.md proposal (project-manager; M) — `docs/tasks/tool/T12-hygiene-docs-agents.md`; handoff `docs/handoffs/project-manager-to-user-claude-md-2026-10-25.md`
 - [ ] T14 stage gates: tech-lead, tester, security, delta audit, close (orchestrator; M) — `docs/tasks/tool/T14-stage-gates.md`
-- [ ] LICENSE decision (user; input from T13) — needed before the repo is advertised
+- [x] LICENSE decision (user 2026-10-25: Apache-2.0, committed fe5737f)
 - [ ] S1-tool manual checks (user; guide `docs/guides/s1-tool-e2e-check.md`): image build with/without `config/local.toml` (N-2), live-bot E2E — PENDING USER
 - [ ] S2 backlog from security follow-up (`docs/audit/security-review-S1-tool.md`): R5b `no-new-privileges` for postgres/redis (low); I1 redact `ExchangeDown` Telegram text (raw `str(ExchangeError)` may carry a signed URL; send class + HTTP status only)
 
@@ -53,7 +53,7 @@ Authority: ADR 0010 (`docs/decisions/0010-self-hosted-alert-tool.md`). Cards in 
 - [x] A6 key-policy startup check (6766bfd + ee38592; tech-lead round 2 + security: accepted) `KeyPolicyCheck` (S-08/G4; before U3, no real keys without it) — card `docs/tasks/track0/A6-key-policy-startup-check.md`
 - [ ] A6 follow-ups F-1..F-5 (parallel venue checks, IKeyIntrospection Protocol, guard test for _ws/transfer fallback, IP CIDR cut-off at U3, .env.example MEXC/Bitget wording) — see `docs/audit/tech-lead-review-track0.md` Round 2
 - [x] B1a remove MEXC_*/BITGET_* key vars from scanner env + `.env.example` (G5; low) — card `docs/tasks/track0/B1a-remove-unused-key-vars.md`
-- [ ] LICENSE decision (user)
+- [x] LICENSE decision (user 2026-10-25: Apache-2.0, committed fe5737f)
 
 - [x] A7 non-secret settings to committed `config/nexus.toml`, `.env` = secrets only (user decision 2026-10-23; after B15 part 1; security split pre-check; backend-lead; medium) — card `docs/tasks/track0/A7-config-file.md`. Accepted: security r1, tech-lead r2.
   - [ ] A7 follow-ups: check-env-settings clean error on bad .env encoding (TL R2-1), louder warning in up-local (R2-2), gitleaks `api-key` hyphen (R2-3) — `docs/audit/tech-lead-review-A7.md` Round 2

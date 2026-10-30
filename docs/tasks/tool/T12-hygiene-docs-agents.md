@@ -6,7 +6,7 @@
 - complexity: medium (many files, judgement per file; skill repo-hygiene)
 - size: M
 - depends_on: T1b, T10
-- status: todo
+- status: done
 
 ## Goal
 Delete or archive everything tied to soak/GO/paper/HT1; leave a consistent doc set; hand CLAUDE.md changes to the user.
@@ -30,5 +30,15 @@ Editing CLAUDE.md.
 
 ## Files likely touched
 docs/, .claude/, scripts/
+
+## Hygiene list (done 2026-10-30)
+- Deleted guides: soak-fresh-stack, soak-auto-recovery, gate-0-how-to-continue.
+- Deleted tasks: m3/S1-fresh-stack-runbook, m2/B15-shadow-paper-portfolios, m2/B16-public-probe-expansion-batch1, HT1-hedged-transfer-paper.
+- Deleted quant: hedged-transfer-spec, b15-review-and-report-spec, b15-part2-review (kept: hedge-method-comparison, b14 review).
+- Deleted handoffs: B15-part2-to-review, D01b-auto-recovery, orchestrator-to-backend-lead-HT1-S11, quant-to-backend-lead-2026-10-25, architect-to-backend-lead-2026-10-25.
+- Retired agents (files deleted): quant-analyst, risk-manager, creative-ceo, observability-engineer. Kept: lawyer.
+- Kept: `scripts/host_watchdog.sh` (has unit test), go-no-go report, legal, ADRs (0006-0009 marked superseded).
+- Updated: backups.md, stage-1-local-setup.md (soak links removed), hedge-method-comparison, go-no-go, HT1-design-review (obsolete banner), vision.md (superseded banner), T7/T9/T13 status lines, todo.md.
+- Left as historical record: dangling refs inside `docs/audit/*` reviews and `docs/pipeline/STATE.md` (scribe updates STATE).
 
 DoD: `make check` green and not worse than baseline, new tests, no secrets in diff, todo.md + card updated, committed (Conventional Commits).
